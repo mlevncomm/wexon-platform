@@ -1,0 +1,656 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TableStatus {
+  EMPTY
+  OCCUPIED
+  PAYMENT_PENDING
+  PARTIALLY_PAID
+  PAID
+  RECEIPT_REQUESTED
+  CLOSED
+}
+
+enum OrderStatus {
+  NEW
+  PREPARING
+  SERVED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIAL
+  FAILED
+  REFUNDED
+}
+
+enum ReceiptStatus {
+  REQUESTED
+  PRINTED
+  CANCELLED
+}
+
+enum NotificationType {
+  ORDER_CREATED
+  ORDER_UPDATED
+  PAYMENT_RECEIVED
+  RECEIPT_REQUESTED
+  TABLE_UPDATED
+  MENU_UPDATED
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+  BILLING
+  VIEWER
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum WexonProductStatus {
+  ACTIVE
+  UPCOMING
+  INTERNAL
+  DISABLED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+  ONE_TIME
+}
+
+enum EntitlementValueType {
+  BOOLEAN
+  INTEGER
+  STRING
+}
+
+enum LicenseStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum LicenseType {
+  MONTHLY
+  YEARLY
+  ONE_TIME
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+  OVERDUE
+}
+
+enum BillingPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum AppInstallationStatus {
+  ACTIVE
+  DISABLED
+  PENDING
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  legalName String?
+  taxNo     String?
+  email     String?
+  phone     String?
+  country   String   @default("TR")
+  isDemo    Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       Membership[]
+  restaurants       Restaurant[]
+  licenses          License[]
+  subscriptions     Subscription[]
+  invoices          Invoice[]
+  billingPayments   BillingPayment[]
+  appInstallations  AppInstallation[]
+  auditLogs         AuditLog[]
+  apiKeys           ApiKey[]
+  webhookEndpoints  WebhookEndpoint[]
+
+  @@index([isDemo])
+  @@index([isActive])
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  name        String?
+  phone       String?
+  avatarUrl   String?
+  isActive    Boolean   @default(true)
+  passwordHash       String?
+  passwordSetAt      DateTime?
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  memberships Membership[]
+  auditLogs   AuditLog[]
+  apiKeys     ApiKey[]
+
+  @@index([isActive])
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MembershipRole   @default(STAFF)
+  status         MembershipStatus @default(INVITED)
+  invitedAt      DateTime         @default(now())
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Product {
+  id          String             @id @default(cuid())
+  key         String             @unique
+  name        String
+  status      WexonProductStatus @default(UPCOMING)
+  description String?
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  plans            Plan[]
+  licenses         License[]
+  appInstallations AppInstallation[]
+  apiKeys          ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
+
+  @@index([status])
+  @@index([isActive])
+}
+
+model Plan {
+  id              String          @id @default(cuid())
+  productId       String
+  key             String          @unique
+  name            String
+  description     String?
+  billingInterval BillingInterval
+  isPublic        Boolean         @default(true)
+  isActive        Boolean         @default(true)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  entitlements  Entitlement[]
+  licenses      License[]
+  subscriptions Subscription[]
+
+  @@index([productId])
+  @@index([billingInterval])
+  @@index([isActive])
+}
+
+model Entitlement {
+  id          String               @id @default(cuid())
+  planId      String
+  key         String
+  valueType   EntitlementValueType
+  valueBool   Boolean?
+  valueInt    Int?
+  valueString String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, key])
+  @@index([planId])
+}
+
+model License {
+  id             String        @id @default(cuid())
+  organizationId String
+  productId      String
+  planId         String
+  status         LicenseStatus @default(TRIAL)
+  licenseType    LicenseType
+  startsAt       DateTime      @default(now())
+  endsAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product          Product           @relation(fields: [productId], references: [id])
+  plan             Plan              @relation(fields: [planId], references: [id])
+  subscription     Subscription?
+  appInstallations AppInstallation[]
+
+  @@index([organizationId])
+  @@index([productId])
+  @@index([planId])
+  @@index([status])
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  organizationId     String
+  licenseId          String             @unique
+  planId             String
+  status             SubscriptionStatus @default(TRIALING)
+  interval           BillingInterval
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAt           DateTime?
+  provider           String?
+  providerRef        String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  license         License          @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  plan            Plan             @relation(fields: [planId], references: [id])
+  invoices        Invoice[]
+  billingPayments BillingPayment[]
+
+  @@index([organizationId])
+  @@index([planId])
+  @@index([status])
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  organizationId String
+  subscriptionId String?
+  invoiceNo      String        @unique
+  status         InvoiceStatus @default(DRAFT)
+  subtotal       Decimal       @db.Decimal(10, 2)
+  tax            Decimal       @default(0) @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  currency       String        @default("TRY")
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription    Subscription?    @relation(fields: [subscriptionId], references: [id])
+  billingPayments BillingPayment[]
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([status])
+}
+
+model BillingPayment {
+  id             String               @id @default(cuid())
+  organizationId String
+  subscriptionId String?
+  invoiceId      String?
+  amount         Decimal              @db.Decimal(10, 2)
+  currency       String               @default("TRY")
+  status         BillingPaymentStatus @default(PENDING)
+  provider       String?
+  providerRef    String?
+  paidAt         DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([invoiceId])
+  @@index([status])
+}
+
+model AppInstallation {
+  id             String                @id @default(cuid())
+  organizationId String
+  productId      String
+  licenseId      String?
+  status         AppInstallationStatus @default(PENDING)
+  settingsJson   Json?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id])
+  license      License?     @relation(fields: [licenseId], references: [id])
+
+  @@unique([organizationId, productId])
+  @@index([organizationId])
+  @@index([productId])
+  @@index([licenseId])
+  @@index([status])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         String
+  entityType     String?
+  entityId       String?
+  level          String   @default("INFO")
+  status         String   @default("SUCCESS")
+  message        String?
+  metadataJson   Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([action])
+  @@index([level])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  organizationId String
+  productId      String?
+  userId         String?
+  name           String
+  prefix         String
+  hashedKey      String
+  scopes         String[]
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([productId])
+  @@index([userId])
+  @@index([prefix])
+}
+
+model WebhookEndpoint {
+  id             String    @id @default(cuid())
+  organizationId String
+  productId      String?
+  url            String
+  secretHash     String
+  events         String[]
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id])
+
+  @@index([organizationId])
+  @@index([productId])
+  @@index([isActive])
+}
+
+model Restaurant {
+  id             String   @id @default(cuid())
+  organizationId String?
+  name           String
+  slug           String   @unique
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  branches     Branch[]
+
+  @@index([organizationId])
+}
+
+model Branch {
+  id           String   @id @default(cuid())
+  restaurantId String
+  name         String
+  slug         String
+  address      String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant    Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tables        RestaurantTable[]
+  categories    MenuCategory[]
+  products      MenuProduct[]
+  orders        CustomerOrder[]
+  payments      Payment[]
+  notifications BusinessNotification[]
+
+  @@unique([restaurantId, slug])
+  @@index([restaurantId])
+}
+
+model RestaurantTable {
+  id        String      @id @default(cuid())
+  branchId  String
+  label     String
+  seats     Int         @default(4)
+  qrCode    String      @unique
+  status        TableStatus @default(EMPTY)
+  isActive      Boolean     @default(true)
+  lastClosedAt  DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  branch          Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  orders          CustomerOrder[]
+  payments        Payment[]
+  receiptRequests ReceiptRequest[]
+
+  @@unique([branchId, label])
+  @@index([branchId])
+}
+
+model MenuCategory {
+  id        String   @id @default(cuid())
+  branchId  String
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch   Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  products MenuProduct[]
+
+  @@unique([branchId, name])
+  @@index([branchId])
+}
+
+model MenuProduct {
+  id          String   @id @default(cuid())
+  branchId    String
+  categoryId  String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  currency    String   @default("TRY")
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  inStock     Boolean  @default(true)
+  isPopular   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branch     Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category   MenuCategory @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([branchId])
+  @@index([categoryId])
+}
+
+model CustomerOrder {
+  id               String      @id @default(cuid())
+  orderNo          String      @unique
+  branchId         String
+  tableId          String
+  status           OrderStatus @default(NEW)
+  note             String?
+  receiptRequested Boolean     @default(false)
+  subtotal         Decimal     @db.Decimal(10, 2)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  servedAt         DateTime?
+  cancelledAt      DateTime?
+
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  table           RestaurantTable        @relation(fields: [tableId], references: [id])
+  items           OrderItem[]
+  payments        Payment[]
+  receiptRequests ReceiptRequest[]
+  notifications   BusinessNotification[]
+
+  @@index([branchId])
+  @@index([tableId])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String
+  productName String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2)
+  totalPrice  Decimal @db.Decimal(10, 2)
+  note        String?
+
+  order   CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product MenuProduct   @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  branchId         String
+  tableId          String
+  orderId          String?
+  amount           Decimal       @db.Decimal(10, 2)
+  tipAmount        Decimal       @default(0) @db.Decimal(10, 2)
+  currency         String        @default("TRY")
+  status           PaymentStatus @default(PENDING)
+  provider         String?
+  providerRef      String?
+  maskedCard       String?
+  receiptRequested Boolean       @default(false)
+  paidAt           DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  table           RestaurantTable        @relation(fields: [tableId], references: [id])
+  order           CustomerOrder?         @relation(fields: [orderId], references: [id])
+  receiptRequests ReceiptRequest[]
+  notifications   BusinessNotification[]
+
+  @@index([branchId])
+  @@index([tableId])
+  @@index([orderId])
+  @@index([status])
+}
+
+model ReceiptRequest {
+  id        String        @id @default(cuid())
+  tableId   String
+  orderId   String?
+  paymentId String?
+  status    ReceiptStatus @default(REQUESTED)
+  note      String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  printedAt DateTime?
+
+  table   RestaurantTable @relation(fields: [tableId], references: [id])
+  order   CustomerOrder?  @relation(fields: [orderId], references: [id])
+  payment Payment?        @relation(fields: [paymentId], references: [id])
+
+  @@index([tableId])
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([status])
+}
+
+model BusinessNotification {
+  id        String           @id @default(cuid())
+  branchId  String
+  orderId   String?
+  paymentId String?
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  branch  Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  order   CustomerOrder? @relation(fields: [orderId], references: [id])
+  payment Payment?       @relation(fields: [paymentId], references: [id])
+
+  @@index([branchId])
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([isRead])
+}
