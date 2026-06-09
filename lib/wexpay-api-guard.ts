@@ -1,5 +1,5 @@
-import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { apiKeyHashCandidates } from "@/lib/wexon-api-key-hash";
 import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { canAccessWexPay, canManageWexPay } from "@/lib/wexpay-auth";
 import {
@@ -11,6 +11,7 @@ import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import type { WexPayMutationContext } from "@/lib/wexpay-service";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
 import { WexPayAccessError } from "@/lib/wexpay-tenant";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 
 /**
  * Tenant-aware guard for the PRODUCTION WexPay API (distinct from the demo
@@ -77,10 +78,6 @@ function jsonError(message: string, status: number, reason?: string, logContext?
   return Response.json({ error: message, reason }, { status });
 }
 
-function sha256(value: string) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
 function readBearerOrApiKey(request: Request): string | null {
   const authorization = request.headers.get("authorization");
   if (authorization?.toLowerCase().startsWith("bearer ")) {
@@ -96,8 +93,12 @@ async function resolveApiKeyActor(
   rawKey: string,
   requiredScope?: string,
 ): Promise<{ ok: true; actor: WexPayApiActor; organizationId: string } | { ok: false; response: Response }> {
+  const { hmac, legacy } = apiKeyHashCandidates(rawKey);
   const apiKey = await prisma.apiKey.findFirst({
-    where: { hashedKey: sha256(rawKey), revokedAt: null },
+    where: {
+      revokedAt: null,
+      OR: [{ hashedKey: hmac }, { hashedKey: legacy }],
+    },
     include: { product: true },
   });
 
@@ -221,11 +222,22 @@ export async function requireWexPayApiContext(
   request: Request,
   options: RequireWexPayApiOptions = {},
 ): Promise<RequireWexPayApiResult> {
+  const ipAddress = getRequestIpAddress(request) ?? "unknown";
+  const rateLimit = enforceRateLimit("wexpay.api", ipAddress, RATE_LIMITS.wexpayApi);
+  if (!rateLimit.ok) {
+    return {
+      ok: false,
+      response: jsonError("Çok fazla istek. Lütfen kısa bir süre sonra tekrar deneyin.", 429, "rate_limited", {
+        ipAddress,
+        metadata: { retryAfterSeconds: rateLimit.retryAfterSeconds },
+      }),
+    };
+  }
+
   const manage = options.manage ?? false;
   const requiredScope = options.requiredScope ?? (manage ? "wexpay:write" : undefined);
   const rawKey = readBearerOrApiKey(request);
 
-  const ipAddress = getRequestIpAddress(request);
   const resolved = rawKey
     ? await resolveApiKeyActor(rawKey, requiredScope)
     : await resolveSessionActor(options.organizationId, manage);

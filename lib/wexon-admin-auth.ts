@@ -2,6 +2,16 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+/**
+ * Admin session auth (MVP).
+ *
+ * PRODUCTION NOTE: A shared `ADMIN_LOGIN_PASSWORD` plus an email allowlist is
+ * not sufficient for production admin access. Target architecture:
+ * - Per-admin user records with unique password hashes (argon2/bcrypt)
+ * - MFA (TOTP/WebAuthn) for privileged operations
+ * - Session rotation, device binding, and audit on every admin mutation
+ */
+
 export const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const SESSION_TTL_MS = 10 * 60 * 60 * 1000;
 const SESSION_COOKIE_PATH = "/";

@@ -1,8 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { clearCustomerSessionCookie, createCustomerSessionCookie } from "@/lib/wexon-customer-auth";
-import { writeAuditFailure } from "@/lib/wexon-audit";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
 
@@ -35,6 +36,20 @@ export async function loginCustomerAction(formData: FormData) {
   const email = readString(formData, "email").toLowerCase();
   const password = readString(formData, "password");
   const nextPath = safeNextPath(readString(formData, "next") || "/dashboard");
+  const ipAddress = await getServerActionIpAddress();
+
+  const ipLimit = enforceRateLimit("customer.login.ip", ipAddress, RATE_LIMITS.customerLoginIp);
+  if (!ipLimit.ok) {
+    redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, { email });
+  }
+
+  if (email) {
+    const emailLimit = enforceRateLimit("customer.login.email", email, RATE_LIMITS.customerLoginEmail);
+    if (!emailLimit.ok) {
+      redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, { email });
+    }
+  }
+
   const expectedPassword = process.env.CUSTOMER_DEV_LOGIN_PASSWORD;
 
   if (!email || !password) {

@@ -67,6 +67,7 @@ function auditActorMeta(context: WexPayMutationContext) {
   if (context.actor.type === "admin_session") {
     return {
       actorType: "admin_session",
+      admin_preview: true,
       email: context.actor.email,
       role: context.actor.role,
     };

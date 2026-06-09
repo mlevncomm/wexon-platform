@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { headers } from "next/headers";
 
 /**
  * Minimal Prisma-compatible client surface so audit writes can run either on
@@ -75,4 +76,16 @@ export function getRequestIpAddress(request: Request): string | null {
   }
 
   return request.headers.get("x-real-ip");
+}
+
+/** Best-effort IP extraction for Server Actions (login, etc.). */
+export async function getServerActionIpAddress(): Promise<string> {
+  const headerList = await headers();
+  const forwardedFor = headerList.get("x-forwarded-for");
+  if (forwardedFor) {
+    const [first] = forwardedFor.split(",");
+    if (first?.trim()) return first.trim();
+  }
+
+  return headerList.get("x-real-ip") ?? "unknown";
 }

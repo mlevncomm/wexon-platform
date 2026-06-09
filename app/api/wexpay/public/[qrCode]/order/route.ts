@@ -1,4 +1,5 @@
 import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { readJsonBody, wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 import { createPublicOrder } from "@/lib/wexpay-service";
@@ -16,7 +17,23 @@ import { validateOrderItems } from "@/lib/wexpay-validation";
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
 
-  const ipAddress = getRequestIpAddress(request);
+  const ipAddress = getRequestIpAddress(request) ?? "unknown";
+  const rateLimit = enforceRateLimit("wexpay.public.qr_order", ipAddress, RATE_LIMITS.publicQrOrder);
+  if (!rateLimit.ok) {
+    writeAuditFailure({
+      action: "wexpay.public.rate_limited",
+      message: "QR sipariş isteği hız sınırına takıldı.",
+      level: "WARN",
+      source: "public_qr",
+      ipAddress,
+      metadata: { qrCode, retryAfterSeconds: rateLimit.retryAfterSeconds },
+    });
+    return Response.json(
+      { error: "Çok fazla istek. Lütfen kısa bir süre sonra tekrar deneyin.", reason: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
+
   const resolution = await resolvePublicTableByQr(qrCode);
   if (!resolution) {
     writeAuditFailure({

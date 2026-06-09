@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { adminDebug, assertAdminAccess, type AdminSession } from "@/lib/wexon-admin-auth";
+import { hashApiKey } from "@/lib/wexon-api-key-hash";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/wexon-passwords";
 import { assertEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
@@ -1725,7 +1726,7 @@ export async function createAdminApiKeyAction(formData: FormData) {
           productId: payload.productId,
           name: payload.name,
           prefix,
-          hashedKey: sha256(rawKey),
+          hashedKey: hashApiKey(rawKey),
           scopes: ["wexpay:read", "wexpay:write"],
         },
       });

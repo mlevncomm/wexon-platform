@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createHash, randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { assertCustomerOrganizationRole, assertCustomerSession } from "@/lib/wexon-customer-auth";
+import { hashApiKey } from "@/lib/wexon-api-key-hash";
 import {
   CustomerValidationError,
   parseCustomerApiKeyPayload,
@@ -526,7 +527,7 @@ export async function createCustomerApiKeyAction(formData: FormData) {
         userId: user.id,
         name: payload.name,
         prefix,
-        hashedKey: sha256(rawKey),
+        hashedKey: hashApiKey(rawKey),
         scopes: ["wexpay:read"],
       },
     });
