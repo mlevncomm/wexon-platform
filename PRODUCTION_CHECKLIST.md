@@ -49,14 +49,44 @@ Bu maddeler MVP gelistirmesini bloke etmez, fakat public production oncesi kapat
 
 ### Environment
 
+#### Deploy oncesi zorunlu env listesi
+
+Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyalari repoya commit edilmez; degerler Vercel (veya kullanilan host) **Environment Variables** uzerinden verilir.
+
+| Degisken | Zorunlu | Aciklama |
+|----------|---------|----------|
+| `DATABASE_URL` | Evet | Postgres baglanti URL'i (runtime). |
+| `DIRECT_URL` | Evet | Postgres direct URL (migrate/seed; Prisma adapter). |
+| `ADMIN_EMAILS` | Evet | Virgulle ayrilmis admin e-posta allowlist. |
+| `ADMIN_LOGIN_PASSWORD` | Evet | MVP admin girisi (gecici; bkz. Security). |
+| `ADMIN_SESSION_SECRET` | Evet | Admin oturum cookie imza secret'i. |
+| `CUSTOMER_SESSION_SECRET` | Evet | Musteri oturum cookie imza secret'i. |
+| `API_KEY_HASH_SECRET` | Evet | API key hashleme icin HMAC secret/pepper. |
+| `NEXT_PUBLIC_APP_URL` | Evet | Public canonical app URL (redirect/link uretimi). |
+
+**Deploy oncesi kontrol:**
+
+- [ ] Tum zorunlu degiskenler **Production** environment'inda set edildi.
+- [ ] `API_KEY_HASH_SECRET`: Production'da zorunlu. API key hashleme icin HMAC secret/pepper olarak kullanilir. **Vercel Environment Variables icine eklenmeden production deploy yapilmamali.**
+- [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
+- [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
+
+**Notlar:**
+
+- `API_KEY_HASH_SECRET` icin guclu, rastgele bir deger kullanin (or. `openssl rand -hex 32`). `ADMIN_SESSION_SECRET` ile ayni deger olmamali.
+- Mevcut API anahtarlari legacy plain SHA-256 hash ile calismaya devam eder; yeni olusturulan anahtarlar HMAC-SHA256 ile saklanir. Production oncesi anahtarlari rotate etmek onerilir.
+- Local development fallback password production'da devre disi olmali.
+
+**Iliskili maddeler (onceki liste):**
+
 - `DATABASE_URL`
 - `DIRECT_URL`
 - `ADMIN_EMAILS`
 - `ADMIN_LOGIN_PASSWORD`
 - `ADMIN_SESSION_SECRET`
 - `CUSTOMER_SESSION_SECRET`
+- `API_KEY_HASH_SECRET`
 - `NEXT_PUBLIC_APP_URL`
-- Local development fallback password production'da devre disi olmali.
 
 ### Database
 
