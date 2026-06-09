@@ -4,7 +4,7 @@ import { WexPayEmptyAccess } from "@/components/wexpay/WexPayAppCards";
 import WexPayBusinessShell from "@/components/wexpay/WexPayBusinessShell";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
-import { readActiveOrganizationId } from "@/lib/wexon-organization-context";
+import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
 
 function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayAccess>>, { allowed: true }>) {
   return access.organization.restaurants.flatMap((restaurant) =>
@@ -19,12 +19,13 @@ function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayA
  * Sidebar/dashboard shell kaldırıldı; tüm sayfalar geniş yatay panel kullanır.
  */
 export default async function WexPayLayout({ children }: { children: ReactNode }) {
-  const [access, activeOrganizationId] = await Promise.all([getWexPayAccess(), readActiveOrganizationId()]);
+  const selector = await resolvePlatformOrganizationSelector();
+  const access = await getWexPayAccess(selector);
 
   if (!access.allowed) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-4 py-10">
-        <WexPayEmptyAccess organizationId={activeOrganizationId} />
+        <WexPayEmptyAccess organizationId={selector?.organizationId ?? null} />
       </main>
     );
   }

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACTIVE_ORGANIZATION_COOKIE } from "@/lib/wexon-organization-context";
+import { ACTIVE_ORGANIZATION_COOKIE, ACTIVE_ORGANIZATION_HEADER } from "@/lib/wexon-organization-context";
 
 const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
@@ -74,10 +74,21 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const response = NextResponse.next();
   const organizationIdFromQuery = request.nextUrl.searchParams.get("organizationId")?.trim();
   const organizationIdFromAdminPath = pathname.match(/^\/admin\/organizations\/([^/]+)$/)?.[1];
   const organizationId = organizationIdFromQuery ?? organizationIdFromAdminPath;
+
+  const requestHeaders = new Headers(request.headers);
+  if (organizationId) {
+    requestHeaders.set(ACTIVE_ORGANIZATION_HEADER, organizationId);
+  }
+
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+
   if (
     organizationId &&
     (pathname.startsWith("/dashboard") ||
@@ -92,7 +103,7 @@ export function proxy(request: NextRequest) {
     });
   }
 
-  adminProxyDebug("proxy:next", { path: pathname });
+  adminProxyDebug("proxy:next", { path: pathname, organizationId: organizationId ?? null });
   return response;
 }
 

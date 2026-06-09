@@ -1,13 +1,29 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { DashboardOrganizationSelector } from "@/lib/wexon-core-dashboard";
 
 export const ACTIVE_ORGANIZATION_COOKIE = "wexon_active_organization_id";
+export const ACTIVE_ORGANIZATION_HEADER = "x-wexon-active-organization-id";
 
 export type PlatformOrganizationSelector = DashboardOrganizationSelector;
 
-export async function readActiveOrganizationId() {
+export async function readActiveOrganizationIdFromHeader() {
+  const headerStore = await headers();
+  return headerStore.get(ACTIVE_ORGANIZATION_HEADER)?.trim() ?? null;
+}
+
+export async function readActiveOrganizationIdFromCookie() {
   const cookieStore = await cookies();
   return cookieStore.get(ACTIVE_ORGANIZATION_COOKIE)?.value ?? null;
+}
+
+/** Resolves the active organization id: request header first, then cookie. */
+export async function readActiveOrganizationId() {
+  const organizationIdFromHeader = await readActiveOrganizationIdFromHeader();
+  if (organizationIdFromHeader) {
+    return organizationIdFromHeader;
+  }
+
+  return readActiveOrganizationIdFromCookie();
 }
 
 export async function resolvePlatformOrganizationSelector(
@@ -20,9 +36,14 @@ export async function resolvePlatformOrganizationSelector(
     };
   }
 
-  const organizationId = await readActiveOrganizationId();
-  if (organizationId) {
-    return { organizationId };
+  const organizationIdFromHeader = await readActiveOrganizationIdFromHeader();
+  if (organizationIdFromHeader) {
+    return { organizationId: organizationIdFromHeader };
+  }
+
+  const organizationIdFromCookie = await readActiveOrganizationIdFromCookie();
+  if (organizationIdFromCookie) {
+    return { organizationId: organizationIdFromCookie };
   }
 
   return undefined;
