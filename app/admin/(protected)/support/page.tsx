@@ -2,7 +2,7 @@ import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStat
 import { AdminActionNotice, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { updateAdminSupportTicketAction } from "@/lib/wexon-admin-actions";
-import { formatAdminDate, getAdminSupportTicketsData } from "@/lib/wexon-admin";
+import { formatAdminDate, getAdminDemoRequestsData, getAdminSupportTicketsData } from "@/lib/wexon-admin";
 
 type SupportTicketMeta = {
   subject?: string;
@@ -13,6 +13,16 @@ type SupportTicketMeta = {
   adminReply?: string;
   adminRepliedAt?: string;
   actor?: { email?: string; userId?: string };
+};
+
+type DemoRequestMeta = {
+  fullName?: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  product?: string;
+  message?: string;
+  status?: string;
 };
 
 const categoryLabels: Record<string, string> = {
@@ -41,13 +51,20 @@ function readMeta(value: unknown): SupportTicketMeta {
   return typeof value === "object" && value !== null ? (value as SupportTicketMeta) : {};
 }
 
+function readDemoMeta(value: unknown): DemoRequestMeta {
+  return typeof value === "object" && value !== null ? (value as DemoRequestMeta) : {};
+}
+
 function isHighPriority(priority?: string) {
   return priority === "HIGH" || priority === "CRITICAL";
 }
 
 export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
   const { adminError } = await searchParams;
-  const { tickets, loadedAt } = await getAdminSupportTicketsData();
+  const [{ tickets, loadedAt }, { requests: demoRequests }] = await Promise.all([
+    getAdminSupportTicketsData(),
+    getAdminDemoRequestsData(),
+  ]);
   const loadedAtTime = loadedAt.getTime();
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   const highPriorityCount = tickets.filter((ticket) => isHighPriority(readMeta(ticket.metadataJson).priority)).length;
@@ -132,6 +149,36 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
                     <AdminTextField label="Yanıt" name="adminReply" placeholder="Müşteriye not veya çözüm..." />
                     <AdminSubmitButton>Güncelle</AdminSubmitButton>
                   </form>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </AdminPanel>
+
+      <AdminPanel>
+        <AdminSectionTitle badge="Demo" title="Public demo talepleri" description="Instagram ve demo-request formundan gelen kayıtlar." />
+        {demoRequests.length === 0 ? (
+          <AdminEmptyState>Henüz public demo talebi bulunmuyor.</AdminEmptyState>
+        ) : (
+          <div className="space-y-4">
+            {demoRequests.map((request) => {
+              const meta = readDemoMeta(request.metadataJson);
+              return (
+                <div key={request.id} className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-black text-slate-950">{meta.company ?? "Demo talebi"}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        {formatAdminDate(request.createdAt)} · {meta.fullName ?? "—"}
+                      </p>
+                    </div>
+                    <AdminStatusPill active>{meta.product ?? "Ürün"}</AdminStatusPill>
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-slate-600">{meta.message ?? "-"}</p>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    {meta.email ?? "—"} · {meta.phone ?? "—"}
+                  </p>
                 </div>
               );
             })}

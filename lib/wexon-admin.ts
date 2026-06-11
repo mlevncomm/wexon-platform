@@ -331,6 +331,15 @@ export async function getAdminSupportTicketsData() {
   return { tickets, loadedAt: new Date() };
 }
 
+export async function getAdminDemoRequestsData() {
+  const requests = await prisma.auditLog.findMany({
+    where: { action: "public.demo_request.created" },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return { requests, loadedAt: new Date() };
+}
+
 export async function getAdminOrganizationMutationOptions() {
   const wexPayProduct = await prisma.product.findFirst({
     where: {

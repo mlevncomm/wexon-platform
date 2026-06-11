@@ -6,6 +6,7 @@ type LinkIcon =
   | "hotel"
   | "building"
   | "sparkles"
+  | "play"
   | "user"
   | "shield"
   | "mail"
@@ -44,6 +45,15 @@ const WEXON_LINKS: WexonLinkItem[] = [
     description: "QR menü, sipariş ve ödeme",
     href: "/products/wexpay",
     icon: "credit-card",
+    tone: "cyan",
+    group: "main",
+  },
+  {
+    id: "wexpay-demo",
+    label: "WexPay Demo",
+    description: "QR sipariş ve ödeme simülasyonu",
+    href: "/demo/wexpay",
+    icon: "play",
     tone: "cyan",
     group: "main",
   },
@@ -229,6 +239,12 @@ function LinkIconGlyph({ icon, className = "" }: { icon: LinkIcon; className?: s
       return (
         <svg {...props} fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3z" strokeLinejoin="round" />
+        </svg>
+      );
+    case "play":
+      return (
+        <svg {...props} fill="currentColor">
+          <path d="M8 5.14v13.72L19 12 8 5.14z" />
         </svg>
       );
     case "user":
