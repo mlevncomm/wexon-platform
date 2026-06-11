@@ -67,7 +67,8 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 **Deploy oncesi kontrol:**
 
 - [ ] Tum zorunlu degiskenler **Production** environment'inda set edildi.
-- [ ] `API_KEY_HASH_SECRET`: Production'da zorunlu. API key hashleme icin HMAC secret/pepper olarak kullanilir. **Vercel Environment Variables icine eklenmeden production deploy yapilmamali.**
+- [ ] `API_KEY_HASH_SECRET`: Zorunlu (local `.env.local` + Vercel Production). API key hashleme icin HMAC secret/pepper olarak kullanilir; kodda fallback yoktur, eksikse uygulama kontrollu hata verir. **Vercel Production environment'a eklenmeden deploy yapilmamali.**
+- [ ] Smoke: `npm run build` sonrasi `npm run test:smoke` (Playwright) gecti.
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
 

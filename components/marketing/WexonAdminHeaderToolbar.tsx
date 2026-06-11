@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type { AdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { adminCommandRoutes } from "@/lib/wexon-admin-navigation";
@@ -22,6 +22,14 @@ function formatActivityTime(iso: string) {
 
 function normalize(value: string) {
   return value.toLocaleLowerCase("tr-TR");
+}
+
+function useIsClient() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 }
 
 function AdminBrandLink({ compact = false, inline = false }: { compact?: boolean; inline?: boolean }) {
@@ -142,7 +150,7 @@ export default function WexonAdminHeaderToolbar({
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const isClient = useIsClient();
   const commandRef = useRef<HTMLDivElement>(null);
   const alertsMobileRef = useRef<HTMLDivElement>(null);
   const alertsDesktopRef = useRef<HTMLDivElement>(null);
@@ -192,6 +200,9 @@ export default function WexonAdminHeaderToolbar({
       .filter((title) => map.has(title))
       .map((title) => ({ title, items: map.get(title)! }));
   }, [filteredItems, query]);
+
+  const highlightedIndex =
+    filteredItems.length === 0 ? 0 : Math.min(activeIndex, filteredItems.length - 1);
 
   const alertItems = useMemo(() => {
     const items = [
@@ -252,10 +263,6 @@ export default function WexonAdminHeaderToolbar({
   }, [closeCommand, commandOpen, openCommand]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
     if (commandOpen) {
       document.body.style.overflow = "hidden";
       inputRef.current?.focus();
@@ -266,10 +273,6 @@ export default function WexonAdminHeaderToolbar({
       document.body.style.overflow = "";
     };
   }, [commandOpen]);
-
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
 
   useEffect(() => {
     if (!commandOpen && !alertsOpen) return;
@@ -307,7 +310,7 @@ export default function WexonAdminHeaderToolbar({
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      const item = filteredItems[activeIndex];
+      const item = filteredItems[highlightedIndex];
       if (item) navigateTo(item.href);
     }
   }
@@ -460,7 +463,7 @@ export default function WexonAdminHeaderToolbar({
         </div>
       </div>
 
-      {commandOpen && mounted
+      {commandOpen && isClient
         ? createPortal(
             <div
               className="fixed inset-0 z-[200] flex items-start justify-center bg-slate-950/20 px-4 pt-[12vh] backdrop-blur-[2px]"
@@ -485,7 +488,10 @@ export default function WexonAdminHeaderToolbar({
                   <input
                     ref={inputRef}
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setActiveIndex(0);
+                    }}
                     onKeyDown={handleCommandKeyDown}
                     placeholder="Sayfa veya müşteri ara…"
                     className="min-w-0 flex-1 bg-transparent text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
@@ -511,7 +517,7 @@ export default function WexonAdminHeaderToolbar({
                         <div className="space-y-0.5">
                           {section.items.map((item) => {
                             const index = filteredItems.findIndex((entry) => entry.id === item.id);
-                            const active = index === activeIndex;
+                            const active = index === highlightedIndex;
                             return (
                               <button
                                 key={item.id}

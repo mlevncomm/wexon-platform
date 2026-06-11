@@ -11,15 +11,25 @@ import { createHash, createHmac, timingSafeEqual } from "crypto";
  * HMAC-SHA256. No schema migration is required.
  */
 
-function getApiKeyHashSecret() {
-  const secret = process.env.API_KEY_HASH_SECRET;
-  if (secret) return secret;
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("API_KEY_HASH_SECRET tanımlı olmalıdır.");
+export class ApiKeyHashSecretError extends Error {
+  constructor() {
+    super(
+      "API_KEY_HASH_SECRET is required. Set it in .env.local for local development or in Vercel Production environment variables before deploy.",
+    );
+    this.name = "ApiKeyHashSecretError";
   }
+}
 
-  return process.env.ADMIN_SESSION_SECRET ?? "dev-api-key-hash-secret";
+export function assertApiKeyHashSecret(): string {
+  const secret = process.env.API_KEY_HASH_SECRET?.trim();
+  if (!secret) {
+    throw new ApiKeyHashSecretError();
+  }
+  return secret;
+}
+
+function getApiKeyHashSecret() {
+  return assertApiKeyHashSecret();
 }
 
 function timingSafeEqualHex(left: string, right: string) {
