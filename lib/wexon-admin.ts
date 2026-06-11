@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { evaluateProductAccess } from "@/lib/wexon-core-access";
+import { groupDemoLeadStatusUpdates, resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
 
 export function formatAdminStatus(status: string) {
   const labels: Record<string, string> = {
@@ -337,7 +338,33 @@ export async function getAdminDemoRequestsData() {
     orderBy: { createdAt: "desc" },
     take: 100,
   });
-  return { requests, loadedAt: new Date() };
+
+  const requestIds = requests.map((request) => request.id);
+  const statusUpdates =
+    requestIds.length === 0
+      ? []
+      : await prisma.auditLog.findMany({
+          where: {
+            action: "public.demo_request.status_updated",
+            entityId: { in: requestIds },
+          },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            entityId: true,
+            metadataJson: true,
+            createdAt: true,
+          },
+        });
+
+  const updatesByRequestId = groupDemoLeadStatusUpdates(statusUpdates);
+
+  const enrichedRequests = requests.map((request) => ({
+    ...request,
+    leadStatus: resolveDemoLeadStatus(request.metadataJson, updatesByRequestId.get(request.id) ?? []),
+  }));
+
+  return { requests: enrichedRequests, loadedAt: new Date() };
 }
 
 export async function getAdminOrganizationMutationOptions() {

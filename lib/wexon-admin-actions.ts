@@ -5,7 +5,9 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { adminDebug, assertAdminAccess, type AdminSession } from "@/lib/wexon-admin-auth";
+import { writeAuditLog } from "@/lib/wexon-audit";
 import { hashApiKey } from "@/lib/wexon-api-key-hash";
+import { resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/wexon-passwords";
 import { assertEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
@@ -36,6 +38,7 @@ import {
   parseSubscriptionCreatePayload,
   parseSubscriptionStatusPayload,
   parseSupportTicketUpdatePayload,
+  parseDemoRequestLeadStatusPayload,
   parseUserPasswordResetPayload,
   parseWebhookActivePayload,
   parseWebhookCreatePayload,
@@ -1862,5 +1865,52 @@ export async function updateAdminAppInstallationSettingsAction(organizationId: s
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(formData, returnTo, error, "Kurulum ayarları güncellenemedi.");
+  }
+}
+
+export async function updateAdminDemoRequestStatusAction(demoRequestId: string, formData: FormData) {
+  const returnTo = readReturnTo(formData, "/admin/support");
+  try {
+    const actor = await assertAdminAccess();
+    const payload = parseDemoRequestLeadStatusPayload(formData);
+    const demoRequest = await prisma.auditLog.findUnique({ where: { id: demoRequestId } });
+    if (!demoRequest || demoRequest.action !== "public.demo_request.created") {
+      throw new AdminValidationError("Demo talebi bulunamadı.");
+    }
+
+    const statusUpdates = await prisma.auditLog.findMany({
+      where: {
+        action: "public.demo_request.status_updated",
+        entityId: demoRequestId,
+      },
+      orderBy: { createdAt: "asc" },
+      select: { metadataJson: true, createdAt: true },
+    });
+
+    const previousStatus = resolveDemoLeadStatus(demoRequest.metadataJson, statusUpdates);
+    const nextStatus = payload.leadStatus;
+
+    if (previousStatus !== nextStatus) {
+      await writeAuditLog({
+        action: "public.demo_request.status_updated",
+        entityType: "DemoRequest",
+        entityId: demoRequestId,
+        source: "admin_demo_request_management",
+        message: `Lead durumu ${previousStatus} → ${nextStatus}`,
+        metadata: {
+          originalDemoRequestId: demoRequestId,
+          previousStatus,
+          nextStatus,
+          actor: getAdminActionActor(actor),
+        },
+      });
+    }
+
+    revalidatePath("/admin/support");
+    revalidatePath("/admin");
+    redirect(returnTo);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, returnTo, error, "Lead durumu güncellenemedi.");
   }
 }

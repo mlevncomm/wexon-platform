@@ -404,6 +404,14 @@ export function parseSupportTicketUpdatePayload(formData: FormData) {
   };
 }
 
+const demoLeadStatuses = ["new", "contacted", "demo_scheduled", "won", "lost"] as const;
+
+export function parseDemoRequestLeadStatusPayload(formData: FormData) {
+  return {
+    leadStatus: oneOf(requiredString(formData, "leadStatus", "Lead durumu"), demoLeadStatuses, "Lead durumu"),
+  };
+}
+
 export function parseAppInstallationSettingsPayload(formData: FormData) {
   const onboardingStatus = readString(formData, "onboardingStatus") || "PENDING_SETUP";
   const message = nullableString(formData, "message");

@@ -47,6 +47,7 @@ export async function createDemoRequestAction(
         product: payload.product,
         message: payload.message,
         source: payload.source,
+        leadStatus: "new",
         status: "NEW",
       },
     });

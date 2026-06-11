@@ -7,7 +7,15 @@ import {
   AdminSummaryCard,
   AdminTableShell,
 } from "@/components/marketing/WexonAdminCards";
+import { AdminSubmitButton } from "@/components/marketing/WexonAdminForms";
 import { formatAdminDate } from "@/lib/wexon-admin";
+import { updateAdminDemoRequestStatusAction } from "@/lib/wexon-admin-actions";
+import {
+  demoLeadStatusBadgeClass,
+  demoLeadStatusLabels,
+  demoLeadStatuses,
+  type DemoLeadStatus,
+} from "@/lib/wexon-demo-request-leads";
 import { demoRequestSourceLabels } from "@/lib/wexon-public-validation";
 
 type DemoRequestMeta = {
@@ -21,10 +29,11 @@ type DemoRequestMeta = {
   source?: string;
 };
 
-type DemoRequestRow = {
+export type AdminDemoRequestRow = {
   id: string;
   createdAt: Date;
   metadataJson: unknown;
+  leadStatus: DemoLeadStatus;
 };
 
 export type AdminDemoRequestFilters = {
@@ -50,6 +59,18 @@ function resolveSource(meta: DemoRequestMeta) {
     key,
     label: demoRequestSourceLabels[key] ?? meta.source ?? demoRequestSourceLabels.direct,
   };
+}
+
+function buildSupportReturnTo(filters: AdminDemoRequestFilters) {
+  const params = new URLSearchParams();
+  if (filters.product && filters.product !== "all") {
+    params.set("demoProduct", filters.product);
+  }
+  if (filters.source && filters.source !== "all") {
+    params.set("demoSource", filters.source);
+  }
+  const query = params.toString();
+  return query ? `/admin/support?${query}` : "/admin/support";
 }
 
 function productBadgeClass(product?: string) {
@@ -86,7 +107,11 @@ function DemoBadge({ children, className }: { children: string; className: strin
   );
 }
 
-function filterDemoRequests(requests: DemoRequestRow[], filters: AdminDemoRequestFilters) {
+function LeadStatusBadge({ status }: { status: DemoLeadStatus }) {
+  return <DemoBadge className={demoLeadStatusBadgeClass(status)}>{demoLeadStatusLabels[status]}</DemoBadge>;
+}
+
+function filterDemoRequests(requests: AdminDemoRequestRow[], filters: AdminDemoRequestFilters) {
   const product = filters.product?.trim();
   const source = filters.source?.trim();
 
@@ -130,7 +155,46 @@ function QuickActionLink({
   );
 }
 
-function DemoRequestCard({ request }: { request: DemoRequestRow }) {
+function LeadStatusUpdateForm({
+  requestId,
+  leadStatus,
+  returnTo,
+  compact = false,
+}: {
+  requestId: string;
+  leadStatus: DemoLeadStatus;
+  returnTo: string;
+  compact?: boolean;
+}) {
+  const updateStatus = updateAdminDemoRequestStatusAction.bind(null, requestId);
+
+  return (
+    <form action={updateStatus} className={compact ? "flex min-w-[160px] flex-col gap-2" : "mt-4 space-y-2"}>
+      <input type="hidden" name="returnTo" value={returnTo} />
+      <select
+        name="leadStatus"
+        defaultValue={leadStatus}
+        aria-label="Lead durumu"
+        className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-950 outline-none transition focus:border-emerald-300"
+      >
+        {demoLeadStatuses.map((status) => (
+          <option key={status} value={status}>
+            {demoLeadStatusLabels[status]}
+          </option>
+        ))}
+      </select>
+      <AdminSubmitButton>Güncelle</AdminSubmitButton>
+    </form>
+  );
+}
+
+function DemoRequestCard({
+  request,
+  returnTo,
+}: {
+  request: AdminDemoRequestRow;
+  returnTo: string;
+}) {
   const meta = readDemoMeta(request.metadataJson);
   const source = resolveSource(meta);
   const email = meta.email?.trim();
@@ -138,15 +202,17 @@ function DemoRequestCard({ request }: { request: DemoRequestRow }) {
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <LeadStatusBadge status={request.leadStatus} />
+        <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
+        <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
+      </div>
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-base font-black text-slate-950">{meta.fullName ?? "—"}</p>
           <p className="mt-1 truncate text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
           <p className="mt-1 text-xs font-semibold text-slate-500">{formatAdminDate(request.createdAt)}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
-          <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
         </div>
       </div>
 
@@ -161,6 +227,8 @@ function DemoRequestCard({ request }: { request: DemoRequestRow }) {
         <p className="truncate">{email ?? "—"}</p>
         <p className="truncate">{phone ?? "—"}</p>
       </div>
+
+      <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} />
     </article>
   );
 }
@@ -169,9 +237,10 @@ export default function AdminDemoRequestsPanel({
   requests,
   filters,
 }: {
-  requests: DemoRequestRow[];
+  requests: AdminDemoRequestRow[];
   filters: AdminDemoRequestFilters;
 }) {
+  const returnTo = buildSupportReturnTo(filters);
   const filteredRequests = filterDemoRequests(requests, filters);
   const wexPayCount = requests.filter((request) => readDemoMeta(request.metadataJson).product === "WexPay").length;
   const linksCount = requests.filter((request) => resolveSource(readDemoMeta(request.metadataJson)).key === "links").length;
@@ -261,10 +330,11 @@ export default function AdminDemoRequestsPanel({
 
           <div className="hidden lg:block">
             <AdminTableShell>
-              <table className="w-full min-w-[1180px] text-left text-sm">
+              <table className="w-full min-w-[1320px] text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
                   <tr>
                     <th className="px-5 py-4 font-bold">Tarih</th>
+                    <th className="px-5 py-4 font-bold">Durum</th>
                     <th className="px-5 py-4 font-bold">Ad soyad</th>
                     <th className="px-5 py-4 font-bold">Firma</th>
                     <th className="px-5 py-4 font-bold">E-posta</th>
@@ -286,6 +356,17 @@ export default function AdminDemoRequestsPanel({
                       <tr key={request.id} className="align-top">
                         <td className="whitespace-nowrap px-5 py-4 text-xs font-semibold text-slate-500">
                           {formatAdminDate(request.createdAt)}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="space-y-3">
+                            <LeadStatusBadge status={request.leadStatus} />
+                            <LeadStatusUpdateForm
+                              requestId={request.id}
+                              leadStatus={request.leadStatus}
+                              returnTo={returnTo}
+                              compact
+                            />
+                          </div>
                         </td>
                         <td className="max-w-[140px] px-5 py-4">
                           <p className="break-words font-black text-slate-950">{meta.fullName ?? "—"}</p>
@@ -330,7 +411,7 @@ export default function AdminDemoRequestsPanel({
 
           <div className="space-y-4 lg:hidden">
             {filteredRequests.map((request) => (
-              <DemoRequestCard key={request.id} request={request} />
+              <DemoRequestCard key={request.id} request={request} returnTo={returnTo} />
             ))}
           </div>
         </>
