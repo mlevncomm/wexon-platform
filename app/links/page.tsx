@@ -1,205 +1,82 @@
 import Link from "next/link";
+import { WexPayDarkPanelHeaderBackdrop } from "@/components/wexpay/WexPayBusinessUI";
 
-type LinkIcon =
-  | "home"
-  | "credit-card"
-  | "hotel"
-  | "building"
-  | "sparkles"
-  | "play"
-  | "user"
-  | "shield"
-  | "mail"
-  | "instagram"
-  | "linkedin";
-
-type LinkTone = "emerald" | "cyan" | "indigo" | "amber" | "blue" | "neutral";
+type LinkIcon = "play" | "sparkles" | "credit-card" | "qr" | "home" | "hotel" | "building" | "user" | "shield" | "mail" | "instagram" | "linkedin";
 
 type WexonLinkItem = {
   id: string;
   label: string;
   description: string;
+  href: string;
   icon: LinkIcon;
-  tone: LinkTone;
-  group: "main" | "portals" | "social";
-} & (
-  | { href: string; external?: false; disabled?: false }
-  | { href: string; external: true; disabled?: false }
-  | { disabled: true; href?: never; external?: never }
-);
-
-/** Düzenlenebilir link listesi — Instagram bio için tek kaynak */
-const WEXON_LINKS: WexonLinkItem[] = [
-  {
-    id: "platform",
-    label: "Wexon Platform",
-    description: "Ana site ve ürün ekosistemi",
-    href: "/",
-    icon: "home",
-    tone: "emerald",
-    group: "main",
-  },
-  {
-    id: "wexpay",
-    label: "WexPay",
-    description: "QR menü, sipariş ve ödeme",
-    href: "/products/wexpay",
-    icon: "credit-card",
-    tone: "cyan",
-    group: "main",
-  },
-  {
-    id: "wexpay-demo",
-    label: "WexPay Demo",
-    description: "QR sipariş ve ödeme simülasyonu",
-    href: "/demo/wexpay",
-    icon: "play",
-    tone: "cyan",
-    group: "main",
-  },
-  {
-    id: "wexhotel",
-    label: "WexHotel",
-    description: "Otel operasyonları",
-    href: "/products/wexhotel",
-    icon: "hotel",
-    tone: "indigo",
-    group: "main",
-  },
-  {
-    id: "wexb2b",
-    label: "WexB2B",
-    description: "B2B satış ve tedarik",
-    href: "/products/wexb2b",
-    icon: "building",
-    tone: "amber",
-    group: "main",
-  },
-  {
-    id: "demo",
-    label: "Demo Talep Et",
-    description: "Ürünleri canlı görün",
-    href: "/demo-request",
-    icon: "sparkles",
-    tone: "emerald",
-    group: "main",
-  },
-  {
-    id: "customer-portal",
-    label: "Customer Portal",
-    description: "Müşteri paneli girişi",
-    href: "/dashboard/login",
-    icon: "user",
-    tone: "blue",
-    group: "portals",
-  },
-  {
-    id: "admin-portal",
-    label: "Admin Portal",
-    description: "Yönetim paneli girişi",
-    href: "/admin/login",
-    icon: "shield",
-    tone: "blue",
-    group: "portals",
-  },
-  {
-    id: "contact",
-    label: "İletişim",
-    description: "Bizimle iletişime geçin",
-    href: "/contact",
-    icon: "mail",
-    tone: "neutral",
-    group: "social",
-  },
-  {
-    id: "instagram",
-    label: "Instagram",
-    description: "@wexon",
-    href: "https://instagram.com/wexon",
-    external: true,
-    icon: "instagram",
-    tone: "neutral",
-    group: "social",
-  },
-  {
-    id: "linkedin",
-    label: "LinkedIn",
-    description: "Wexon",
-    href: "https://linkedin.com/company/wexon",
-    external: true,
-    icon: "linkedin",
-    tone: "neutral",
-    group: "social",
-  },
-];
-
-const TONE_STYLES: Record<
-  LinkTone,
-  {
-    stripe: string;
-    icon: string;
-    hover: string;
-    chevron: string;
-    chevronBg: string;
-  }
-> = {
-  emerald: {
-    stripe: "from-emerald-400 to-teal-500",
-    icon: "from-emerald-500/25 to-teal-500/10 text-emerald-300",
-    hover: "hover:border-emerald-400/30 hover:shadow-[0_12px_40px_-12px_rgba(16,185,129,0.45)]",
-    chevron: "group-hover:text-emerald-300",
-    chevronBg: "group-hover:bg-emerald-500/15 group-hover:border-emerald-400/25",
-  },
-  cyan: {
-    stripe: "from-cyan-400 to-emerald-400",
-    icon: "from-cyan-500/25 to-blue-500/10 text-cyan-300",
-    hover: "hover:border-cyan-400/30 hover:shadow-[0_12px_40px_-12px_rgba(34,211,238,0.4)]",
-    chevron: "group-hover:text-cyan-300",
-    chevronBg: "group-hover:bg-cyan-500/15 group-hover:border-cyan-400/25",
-  },
-  indigo: {
-    stripe: "from-indigo-400 to-violet-500",
-    icon: "from-indigo-500/25 to-violet-500/10 text-indigo-300",
-    hover: "hover:border-indigo-400/30 hover:shadow-[0_12px_40px_-12px_rgba(99,102,241,0.4)]",
-    chevron: "group-hover:text-indigo-300",
-    chevronBg: "group-hover:bg-indigo-500/15 group-hover:border-indigo-400/25",
-  },
-  amber: {
-    stripe: "from-amber-400 to-orange-500",
-    icon: "from-amber-500/25 to-orange-500/10 text-amber-300",
-    hover: "hover:border-amber-400/30 hover:shadow-[0_12px_40px_-12px_rgba(245,158,11,0.35)]",
-    chevron: "group-hover:text-amber-300",
-    chevronBg: "group-hover:bg-amber-500/15 group-hover:border-amber-400/25",
-  },
-  blue: {
-    stripe: "from-blue-400 to-indigo-500",
-    icon: "from-blue-500/25 to-indigo-500/10 text-blue-300",
-    hover: "hover:border-blue-400/30 hover:shadow-[0_12px_40px_-12px_rgba(59,130,246,0.35)]",
-    chevron: "group-hover:text-blue-300",
-    chevronBg: "group-hover:bg-blue-500/15 group-hover:border-blue-400/25",
-  },
-  neutral: {
-    stripe: "from-slate-400 to-slate-500",
-    icon: "from-white/10 to-white/5 text-slate-300",
-    hover: "hover:border-white/20 hover:shadow-[0_12px_40px_-12px_rgba(255,255,255,0.1)]",
-    chevron: "group-hover:text-slate-200",
-    chevronBg: "group-hover:bg-white/10 group-hover:border-white/15",
-  },
+  featured?: boolean;
+  external?: boolean;
+  compact?: boolean;
 };
 
-function WexonMark() {
+/** Düzenlenebilir link listesi — Instagram bio için tek kaynak */
+const WEXON_LINKS = {
+  featured: [
+    {
+      id: "wexpay-demo",
+      label: "WexPay Demo",
+      description: "QR menü · sepet · sipariş · ödeme simülasyonu",
+      href: "/demo/wexpay",
+      icon: "play" as const,
+      featured: true,
+    },
+    {
+      id: "demo-request",
+      label: "Demo Talep Et",
+      description: "İşletmeniz için canlı demo planlayın",
+      href: "/demo-request",
+      icon: "sparkles" as const,
+    },
+    {
+      id: "wexpay-product",
+      label: "WexPay Ürün Sayfası",
+      description: "Özellikler, akış ve paketler",
+      href: "/products/wexpay",
+      icon: "credit-card" as const,
+    },
+  ],
+  secondary: [
+    { id: "platform", label: "Wexon Platform", description: "Ana site", href: "/", icon: "home" as const, compact: true },
+    { id: "wexhotel", label: "WexHotel", description: "Otel operasyonları", href: "/products/wexhotel", icon: "hotel" as const, compact: true },
+    { id: "wexb2b", label: "WexB2B", description: "B2B satış", href: "/products/wexb2b", icon: "building" as const, compact: true },
+    { id: "customer-portal", label: "Customer Portal", description: "Müşteri girişi", href: "/dashboard/login", icon: "user" as const, compact: true },
+    { id: "admin-portal", label: "Admin Portal", description: "Yönetim girişi", href: "/admin/login", icon: "shield" as const, compact: true },
+    { id: "contact", label: "İletişim", description: "Bizimle iletişime geçin", href: "/contact", icon: "mail" as const, compact: true },
+    {
+      id: "instagram",
+      label: "Instagram",
+      description: "@wexon",
+      href: "https://instagram.com/wexon",
+      icon: "instagram" as const,
+      external: true,
+      compact: true,
+    },
+    {
+      id: "linkedin",
+      label: "LinkedIn",
+      description: "Wexon",
+      href: "https://linkedin.com/company/wexon",
+      icon: "linkedin" as const,
+      external: true,
+      compact: true,
+    },
+  ],
+};
+
+function WexPayMark() {
   return (
-    <div className="relative">
-      <div
-        className="absolute -inset-1 rounded-[22px] bg-gradient-to-br from-emerald-400/40 via-cyan-400/20 to-transparent blur-md"
-        aria-hidden
-      />
-      <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-xl shadow-emerald-500/25 ring-1 ring-white/20">
-        <svg width="32" height="32" viewBox="0 0 18 18" fill="none" aria-hidden>
-          <path d="M9 2L16 6V12L9 16L2 12V6L9 2Z" stroke="white" strokeWidth="1.5" />
-          <circle cx="9" cy="9" r="2" fill="white" />
-        </svg>
-      </div>
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#10b981] shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/30">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <rect x="3" y="3" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
+        <path d="M16 16h4v4h-4zM16 16l4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
     </div>
   );
 }
@@ -208,10 +85,19 @@ function LinkIconGlyph({ icon, className = "" }: { icon: LinkIcon; className?: s
   const props = { className, viewBox: "0 0 24 24", "aria-hidden": true as const };
 
   switch (icon) {
-    case "home":
+    case "play":
+      return (
+        <svg {...props} fill="currentColor">
+          <path d="M8 5.14v13.72L19 12 8 5.14z" />
+        </svg>
+      );
+    case "qr":
       return (
         <svg {...props} fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z" strokeLinejoin="round" />
+          <rect x="4" y="4" width="6" height="6" />
+          <rect x="14" y="4" width="6" height="6" />
+          <rect x="4" y="14" width="6" height="6" />
+          <path d="M14 14h6v6h-6z" />
         </svg>
       );
     case "credit-card":
@@ -219,6 +105,18 @@ function LinkIconGlyph({ icon, className = "" }: { icon: LinkIcon; className?: s
         <svg {...props} fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="2" y="5" width="20" height="14" rx="2" />
           <path d="M2 10h20" />
+        </svg>
+      );
+    case "sparkles":
+      return (
+        <svg {...props} fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3z" strokeLinejoin="round" />
+        </svg>
+      );
+    case "home":
+      return (
+        <svg {...props} fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z" strokeLinejoin="round" />
         </svg>
       );
     case "hotel":
@@ -232,19 +130,6 @@ function LinkIconGlyph({ icon, className = "" }: { icon: LinkIcon; className?: s
       return (
         <svg {...props} fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="4" y="3" width="16" height="18" rx="1" />
-          <path d="M9 7h1M9 11h1M9 15h1M14 7h1M14 11h1M14 15h1" />
-        </svg>
-      );
-    case "sparkles":
-      return (
-        <svg {...props} fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3z" strokeLinejoin="round" />
-        </svg>
-      );
-    case "play":
-      return (
-        <svg {...props} fill="currentColor">
-          <path d="M8 5.14v13.72L19 12 8 5.14z" />
         </svg>
       );
     case "user":
@@ -282,125 +167,134 @@ function LinkIconGlyph({ icon, className = "" }: { icon: LinkIcon; className?: s
   }
 }
 
-function GroupDivider() {
-  return (
-    <div className="flex items-center gap-3 py-0.5" aria-hidden>
-      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-    </div>
-  );
-}
+function FeaturedLinkCard({ item }: { item: WexonLinkItem }) {
+  const isHero = item.featured;
 
-function LinkCard({ item }: { item: WexonLinkItem }) {
-  const tone = TONE_STYLES[item.tone];
-
-  const content = (
+  const inner = (
     <>
       <span
-        className={`absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-gradient-to-b ${tone.stripe}`}
-        aria-hidden
-      />
-      <span
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br ring-1 ring-white/10 ${tone.icon}`}
+        className={`flex shrink-0 items-center justify-center rounded-2xl ${
+          isHero
+            ? "h-12 w-12 bg-white/15 text-white ring-1 ring-white/20"
+            : "h-11 w-11 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+        }`}
       >
-        <LinkIconGlyph icon={item.icon} className="h-[18px] w-[18px]" />
+        <LinkIconGlyph icon={item.icon} className="h-5 w-5" />
       </span>
-      <span className="min-w-0 flex-1 pl-0.5">
-        <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-white">
+      <span className="min-w-0 flex-1 text-left">
+        <span className={`block truncate font-black tracking-tight ${isHero ? "text-lg text-white" : "text-[15px] text-slate-950"}`}>
           {item.label}
         </span>
-        <span className="mt-0.5 block truncate text-[12px] font-medium text-slate-500">
+        <span className={`mt-0.5 block truncate text-[12px] font-semibold ${isHero ? "text-emerald-100/90" : "text-slate-500"}`}>
           {item.description}
         </span>
       </span>
-      {!item.disabled && (
-        <span
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/8 bg-white/[0.03] transition-all duration-300 ${tone.chevronBg}`}
-        >
-          <svg
-            className={`h-3.5 w-3.5 text-slate-500 transition-all duration-300 group-hover:translate-x-px ${tone.chevron}`}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            aria-hidden
-          >
-            <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      )}
+      <svg
+        className={`h-4 w-4 shrink-0 ${isHero ? "text-emerald-200" : "text-slate-300 group-hover:text-emerald-600"}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        aria-hidden
+      >
+        <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </>
   );
 
-  const baseClass = `group relative flex min-h-[4rem] w-full items-center gap-3.5 overflow-hidden rounded-[18px] border border-white/[0.07] bg-gradient-to-b from-white/[0.06] to-white/[0.02] py-3.5 pl-4 pr-3.5 backdrop-blur-xl transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 hover:-translate-y-0.5 ${tone.hover} active:scale-[0.99] active:translate-y-0`;
+  const heroClass =
+    "group relative flex min-h-[4.75rem] w-full items-center gap-3.5 overflow-hidden rounded-[20px] border border-emerald-400/30 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-4 py-4 shadow-[0_16px_40px_-12px_rgba(16,185,129,0.55)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50";
 
-  if (item.disabled) {
-    return (
-      <div className={`${baseClass} cursor-not-allowed opacity-45`} aria-disabled="true">
-        {content}
-        <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-          Yakında
-        </span>
-      </div>
-    );
-  }
+  const normalClass =
+    "group flex min-h-[3.75rem] w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm shadow-slate-900/5 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md hover:shadow-emerald-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40";
 
   if (item.external) {
     return (
-      <a href={item.href} target="_blank" rel="noreferrer" className={baseClass}>
+      <a href={item.href} target="_blank" rel="noreferrer" className={isHero ? heroClass : normalClass}>
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={item.href} className={isHero ? heroClass : normalClass}>
+      {inner}
+    </Link>
+  );
+}
+
+function CompactLinkCard({ item }: { item: WexonLinkItem }) {
+  const content = (
+    <>
+      <LinkIconGlyph icon={item.icon} className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-emerald-600" />
+      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-700 group-hover:text-slate-950">
+        {item.label}
+      </span>
+      <svg className="h-3.5 w-3.5 shrink-0 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+        <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </>
+  );
+
+  const className =
+    "group flex min-h-[2.75rem] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2.5 transition-colors hover:border-emerald-200 hover:bg-emerald-50/40";
+
+  if (item.external) {
+    return (
+      <a href={item.href} target="_blank" rel="noreferrer" className={className}>
         {content}
       </a>
     );
   }
 
   return (
-    <Link href={item.href} className={baseClass}>
+    <Link href={item.href} className={className}>
       {content}
     </Link>
   );
 }
 
 export default function WexonLinksPage() {
-  const mainLinks = WEXON_LINKS.filter((l) => l.group === "main");
-  const portalLinks = WEXON_LINKS.filter((l) => l.group === "portals");
-  const socialLinks = WEXON_LINKS.filter((l) => l.group === "social");
-
   return (
-    <div className="flex min-h-dvh items-start justify-center px-4 py-6 sm:px-5 sm:py-10">
-      <main className="w-full max-w-[440px] rounded-[28px] border border-emerald-400/10 bg-gradient-to-b from-emerald-950/20 via-black/30 to-black/50 p-4 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.9),0_0_60px_-20px_rgba(16,185,129,0.15)] backdrop-blur-xl sm:p-5 md:mt-4">
-        <header className="mb-5 flex flex-col items-center text-center">
-          <WexonMark />
-          <h1 className="mt-4 bg-gradient-to-b from-white to-slate-400 bg-clip-text text-[26px] font-black tracking-[-0.04em] text-transparent">
-            Wexon
-          </h1>
-          <p className="mt-1.5 text-[13px] font-semibold tracking-wide text-emerald-400/90">
-            Çok ürünlü SaaS ekosistemi
-          </p>
-          <p className="mt-2 max-w-[300px] text-[12px] leading-relaxed text-slate-500">
-            Wexon Core, WexPay, WexHotel ve WexB2B bağlantıları tek yerde.
-          </p>
-        </header>
+    <div className="flex min-h-dvh items-start justify-center px-4 py-5 sm:py-8">
+      <main className="w-full max-w-[430px]">
+        <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/80">
+          <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-5 py-6 text-center">
+            <WexPayDarkPanelHeaderBackdrop />
+            <div className="relative flex flex-col items-center">
+              <WexPayMark />
+              <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-300/90">WexPay</p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-white">QR menü, sipariş ve ödeme</h1>
+              <p className="mt-2 max-w-[320px] text-[13px] leading-relaxed text-slate-400">
+                Restoranlar için tek QR üzerinden menü, sipariş ve ödeme akışı.
+              </p>
+              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-200">
+                <LinkIconGlyph icon="qr" className="h-3 w-3" />
+                Masa QR · Demo hazır
+              </span>
+            </div>
+          </div>
 
-        <nav className="flex flex-col gap-2" aria-label="Wexon bağlantıları">
-          {mainLinks.map((item) => (
-            <LinkCard key={item.id} item={item} />
-          ))}
+          <nav className="space-y-2 p-4 sm:p-5" aria-label="WexPay bağlantıları">
+            {WEXON_LINKS.featured.map((item) => (
+              <FeaturedLinkCard key={item.id} item={item} />
+            ))}
 
-          <GroupDivider />
+            <div className="flex items-center gap-3 py-2" aria-hidden>
+              <div className="h-px flex-1 bg-slate-200" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Diğer</span>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
 
-          {portalLinks.map((item) => (
-            <LinkCard key={item.id} item={item} />
-          ))}
+            <div className="grid gap-2">
+              {WEXON_LINKS.secondary.map((item) => (
+                <CompactLinkCard key={item.id} item={item} />
+              ))}
+            </div>
+          </nav>
+        </div>
 
-          <GroupDivider />
-
-          {socialLinks.map((item) => (
-            <LinkCard key={item.id} item={item} />
-          ))}
-        </nav>
-
-        <p className="mt-6 text-center text-[10px] font-medium tracking-wide text-slate-600">
-          © {new Date().getFullYear()} Wexon
-        </p>
+        <p className="mt-5 text-center text-[10px] font-medium text-slate-400">© {new Date().getFullYear()} WexPay · Wexon</p>
       </main>
     </div>
   );

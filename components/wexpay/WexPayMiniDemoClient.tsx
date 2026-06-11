@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  formatLira,
+  OrderStatusBadge,
+  WexPayErrorNotice,
+} from "@/components/wexpay/WexPayBusinessUI";
 
-type DemoScreen = "menu" | "order-status" | "payment-done";
+type DemoScreen = "menu" | "order-status" | "payment" | "payment-done";
 
 type MenuProduct = {
   id: string;
@@ -36,8 +41,54 @@ type OrderResponse = {
   items: Array<{ name: string; quantity: number; lineTotal: number }>;
 };
 
-function formatTry(value: number) {
-  return `${value.toLocaleString("tr-TR")} ₺`;
+function RestaurantHeader({ badge, restaurantName }: { badge: string; restaurantName: string }) {
+  return (
+    <header className="mb-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">WexPay · QR Menü</p>
+          <p className="mt-1 text-xs font-semibold text-[#10b981]">{restaurantName}</p>
+          <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-950">Masa 12</h1>
+        </div>
+        <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700">
+          {badge}
+        </span>
+      </div>
+    </header>
+  );
+}
+
+function QuantityControl({
+  quantity,
+  onMinus,
+  onPlus,
+}: {
+  quantity: number;
+  onMinus: () => void;
+  onPlus: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-3">
+      <button
+        type="button"
+        onClick={onMinus}
+        disabled={quantity === 0}
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-bold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-300"
+        aria-label="Azalt"
+      >
+        −
+      </button>
+      <span className="min-w-6 text-center text-sm font-bold text-slate-950">{quantity}</span>
+      <button
+        type="button"
+        onClick={onPlus}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#10b981] text-lg font-bold text-white"
+        aria-label="Artır"
+      >
+        +
+      </button>
+    </div>
+  );
 }
 
 export default function WexPayMiniDemoClient() {
@@ -53,7 +104,7 @@ export default function WexPayMiniDemoClient() {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [order, setOrder] = useState<OrderResponse | null>(null);
-  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [paymentRef, setPaymentRef] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,9 +151,7 @@ export default function WexPayMiniDemoClient() {
   }, []);
 
   const visibleProducts = useMemo(() => {
-    if (activeCategory === "Popüler") {
-      return products.filter((item) => item.isPopular);
-    }
+    if (activeCategory === "Popüler") return products.filter((item) => item.isPopular);
     return products.filter((item) => item.categoryName === activeCategory);
   }, [activeCategory, products]);
 
@@ -183,8 +232,8 @@ export default function WexPayMiniDemoClient() {
 
       if (!response.ok) throw new Error("Ödeme simülasyonu başarısız.");
 
-      const payment = (await response.json()) as { id: string };
-      setPaymentId(payment.id);
+      const payment = (await response.json()) as { id: string; transactionId?: string | null };
+      setPaymentRef(payment.transactionId ?? payment.id);
       setScreen("payment-done");
     } catch {
       setActionError("Ödeme simülasyonu sırasında bir sorun oluştu.");
@@ -198,239 +247,273 @@ export default function WexPayMiniDemoClient() {
     setCart({});
     setOrderNote("");
     setOrder(null);
-    setPaymentId(null);
+    setPaymentRef(null);
     setActionError(null);
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 px-4 py-3 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">WexPay Demo</p>
-            <h1 className="truncate text-base font-black text-white">{restaurantName}</h1>
-          </div>
-          <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-300">
-            Masa 12 · QR
-          </span>
-        </div>
-      </header>
+    <main className="min-h-dvh bg-[#f6f8f7] px-4 py-6 text-slate-950 sm:px-6">
+      <div className="mx-auto w-full max-w-[430px]">
+        <div className="rounded-[32px] border border-slate-200 bg-white p-3 shadow-xl shadow-slate-200/80">
+          <div className="max-h-[calc(100dvh-3rem)] overflow-y-auto overflow-x-hidden rounded-[26px] border border-slate-200 bg-[#fbfcfb] p-5">
+            <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-200" aria-hidden />
 
-      {screen === "menu" ? (
-        <>
-          <div className="flex-1 px-4 pb-28 pt-4">
-            <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3">
-              <p className="text-xs font-semibold leading-relaxed text-emerald-100/90">
-                Tek QR ile menü, sipariş ve ödeme. Bu akış gerçek ödeme almaz; WexPay deneyimini simüle eder.
-              </p>
-            </div>
+            {screen === "menu" ? (
+              <section>
+                <RestaurantHeader badge="QR menü" restaurantName={restaurantName} />
 
-            {loading ? (
-              <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm font-semibold text-slate-400">
-                Menü yükleniyor...
-              </p>
-            ) : loadError ? (
-              <p className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm font-semibold text-rose-200">
-                {loadError}
-              </p>
-            ) : (
-              <>
-                <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {categories.map((category) => (
-                    <button
-                      key={category}
-                      type="button"
-                      onClick={() => setActiveCategory(category)}
-                      className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold transition-colors ${
-                        activeCategory === category
-                          ? "bg-emerald-500 text-white"
-                          : "border border-white/10 bg-white/5 text-slate-300"
-                      }`}
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
+                <p className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold leading-relaxed text-emerald-700">
+                  QR okutuldu · Menüden seç, sepete ekle, siparişi gönder, ödemeyi simüle et. Gerçek ödeme alınmaz.
+                </p>
 
-                <div className="space-y-3">
-                  {visibleProducts.map((product) => {
-                    const quantity = cart[product.id] ?? 0;
-                    return (
-                      <article
-                        key={product.id}
-                        className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm"
+                {loading ? (
+                  <p className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">
+                    Menü yükleniyor...
+                  </p>
+                ) : loadError ? (
+                  <WexPayErrorNotice message={loadError} />
+                ) : (
+                  <>
+                    <div className="-mx-1 mb-5 flex gap-2 overflow-x-auto px-1 pb-1">
+                      {categories.map((category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => setActiveCategory(category)}
+                          className={`shrink-0 rounded-full border px-4 py-2 text-xs font-bold transition-colors ${
+                            activeCategory === category
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-white text-slate-600"
+                          }`}
+                        >
+                          {category}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-3">
+                      {visibleProducts.map((product) => {
+                        const quantity = cart[product.id] ?? 0;
+                        return (
+                          <article
+                            key={product.id}
+                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-900/5"
+                          >
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h2 className="text-sm font-bold text-slate-950">{product.name}</h2>
+                                {product.description ? (
+                                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">
+                                    {product.description}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <p className="shrink-0 text-sm font-black text-slate-950">{formatLira(product.price)}</p>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-xs font-semibold text-slate-500">
+                                {quantity > 0 ? `${quantity} adet sepette` : "Sepete ekle"}
+                              </span>
+                              <QuantityControl
+                                quantity={quantity}
+                                onMinus={() => updateCart(product.id, -1)}
+                                onPlus={() => updateCart(product.id, 1)}
+                              />
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+                      <h3 className="mb-3 text-sm font-bold text-slate-950">Sepet</h3>
+                      {cartLines.length === 0 ? (
+                        <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Henüz ürün seçilmedi.</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {cartLines.map((line) => (
+                            <li key={line.product.id} className="flex items-center justify-between gap-3 text-sm">
+                              <span className="min-w-0 truncate font-semibold text-slate-950">{line.product.name}</span>
+                              <span className="shrink-0 font-bold text-slate-950">
+                                {formatLira(line.product.price * line.quantity)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <input
+                        value={orderNote}
+                        onChange={(event) => setOrderNote(event.target.value)}
+                        placeholder="Sipariş notu ekleyin"
+                        className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none transition-colors placeholder:text-slate-400 focus:border-emerald-300 focus:bg-white"
+                      />
+                      <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4">
+                        <span className="text-sm font-semibold text-slate-500">Sepet toplamı</span>
+                        <span className="text-xl font-black text-slate-950">{formatLira(cartTotal)}</span>
+                      </div>
+                      {actionError ? <div className="mt-4"><WexPayErrorNotice message={actionError} /></div> : null}
+                      <button
+                        type="button"
+                        onClick={() => void submitOrder()}
+                        disabled={submitting || cartCount === 0}
+                        className="mt-4 w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-bold text-white">{product.name}</p>
-                            {product.description ? (
-                              <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-400">
-                                {product.description}
-                              </p>
-                            ) : null}
-                          </div>
-                          <p className="shrink-0 text-sm font-black text-emerald-300">{formatTry(product.price)}</p>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-slate-500">
-                            {quantity > 0 ? `${quantity} adet` : "Sepete ekle"}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => updateCart(product.id, -1)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-lg font-bold text-white"
-                              aria-label="Azalt"
-                            >
-                              −
-                            </button>
-                            <span className="w-5 text-center text-sm font-bold text-white">{quantity}</span>
-                            <button
-                              type="button"
-                              onClick={() => updateCart(product.id, 1)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-lg font-bold text-white"
-                              aria-label="Artır"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
+                        {submitting ? "Sipariş gönderiliyor..." : "Siparişi Gönder"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </section>
+            ) : null}
+
+            {screen === "order-status" && order ? (
+              <section className="text-center">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#10b981]">
+                  ✓
                 </div>
+                <h2 className="text-2xl font-black text-slate-950">Sipariş alındı</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Sipariş mutfağa iletildi. Aynı QR ekranından ödemeye geçebilirsiniz.
+                </p>
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-black text-slate-950">{order.orderNumber}</p>
+                    <OrderStatusBadge status={order.status} />
+                  </div>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{order.table.name}</p>
+                  <ul className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+                    {order.items.map((item) => (
+                      <li key={`${item.name}-${item.quantity}`} className="flex justify-between gap-3 text-sm">
+                        <span className="min-w-0 truncate font-semibold text-slate-700">
+                          {item.quantity}× {item.name}
+                        </span>
+                        <span className="shrink-0 font-bold text-slate-950">{formatLira(item.lineTotal)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                    <span className="text-sm font-semibold text-slate-500">Toplam</span>
+                    <span className="text-lg font-black text-emerald-600">{formatLira(order.totalAmount)}</span>
+                  </div>
+                </div>
+                {actionError ? <div className="mt-4"><WexPayErrorNotice message={actionError} /></div> : null}
+                <div className="mt-6 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionError(null);
+                      setScreen("payment");
+                    }}
+                    className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-700"
+                  >
+                    Ödemeyi Simüle Et
+                  </button>
+                  <button
+                    type="button"
+                    onClick={restartDemo}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-700"
+                  >
+                    Yeni Demo
+                  </button>
+                </div>
+              </section>
+            ) : null}
 
-                <label className="mt-4 block">
-                  <span className="text-xs font-bold text-slate-400">Sipariş notu (opsiyonel)</span>
-                  <textarea
-                    value={orderNote}
-                    onChange={(event) => setOrderNote(event.target.value)}
-                    rows={2}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-white outline-none placeholder:text-slate-500 focus:border-emerald-400/40"
-                    placeholder="Örn. Az acılı olsun"
-                  />
-                </label>
-              </>
-            )}
+            {screen === "payment" && order ? (
+              <section>
+                <RestaurantHeader badge="Güvenli ödeme" restaurantName={restaurantName} />
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Demo checkout</p>
+                  <p className="text-sm font-bold text-slate-950">Ödeme simülasyonu</p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    Gerçek kart bilgisi alınmaz. WexPay tek QR ödeme akışını test edersiniz.
+                  </p>
+                  <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-semibold text-slate-500">Sipariş</span>
+                      <span className="font-bold text-slate-950">{order.orderNumber}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="font-semibold text-slate-500">Masa</span>
+                      <span className="font-bold text-slate-950">{order.table.name}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-200 pt-3 text-sm">
+                      <span className="font-semibold text-slate-500">Ödenecek tutar</span>
+                      <span className="text-lg font-black text-emerald-600">{formatLira(order.totalAmount)}</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2 rounded-2xl border border-dashed border-slate-200 p-3 text-left text-xs font-semibold text-slate-500">
+                    <p>Kart: **** **** **** 4821</p>
+                    <p>Simülasyon · WexPay Demo</p>
+                  </div>
+                </div>
+                {actionError ? <div className="mt-4"><WexPayErrorNotice message={actionError} /></div> : null}
+                <button
+                  type="button"
+                  onClick={() => void simulatePayment()}
+                  disabled={submitting}
+                  className="mt-5 w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 disabled:bg-slate-300"
+                >
+                  {submitting ? "Ödeme tamamlanıyor..." : "Ödemeyi Tamamla"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScreen("order-status")}
+                  className="mt-2 w-full rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600"
+                >
+                  Geri
+                </button>
+              </section>
+            ) : null}
 
-            {actionError ? (
-              <p className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-3 text-xs font-semibold text-rose-200">
-                {actionError}
-              </p>
+            {screen === "payment-done" && order ? (
+              <section className="text-center">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#10b981]">
+                  ✓
+                </div>
+                <h2 className="text-2xl font-black text-slate-950">Ödeme tamamlandı</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Ödeme simülasyonu başarıyla kaydedildi.
+                </p>
+                <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left">
+                  <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Sipariş</p>
+                  <p className="mt-1 text-sm font-black text-slate-950">{order.orderNumber}</p>
+                  <p className="mt-3 text-xs font-bold uppercase tracking-wide text-emerald-700">Tutar</p>
+                  <p className="mt-1 text-lg font-black text-emerald-700">{formatLira(order.totalAmount)}</p>
+                  {paymentRef ? (
+                    <>
+                      <p className="mt-3 text-xs font-bold uppercase tracking-wide text-emerald-700">Ödeme ref</p>
+                      <p className="mt-1 break-all text-xs font-semibold text-slate-600">{paymentRef}</p>
+                    </>
+                  ) : null}
+                </div>
+                <div className="mt-6 space-y-2">
+                  <button
+                    type="button"
+                    onClick={restartDemo}
+                    className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20"
+                  >
+                    Tekrar Dene
+                  </button>
+                  <Link
+                    href="/demo-request"
+                    className="block w-full rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-700"
+                  >
+                    Demo Talep Et
+                  </Link>
+                  <Link href="/links" className="block text-xs font-semibold text-slate-500 hover:text-emerald-700">
+                    WexPay bağlantılarına dön
+                  </Link>
+                </div>
+              </section>
             ) : null}
           </div>
-
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur-xl">
-            <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Sepet</p>
-                <p className="text-lg font-black text-white">{formatTry(cartTotal)}</p>
-                <p className="text-xs font-semibold text-slate-500">{cartCount} ürün</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void submitOrder()}
-                disabled={submitting || cartCount === 0}
-                className="rounded-2xl bg-emerald-500 px-5 py-3.5 text-sm font-bold text-white transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting ? "Gönderiliyor..." : "Sipariş Ver"}
-              </button>
-            </div>
-          </div>
-        </>
-      ) : null}
-
-      {screen === "order-status" && order ? (
-        <div className="flex flex-1 flex-col px-4 py-6">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-400">Sipariş alındı</p>
-            <h2 className="mt-2 text-2xl font-black text-white">{order.orderNumber}</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-400">
-              {order.table.name} · Durum: {order.status}
-            </p>
-
-            <ul className="mt-5 space-y-2 border-t border-white/10 pt-4">
-              {order.items.map((item) => (
-                <li key={`${item.name}-${item.quantity}`} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="min-w-0 truncate font-semibold text-slate-200">
-                    {item.quantity}× {item.name}
-                  </span>
-                  <span className="shrink-0 font-bold text-white">{formatTry(item.lineTotal)}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
-              <span className="text-sm font-bold text-slate-400">Toplam</span>
-              <span className="text-xl font-black text-emerald-300">{formatTry(order.totalAmount)}</span>
-            </div>
-          </div>
-
-          <p className="mt-4 text-center text-xs font-medium leading-relaxed text-slate-500">
-            Sipariş mutfağa iletildi. Şimdi aynı QR ekranından ödeme simülasyonunu tamamlayın.
-          </p>
-
-          {actionError ? (
-            <p className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-3 text-xs font-semibold text-rose-200">
-              {actionError}
-            </p>
-          ) : null}
-
-          <div className="mt-auto space-y-2 pt-6">
-            <button
-              type="button"
-              onClick={() => void simulatePayment()}
-              disabled={submitting}
-              className="w-full rounded-2xl bg-emerald-500 py-4 text-sm font-bold text-white hover:bg-emerald-400 disabled:opacity-60"
-            >
-              {submitting ? "Simüle ediliyor..." : "Ödeme Simülasyonunu Başlat"}
-            </button>
-            <button
-              type="button"
-              onClick={restartDemo}
-              className="w-full rounded-2xl border border-white/10 py-3.5 text-sm font-bold text-slate-300"
-            >
-              Yeni Demo
-            </button>
-          </div>
         </div>
-      ) : null}
 
-      {screen === "payment-done" && order ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-4 py-10 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/30">
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
-              <path d="M5 12l5 5L19 7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <h2 className="mt-5 text-2xl font-black text-white">Ödeme simülasyonu tamamlandı</h2>
-          <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-400">
-            {order.orderNumber} numaralı sipariş için {formatTry(order.totalAmount)} tutarında demo ödeme kaydedildi.
-          </p>
-          {paymentId ? (
-            <p className="mt-2 text-xs font-semibold text-slate-500">Demo ödeme ref: {paymentId.slice(0, 8)}</p>
-          ) : null}
-
-          <div className="mt-8 flex w-full max-w-xs flex-col gap-2">
-            <button
-              type="button"
-              onClick={restartDemo}
-              className="rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white hover:bg-emerald-400"
-            >
-              Tekrar Dene
-            </button>
-            <Link
-              href="/demo-request"
-              className="rounded-2xl border border-white/10 py-3.5 text-sm font-bold text-slate-200"
-            >
-              Demo Talep Et
-            </Link>
-            <Link href="/links" className="text-xs font-semibold text-slate-500 hover:text-slate-300">
-              Tüm bağlantılara dön
-            </Link>
-          </div>
-        </div>
-      ) : null}
-    </div>
+        <p className="mt-4 px-2 text-center text-[11px] font-semibold leading-relaxed text-slate-400">
+          WexPay public demo · Gerçek ödeme ve webhook tetiklenmez.
+        </p>
+      </div>
+    </main>
   );
 }

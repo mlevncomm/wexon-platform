@@ -7,9 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function WexPayMiniDemoLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-dvh overflow-x-hidden bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.12),transparent_55%),#020617] text-white antialiased">
-      {children}
-    </div>
-  );
+  return <div className="min-h-dvh overflow-x-hidden bg-[#f6f8f7] antialiased">{children}</div>;
 }
