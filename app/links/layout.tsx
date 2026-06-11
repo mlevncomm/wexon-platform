@@ -14,19 +14,35 @@ export const metadata: Metadata = {
 
 export default function LinksLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-dvh w-full overflow-x-hidden bg-[#04080f] text-[#f0f4f8] antialiased">
+    <div className="relative min-h-dvh w-full overflow-x-hidden text-[#f0f4f8] antialiased">
+      {/* Yeşil → siyah ana zemin */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(16,185,129,0.14),transparent)]"
+        className="pointer-events-none fixed inset-0 bg-[#020604]"
         aria-hidden
       />
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-          maskImage: "linear-gradient(to bottom, black 0%, transparent 70%)",
-        }}
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_90%_70%_at_50%_-8%,rgba(16,185,129,0.38)_0%,rgba(6,78,59,0.18)_32%,transparent_68%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_55%_45%_at_12%_18%,rgba(20,184,166,0.14)_0%,transparent_62%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_55%_45%_at_88%_22%,rgba(5,150,105,0.12)_0%,transparent_62%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none fixed inset-0 bg-[linear-gradient(180deg,#0a1f17_0%,#061410_22%,#030a08_52%,#010403_78%,#000000_100%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_100%,rgba(16,185,129,0.07)_0%,transparent_55%)]"
+        aria-hidden
+      />
+      {/* Kenar vignette — siyah derinlik */}
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_75%_65%_at_50%_45%,transparent_35%,rgba(0,0,0,0.55)_100%)]"
         aria-hidden
       />
       <div className="relative">{children}</div>

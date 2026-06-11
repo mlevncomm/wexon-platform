@@ -350,7 +350,7 @@ export default function WexonLinksPage() {
 
   return (
     <div className="flex min-h-dvh items-start justify-center px-4 py-6 sm:px-5 sm:py-10">
-      <main className="w-full max-w-[440px] rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-4 shadow-[0_24px_80px_-24px_rgba(0,0,0,0.8)] backdrop-blur-sm sm:p-5 md:mt-4">
+      <main className="w-full max-w-[440px] rounded-[28px] border border-emerald-400/10 bg-gradient-to-b from-emerald-950/20 via-black/30 to-black/50 p-4 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.9),0_0_60px_-20px_rgba(16,185,129,0.15)] backdrop-blur-xl sm:p-5 md:mt-4">
         <header className="mb-5 flex flex-col items-center text-center">
           <WexonMark />
           <h1 className="mt-4 bg-gradient-to-b from-white to-slate-400 bg-clip-text text-[26px] font-black tracking-[-0.04em] text-transparent">
