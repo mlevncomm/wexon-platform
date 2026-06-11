@@ -1,9 +1,9 @@
 import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStatusPill, AdminSummaryCard } from "@/components/marketing/WexonAdminCards";
+import AdminDemoRequestsPanel from "@/components/marketing/AdminDemoRequestsPanel";
 import { AdminActionNotice, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { updateAdminSupportTicketAction } from "@/lib/wexon-admin-actions";
 import { formatAdminDate, getAdminDemoRequestsData, getAdminSupportTicketsData } from "@/lib/wexon-admin";
-import { demoRequestSourceLabels } from "@/lib/wexon-public-validation";
 
 type SupportTicketMeta = {
   subject?: string;
@@ -14,17 +14,6 @@ type SupportTicketMeta = {
   adminReply?: string;
   adminRepliedAt?: string;
   actor?: { email?: string; userId?: string };
-};
-
-type DemoRequestMeta = {
-  fullName?: string;
-  company?: string;
-  email?: string;
-  phone?: string;
-  product?: string;
-  message?: string;
-  status?: string;
-  source?: string;
 };
 
 const categoryLabels: Record<string, string> = {
@@ -53,16 +42,16 @@ function readMeta(value: unknown): SupportTicketMeta {
   return typeof value === "object" && value !== null ? (value as SupportTicketMeta) : {};
 }
 
-function readDemoMeta(value: unknown): DemoRequestMeta {
-  return typeof value === "object" && value !== null ? (value as DemoRequestMeta) : {};
-}
-
 function isHighPriority(priority?: string) {
   return priority === "HIGH" || priority === "CRITICAL";
 }
 
-export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
-  const { adminError } = await searchParams;
+export default async function AdminSupportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ adminError?: string; demoProduct?: string; demoSource?: string }>;
+}) {
+  const { adminError, demoProduct, demoSource } = await searchParams;
   const [{ tickets, loadedAt }, { requests: demoRequests }] = await Promise.all([
     getAdminSupportTicketsData(),
     getAdminDemoRequestsData(),
@@ -158,38 +147,13 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
         )}
       </AdminPanel>
 
-      <AdminPanel>
-        <AdminSectionTitle badge="Demo" title="Public demo talepleri" description="Instagram ve demo-request formundan gelen kayıtlar." />
-        {demoRequests.length === 0 ? (
-          <AdminEmptyState>Henüz public demo talebi bulunmuyor.</AdminEmptyState>
-        ) : (
-          <div className="space-y-4">
-            {demoRequests.map((request) => {
-              const meta = readDemoMeta(request.metadataJson);
-              return (
-                <div key={request.id} className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-lg font-black text-slate-950">{meta.company ?? "Demo talebi"}</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        {formatAdminDate(request.createdAt)} · {meta.fullName ?? "—"}
-                      </p>
-                    </div>
-                    <AdminStatusPill active>{meta.product ?? "Ürün"}</AdminStatusPill>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-slate-600">{meta.message ?? "-"}</p>
-                  <p className="mt-2 text-xs font-semibold text-slate-500">
-                    {meta.email ?? "—"} · {meta.phone ?? "—"}
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-emerald-700">
-                    Kaynak: {demoRequestSourceLabels[meta.source ?? "direct"] ?? meta.source ?? "Direct"}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </AdminPanel>
+      <AdminDemoRequestsPanel
+        requests={demoRequests}
+        filters={{
+          product: demoProduct,
+          source: demoSource,
+        }}
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <AdminInfoRow label="Kaynak" value="AuditLog metadata" />
