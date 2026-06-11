@@ -1,6 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { evaluateProductAccess } from "@/lib/wexon-core-access";
-import { groupDemoLeadFollowUpUpdates, groupDemoLeadStatusUpdates, resolveDemoLeadFollowUp, resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
+import {
+  buildAdminDemoLeadSupportHref,
+  compareDemoLeadFollowUpPriority,
+  groupDemoLeadFollowUpUpdates,
+  groupDemoLeadStatusUpdates,
+  isDemoLeadFollowUpDue,
+  readDemoRequestLeadMeta,
+  resolveDemoLeadFollowUp,
+  resolveDemoLeadStatus,
+  resolveDemoRequestSourceLabel,
+  resolveFollowUpDateState,
+  type DemoLeadStatus,
+} from "@/lib/wexon-demo-request-leads";
 
 export function formatAdminStatus(status: string) {
   const labels: Record<string, string> = {
@@ -382,6 +394,74 @@ export async function getAdminDemoRequestsData() {
   }));
 
   return { requests: enrichedRequests, loadedAt: new Date() };
+}
+
+export type AdminDemoLeadFollowUpItem = {
+  id: string;
+  fullName: string;
+  company: string;
+  product: string;
+  sourceLabel: string;
+  leadStatus: DemoLeadStatus;
+  followUpAt: string;
+  followUpDateState: "today" | "overdue";
+  note: string | null;
+  supportHref: string;
+};
+
+export type AdminDemoLeadFollowUpWidgetData = {
+  items: AdminDemoLeadFollowUpItem[];
+  stats: {
+    newLeads: number;
+    todayFollowUp: number;
+    overdueFollowUp: number;
+    wonLeads: number;
+  };
+};
+
+export async function getAdminDemoLeadFollowUpWidgetData(now = new Date()): Promise<AdminDemoLeadFollowUpWidgetData> {
+  const { requests } = await getAdminDemoRequestsData();
+
+  const stats = {
+    newLeads: requests.filter((request) => request.leadStatus === "new").length,
+    todayFollowUp: 0,
+    overdueFollowUp: 0,
+    wonLeads: requests.filter((request) => request.leadStatus === "won").length,
+  };
+
+  const dueItems: AdminDemoLeadFollowUpItem[] = [];
+
+  for (const request of requests) {
+    const meta = readDemoRequestLeadMeta(request.metadataJson);
+    const followUpAt = request.followUp.followUpAt;
+    if (!isDemoLeadFollowUpDue(request.leadStatus, followUpAt, now) || !followUpAt) continue;
+
+    const followUpDateState = resolveFollowUpDateState(followUpAt, now);
+    if (followUpDateState !== "today" && followUpDateState !== "overdue") continue;
+
+    if (followUpDateState === "today") stats.todayFollowUp += 1;
+    if (followUpDateState === "overdue") stats.overdueFollowUp += 1;
+
+    dueItems.push({
+      id: request.id,
+      fullName: meta.fullName?.trim() || "—",
+      company: meta.company?.trim() || "—",
+      product: meta.product?.trim() || "—",
+      sourceLabel: resolveDemoRequestSourceLabel(meta.source),
+      leadStatus: request.leadStatus,
+      followUpAt,
+      followUpDateState,
+      note: request.followUp.note,
+      supportHref: buildAdminDemoLeadSupportHref(meta),
+    });
+  }
+
+  dueItems.sort(compareDemoLeadFollowUpPriority);
+
+  return {
+    items: dueItems.slice(0, 5),
+    stats,
+  };
 }
 
 export async function getAdminOrganizationMutationOptions() {

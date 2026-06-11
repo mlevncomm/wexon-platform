@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AdminDemoLeadFollowUpWidget from "@/components/marketing/AdminDemoLeadFollowUpWidget";
 import {
   AdminEmptyState,
   AdminInfoRow,
@@ -6,11 +7,14 @@ import {
   AdminSectionTitle,
   AdminSummaryCard,
 } from "@/components/marketing/WexonAdminCards";
-import { getAdminOverviewData } from "@/lib/wexon-admin";
+import { getAdminDemoLeadFollowUpWidgetData, getAdminOverviewData } from "@/lib/wexon-admin";
 import { dashboardPreviewHref, wexpayHref } from "@/lib/wexon-organization-context";
 
 export default async function AdminPage() {
-  const { organizations, licenses, invoices, auditLogs, wexPayAccessDecisions } = await getAdminOverviewData();
+  const [{ organizations, licenses, invoices, auditLogs, wexPayAccessDecisions }, demoLeadFollowUp] = await Promise.all([
+    getAdminOverviewData(),
+    getAdminDemoLeadFollowUpWidgetData(),
+  ]);
   const activeLicenses = licenses.filter((license) => license.status === "ACTIVE");
   const activeWexPayInstallations = wexPayAccessDecisions.filter((decision) => decision.allowed);
   const pendingInvoices = invoices.filter((invoice) => invoice.status === "ISSUED" || invoice.status === "OVERDUE");
@@ -44,6 +48,8 @@ export default async function AdminPage() {
         <AdminSummaryCard label="Aktif lisans" value={activeLicenses.length} />
         <AdminSummaryCard label="Bekleyen işlem" value={pendingWork} />
       </section>
+
+      <AdminDemoLeadFollowUpWidget data={demoLeadFollowUp} />
 
       <AdminPanel>
         <AdminSectionTitle

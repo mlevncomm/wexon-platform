@@ -1,3 +1,5 @@
+import { demoRequestSourceLabels } from "@/lib/wexon-public-validation";
+
 export const demoLeadStatuses = ["new", "contacted", "demo_scheduled", "won", "lost"] as const;
 
 export type DemoLeadStatus = (typeof demoLeadStatuses)[number];
@@ -190,4 +192,67 @@ export function groupDemoLeadFollowUpUpdates<T extends { entityId: string | null
   updates: T[],
 ) {
   return groupDemoLeadUpdatesByRequestId(updates);
+}
+
+export type DemoRequestLeadMeta = {
+  fullName?: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  product?: string;
+  message?: string;
+  source?: string;
+};
+
+const demoProductQueryMap: Record<string, string> = {
+  WexPay: "wexpay",
+  WexHotel: "wexhotel",
+  WexB2B: "wexb2b",
+  "Wexon Core": "wexon-core",
+};
+
+export function readDemoRequestLeadMeta(value: unknown): DemoRequestLeadMeta {
+  return typeof value === "object" && value !== null ? (value as DemoRequestLeadMeta) : {};
+}
+
+export function resolveDemoRequestSourceLabel(source?: string) {
+  const key = source?.trim().toLowerCase() || "direct";
+  return demoRequestSourceLabels[key] ?? source ?? "Direct";
+}
+
+export function buildAdminDemoLeadSupportHref(meta: DemoRequestLeadMeta) {
+  const params = new URLSearchParams();
+  const product = meta.product?.trim();
+  if (product && demoProductQueryMap[product]) {
+    params.set("demoProduct", demoProductQueryMap[product]);
+  }
+
+  const source = meta.source?.trim().toLowerCase();
+  if (source && source !== "direct") {
+    params.set("demoSource", source);
+  }
+
+  const query = params.toString();
+  return query ? `/admin/support?${query}` : "/admin/support";
+}
+
+export function isDemoLeadFollowUpDue(
+  leadStatus: DemoLeadStatus,
+  followUpAt: string | null | undefined,
+  now = new Date(),
+) {
+  if (leadStatus === "won" || leadStatus === "lost") return false;
+  const state = resolveFollowUpDateState(followUpAt, now);
+  return state === "today" || state === "overdue";
+}
+
+export function compareDemoLeadFollowUpPriority(
+  a: { followUpAt: string; followUpDateState: "today" | "overdue" },
+  b: { followUpAt: string; followUpDateState: "today" | "overdue" },
+) {
+  if (a.followUpDateState !== b.followUpDateState) {
+    return a.followUpDateState === "overdue" ? -1 : 1;
+  }
+
+  return a.followUpAt.localeCompare(b.followUpAt);
 }
