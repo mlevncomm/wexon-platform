@@ -39,6 +39,7 @@ import {
   parseSubscriptionStatusPayload,
   parseSupportTicketUpdatePayload,
   parseDemoRequestLeadStatusPayload,
+  parseDemoRequestFollowUpPayload,
   parseUserPasswordResetPayload,
   parseWebhookActivePayload,
   parseWebhookCreatePayload,
@@ -1912,5 +1913,38 @@ export async function updateAdminDemoRequestStatusAction(demoRequestId: string, 
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(formData, returnTo, error, "Lead durumu güncellenemedi.");
+  }
+}
+
+export async function updateAdminDemoRequestFollowUpAction(demoRequestId: string, formData: FormData) {
+  const returnTo = readReturnTo(formData, "/admin/support");
+  try {
+    const actor = await assertAdminAccess();
+    const payload = parseDemoRequestFollowUpPayload(formData);
+    const demoRequest = await prisma.auditLog.findUnique({ where: { id: demoRequestId } });
+    if (!demoRequest || demoRequest.action !== "public.demo_request.created") {
+      throw new AdminValidationError("Demo talebi bulunamadı.");
+    }
+
+    await writeAuditLog({
+      action: "public.demo_request.followup_updated",
+      entityType: "DemoRequest",
+      entityId: demoRequestId,
+      source: "admin_demo_request_management",
+      message: payload.note ? "Lead takip notu güncellendi" : "Lead takip tarihi güncellendi",
+      metadata: {
+        originalDemoRequestId: demoRequestId,
+        note: payload.note,
+        followUpAt: payload.followUpAt,
+        actor: getAdminActionActor(actor),
+      },
+    });
+
+    revalidatePath("/admin/support");
+    revalidatePath("/admin");
+    redirect(returnTo);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, returnTo, error, "Takip bilgisi kaydedilemedi.");
   }
 }

@@ -412,6 +412,29 @@ export function parseDemoRequestLeadStatusPayload(formData: FormData) {
   };
 }
 
+export function parseDemoRequestFollowUpPayload(formData: FormData) {
+  const note = readString(formData, "note");
+  const followUpAtRaw = readString(formData, "followUpAt");
+  const followUpAt = followUpAtRaw || null;
+
+  if (!note && !followUpAt) {
+    throw new AdminValidationError("Takip notu veya tarih girin.");
+  }
+
+  if (note.length > 2000) {
+    throw new AdminValidationError("Takip notu en fazla 2000 karakter olabilir.");
+  }
+
+  if (followUpAt && !/^\d{4}-\d{2}-\d{2}$/.test(followUpAt)) {
+    throw new AdminValidationError("Geçerli bir takip tarihi seçin.");
+  }
+
+  return {
+    note: note || null,
+    followUpAt,
+  };
+}
+
 export function parseAppInstallationSettingsPayload(formData: FormData) {
   const onboardingStatus = readString(formData, "onboardingStatus") || "PENDING_SETUP";
   const message = nullableString(formData, "message");

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { evaluateProductAccess } from "@/lib/wexon-core-access";
-import { groupDemoLeadStatusUpdates, resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
+import { groupDemoLeadFollowUpUpdates, groupDemoLeadStatusUpdates, resolveDemoLeadFollowUp, resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
 
 export function formatAdminStatus(status: string) {
   const labels: Record<string, string> = {
@@ -340,28 +340,45 @@ export async function getAdminDemoRequestsData() {
   });
 
   const requestIds = requests.map((request) => request.id);
-  const statusUpdates =
+  const [statusUpdates, followUpUpdates] =
     requestIds.length === 0
-      ? []
-      : await prisma.auditLog.findMany({
-          where: {
-            action: "public.demo_request.status_updated",
-            entityId: { in: requestIds },
-          },
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            entityId: true,
-            metadataJson: true,
-            createdAt: true,
-          },
-        });
+      ? [[], []]
+      : await Promise.all([
+          prisma.auditLog.findMany({
+            where: {
+              action: "public.demo_request.status_updated",
+              entityId: { in: requestIds },
+            },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              entityId: true,
+              metadataJson: true,
+              createdAt: true,
+            },
+          }),
+          prisma.auditLog.findMany({
+            where: {
+              action: "public.demo_request.followup_updated",
+              entityId: { in: requestIds },
+            },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              entityId: true,
+              metadataJson: true,
+              createdAt: true,
+            },
+          }),
+        ]);
 
   const updatesByRequestId = groupDemoLeadStatusUpdates(statusUpdates);
+  const followUpsByRequestId = groupDemoLeadFollowUpUpdates(followUpUpdates);
 
   const enrichedRequests = requests.map((request) => ({
     ...request,
     leadStatus: resolveDemoLeadStatus(request.metadataJson, updatesByRequestId.get(request.id) ?? []),
+    followUp: resolveDemoLeadFollowUp(followUpsByRequestId.get(request.id) ?? []),
   }));
 
   return { requests: enrichedRequests, loadedAt: new Date() };

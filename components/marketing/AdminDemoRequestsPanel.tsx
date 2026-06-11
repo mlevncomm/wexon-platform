@@ -9,11 +9,16 @@ import {
 } from "@/components/marketing/WexonAdminCards";
 import { AdminSubmitButton } from "@/components/marketing/WexonAdminForms";
 import { formatAdminDate } from "@/lib/wexon-admin";
-import { updateAdminDemoRequestStatusAction } from "@/lib/wexon-admin-actions";
+import { updateAdminDemoRequestFollowUpAction, updateAdminDemoRequestStatusAction } from "@/lib/wexon-admin-actions";
 import {
   demoLeadStatusBadgeClass,
   demoLeadStatusLabels,
   demoLeadStatuses,
+  followUpDateBadgeClass,
+  followUpDateStateLabels,
+  formatFollowUpDateLabel,
+  resolveFollowUpDateState,
+  type DemoLeadFollowUp,
   type DemoLeadStatus,
 } from "@/lib/wexon-demo-request-leads";
 import { demoRequestSourceLabels } from "@/lib/wexon-public-validation";
@@ -34,6 +39,7 @@ export type AdminDemoRequestRow = {
   createdAt: Date;
   metadataJson: unknown;
   leadStatus: DemoLeadStatus;
+  followUp: DemoLeadFollowUp;
 };
 
 export type AdminDemoRequestFilters = {
@@ -109,6 +115,74 @@ function DemoBadge({ children, className }: { children: string; className: strin
 
 function LeadStatusBadge({ status }: { status: DemoLeadStatus }) {
   return <DemoBadge className={demoLeadStatusBadgeClass(status)}>{demoLeadStatusLabels[status]}</DemoBadge>;
+}
+
+function FollowUpDateBadge({ followUpAt }: { followUpAt: string | null }) {
+  const state = resolveFollowUpDateState(followUpAt);
+  if (!state) return null;
+
+  return <DemoBadge className={followUpDateBadgeClass(state)}>{followUpDateStateLabels[state]}</DemoBadge>;
+}
+
+function FollowUpSummary({ followUp, compact = false }: { followUp: DemoLeadFollowUp; compact?: boolean }) {
+  const dateLabel = formatFollowUpDateLabel(followUp.followUpAt);
+
+  return (
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      <div className="flex flex-wrap items-center gap-2">
+        {dateLabel ? (
+          <span className="text-xs font-bold text-slate-700">{dateLabel}</span>
+        ) : (
+          <span className="text-xs font-semibold text-slate-400">Takip tarihi yok</span>
+        )}
+        <FollowUpDateBadge followUpAt={followUp.followUpAt} />
+      </div>
+      <p className={`break-words text-slate-600 ${compact ? "line-clamp-2 text-xs leading-relaxed" : "text-sm leading-relaxed"}`}>
+        {followUp.note ?? "Takip notu yok."}
+      </p>
+    </div>
+  );
+}
+
+function LeadFollowUpUpdateForm({
+  requestId,
+  followUp,
+  returnTo,
+  compact = false,
+}: {
+  requestId: string;
+  followUp: DemoLeadFollowUp;
+  returnTo: string;
+  compact?: boolean;
+}) {
+  const updateFollowUp = updateAdminDemoRequestFollowUpAction.bind(null, requestId);
+  const defaultDate = followUp.followUpAt?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? "";
+
+  return (
+    <form action={updateFollowUp} className={compact ? "mt-3 space-y-2" : "mt-4 space-y-2"}>
+      <input type="hidden" name="returnTo" value={returnTo} />
+      <label className="block min-w-0">
+        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Takip notu</span>
+        <textarea
+          name="note"
+          rows={compact ? 2 : 3}
+          defaultValue={followUp.note ?? ""}
+          placeholder="Kısa takip notu..."
+          className="mt-1.5 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-950 outline-none transition focus:border-emerald-300"
+        />
+      </label>
+      <label className="block min-w-0">
+        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Takip tarihi</span>
+        <input
+          name="followUpAt"
+          type="date"
+          defaultValue={defaultDate}
+          className="mt-1.5 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-950 outline-none transition focus:border-emerald-300"
+        />
+      </label>
+      <AdminSubmitButton>Kaydet</AdminSubmitButton>
+    </form>
+  );
 }
 
 function filterDemoRequests(requests: AdminDemoRequestRow[], filters: AdminDemoRequestFilters) {
@@ -229,6 +303,12 @@ function DemoRequestCard({
       </div>
 
       <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} />
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3">
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Son takip</p>
+        <FollowUpSummary followUp={request.followUp} />
+        <LeadFollowUpUpdateForm requestId={request.id} followUp={request.followUp} returnTo={returnTo} compact />
+      </div>
     </article>
   );
 }
@@ -330,7 +410,7 @@ export default function AdminDemoRequestsPanel({
 
           <div className="hidden lg:block">
             <AdminTableShell>
-              <table className="w-full min-w-[1320px] text-left text-sm">
+              <table className="w-full min-w-[1480px] text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
                   <tr>
                     <th className="px-5 py-4 font-bold">Tarih</th>
@@ -341,7 +421,8 @@ export default function AdminDemoRequestsPanel({
                     <th className="px-5 py-4 font-bold">Telefon</th>
                     <th className="px-5 py-4 font-bold">Ürün</th>
                     <th className="px-5 py-4 font-bold">Kaynak</th>
-                    <th className="px-5 py-4 font-bold">Kullanım amacı / not</th>
+                    <th className="px-5 py-4 font-bold">Talep notu</th>
+                    <th className="px-5 py-4 font-bold">Takip</th>
                     <th className="px-5 py-4 font-bold">Aksiyon</th>
                   </tr>
                 </thead>
@@ -386,10 +467,19 @@ export default function AdminDemoRequestsPanel({
                         <td className="px-5 py-4">
                           <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
                         </td>
-                        <td className="max-w-[280px] px-5 py-4">
-                          <p className="line-clamp-3 break-words text-sm leading-relaxed text-slate-600">
+                        <td className="max-w-[220px] px-5 py-4">
+                          <p className="line-clamp-2 break-words text-sm leading-relaxed text-slate-600">
                             {meta.message ?? "—"}
                           </p>
+                        </td>
+                        <td className="max-w-[240px] px-5 py-4">
+                          <FollowUpSummary followUp={request.followUp} compact />
+                          <LeadFollowUpUpdateForm
+                            requestId={request.id}
+                            followUp={request.followUp}
+                            returnTo={returnTo}
+                            compact
+                          />
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex min-w-[120px] flex-col gap-2">
