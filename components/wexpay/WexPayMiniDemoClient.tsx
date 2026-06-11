@@ -487,20 +487,33 @@ export default function WexPayMiniDemoClient() {
                     </>
                   ) : null}
                 </div>
-                <div className="mt-6 space-y-2">
-                  <button
-                    type="button"
-                    onClick={restartDemo}
-                    className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20"
-                  >
-                    Tekrar Dene
-                  </button>
+
+                <div className="mt-6 rounded-[24px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                    Restoranınız için WexPay
+                  </p>
+                  <h3 className="mt-2 text-lg font-black leading-snug text-slate-950">
+                    WexPay&apos;i restoranınızda kullanmak ister misiniz?
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                    Tek QR ile menü, sipariş ve ödeme akışını kendi işletmenize uyarlayalım.
+                  </p>
                   <Link
-                    href="/demo-request"
-                    className="block w-full rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-700"
+                    href="/demo-request?product=wexpay&source=wexpay-demo"
+                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 transition-colors hover:bg-emerald-700"
                   >
                     Demo Talep Et
                   </Link>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={restartDemo}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-700"
+                  >
+                    Tekrar Dene
+                  </button>
                   <Link href="/links" className="block text-xs font-semibold text-slate-500 hover:text-emerald-700">
                     WexPay bağlantılarına dön
                   </Link>

@@ -2,8 +2,16 @@ import Link from "next/link";
 import DemoRequestForm from "@/components/marketing/DemoRequestForm";
 import WexonFormAside from "@/components/marketing/WexonFormAside";
 import WexonFormShell from "@/components/marketing/WexonFormShell";
+import { normalizeDemoRequestSource, resolveDemoProductFromQuery } from "@/lib/wexon-public-validation";
 
-export default function DemoRequestPage() {
+export default async function DemoRequestPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ product?: string; source?: string }>;
+}) {
+  const params = await searchParams;
+  const defaultProduct = resolveDemoProductFromQuery(params.product) ?? undefined;
+  const defaultSource = normalizeDemoRequestSource(params.source);
   const demoCards = [
     "WexPay müşteri QR deneyimi",
     "WexPay işletme paneli",
@@ -43,7 +51,7 @@ export default function DemoRequestPage() {
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
-                href="/demo/wexpay"
+                href="/demo/wexpay?source=links"
                 className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white hover:bg-emerald-400"
               >
                 WexPay Demo Aç
@@ -72,7 +80,7 @@ export default function DemoRequestPage() {
             "Kurulum yol haritası",
           ]}
         />
-        <DemoRequestForm />
+        <DemoRequestForm defaultProduct={defaultProduct} defaultSource={defaultSource} />
       </section>
     </WexonFormShell>
   );

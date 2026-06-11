@@ -21,7 +21,7 @@ const WEXON_LINKS = {
       id: "wexpay-demo",
       label: "WexPay Demo",
       description: "QR menü · sepet · sipariş · ödeme simülasyonu",
-      href: "/demo/wexpay",
+      href: "/demo/wexpay?source=links",
       icon: "play" as const,
       featured: true,
     },

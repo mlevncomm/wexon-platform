@@ -7,6 +7,7 @@ import {
   initialDemoRequestState,
   type DemoRequestFormState,
 } from "@/lib/wexon-public-actions";
+import { normalizeDemoRequestSource } from "@/lib/wexon-public-validation";
 import WexonInput from "@/components/marketing/WexonInput";
 import WexonSelect from "@/components/marketing/WexonSelect";
 import WexonTextarea from "@/components/marketing/WexonTextarea";
@@ -41,7 +42,7 @@ function SuccessPanel({ state }: { state: DemoRequestFormState }) {
       </p>
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         <Link
-          href="/demo/wexpay"
+          href="/demo/wexpay?source=links"
           className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-600"
         >
           WexPay Demo Dene
@@ -57,8 +58,16 @@ function SuccessPanel({ state }: { state: DemoRequestFormState }) {
   );
 }
 
-export default function DemoRequestForm() {
+type DemoRequestFormProps = {
+  defaultProduct?: string;
+  defaultSource?: string;
+};
+
+export default function DemoRequestForm({ defaultProduct, defaultSource }: DemoRequestFormProps) {
   const [state, formAction, pending] = useActionState(createDemoRequestAction, initialDemoRequestState);
+  const sourceValue = normalizeDemoRequestSource(defaultSource);
+  const selectedProduct =
+    defaultProduct && productOptions.includes(defaultProduct) ? defaultProduct : undefined;
 
   return (
     <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
@@ -82,12 +91,18 @@ export default function DemoRequestForm() {
 
       {!state.submitted ? (
         <form action={formAction} className="grid gap-4 sm:grid-cols-2">
+          <input type="hidden" name="source" value={sourceValue} />
           <WexonInput name="fullName" label="Ad soyad" required />
           <WexonInput name="company" label="Firma adı" required />
           <WexonInput name="email" type="email" label="E-posta" required />
           <WexonInput name="phone" type="tel" label="Telefon" required />
           <div className="sm:col-span-2">
-            <WexonSelect name="product" label="İlgilendiğiniz ürün" options={productOptions} />
+            <WexonSelect
+              name="product"
+              label="İlgilendiğiniz ürün"
+              options={productOptions}
+              defaultValue={selectedProduct ?? ""}
+            />
           </div>
           <div className="sm:col-span-2">
             <WexonTextarea name="message" rows={5} label="Kullanım amacı / not" required />

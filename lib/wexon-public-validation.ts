@@ -7,6 +7,31 @@ export class PublicValidationError extends Error {
 
 const demoProducts = ["WexPay", "WexHotel", "WexB2B", "Wexon Core"] as const;
 
+const productQueryMap: Record<string, (typeof demoProducts)[number]> = {
+  wexpay: "WexPay",
+  wexhotel: "WexHotel",
+  wexb2b: "WexB2B",
+  "wexon-core": "Wexon Core",
+  wexoncore: "Wexon Core",
+};
+
+export function resolveDemoProductFromQuery(param: string | null | undefined): (typeof demoProducts)[number] | null {
+  if (!param?.trim()) return null;
+  const key = param.trim().toLowerCase();
+  return productQueryMap[key] ?? null;
+}
+
+export function normalizeDemoRequestSource(param: string | null | undefined): string {
+  const value = param?.trim().toLowerCase();
+  return value && value.length > 0 ? value : "direct";
+}
+
+export const demoRequestSourceLabels: Record<string, string> = {
+  direct: "Direct",
+  links: "WexPay Links",
+  "wexpay-demo": "WexPay Demo",
+};
+
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -47,5 +72,7 @@ export function parseDemoRequestPayload(formData: FormData) {
     throw new PublicValidationError("Kullanım amacı en az 10 karakter olmalıdır.");
   }
 
-  return { fullName, company, email, phone, product, message };
+  const source = normalizeDemoRequestSource(readString(formData, "source"));
+
+  return { fullName, company, email, phone, product, message, source };
 }

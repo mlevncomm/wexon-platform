@@ -3,6 +3,7 @@ import { AdminActionNotice, AdminSelectField, AdminSubmitButton, AdminTextField 
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { updateAdminSupportTicketAction } from "@/lib/wexon-admin-actions";
 import { formatAdminDate, getAdminDemoRequestsData, getAdminSupportTicketsData } from "@/lib/wexon-admin";
+import { demoRequestSourceLabels } from "@/lib/wexon-public-validation";
 
 type SupportTicketMeta = {
   subject?: string;
@@ -23,6 +24,7 @@ type DemoRequestMeta = {
   product?: string;
   message?: string;
   status?: string;
+  source?: string;
 };
 
 const categoryLabels: Record<string, string> = {
@@ -178,6 +180,9 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
                   <p className="mt-4 text-sm leading-relaxed text-slate-600">{meta.message ?? "-"}</p>
                   <p className="mt-2 text-xs font-semibold text-slate-500">
                     {meta.email ?? "—"} · {meta.phone ?? "—"}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-emerald-700">
+                    Kaynak: {demoRequestSourceLabels[meta.source ?? "direct"] ?? meta.source ?? "Direct"}
                   </p>
                 </div>
               );
