@@ -6,10 +6,29 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 const fixturesPath = resolve(process.cwd(), "e2e", ".fixtures.json");
 
+function emptyFixtures(reason) {
+  return {
+    dbAvailable: false,
+    setupError: reason,
+    adminEmail: (process.env.ADMIN_EMAILS ?? "").split(",")[0]?.trim() || null,
+    customerEmail: "demo@wexon.dev",
+    customerOrgId: null,
+    licensedCustomerEmail: "real@wexon.dev",
+    licensedOrgId: null,
+    realOrgId: null,
+    demoOrgId: null,
+    inactiveWexPayOrgId: null,
+    qrCode: null,
+  };
+}
+
 export default async function globalSetup() {
   const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
   if (!databaseUrl) {
-    throw new Error("DIRECT_URL or DATABASE_URL is required for smoke test fixtures.");
+    const fixtures = emptyFixtures("DIRECT_URL or DATABASE_URL is not configured.");
+    writeFileSync(fixturesPath, JSON.stringify(fixtures, null, 2), "utf8");
+    console.warn("[smoke] DB fixtures unavailable:", fixtures.setupError);
+    return;
   }
 
   const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
@@ -67,6 +86,8 @@ export default async function globalSetup() {
     const licensedOrgId = realOrg?.id ?? customerOrgId;
 
     const fixtures = {
+      dbAvailable: true,
+      setupError: null,
       adminEmail: (process.env.ADMIN_EMAILS ?? "").split(",")[0]?.trim() || null,
       customerEmail: customerUser?.email ?? "demo@wexon.dev",
       customerOrgId,
@@ -80,6 +101,11 @@ export default async function globalSetup() {
 
     writeFileSync(fixturesPath, JSON.stringify(fixtures, null, 2), "utf8");
     console.log("[smoke] fixtures written:", fixturesPath);
+  } catch (error) {
+    const reason = error instanceof Error ? `${error.name}: ${error.message || "database fixture setup failed"}` : "database fixture setup failed";
+    const fixtures = emptyFixtures(reason);
+    writeFileSync(fixturesPath, JSON.stringify(fixtures, null, 2), "utf8");
+    console.warn("[smoke] DB fixtures unavailable:", reason);
   } finally {
     await prisma.$disconnect();
   }
