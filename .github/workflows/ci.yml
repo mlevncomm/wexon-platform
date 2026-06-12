@@ -11,6 +11,17 @@ jobs:
     name: Typecheck, lint, and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Prisma 7 reads DIRECT_URL from prisma.config.ts even for client generation.
+      # CI only validates compilation here; it does not connect to this database.
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/wexon_ci
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/wexon_ci
+      ADMIN_EMAILS: admin@wexon.test
+      ADMIN_LOGIN_PASSWORD: ci-admin-password
+      ADMIN_SESSION_SECRET: ci-admin-session-secret
+      CUSTOMER_SESSION_SECRET: ci-customer-session-secret
+      API_KEY_HASH_SECRET: ci-api-key-hash-secret
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
 
     steps:
       - name: Checkout
