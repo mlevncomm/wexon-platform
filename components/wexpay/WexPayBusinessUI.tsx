@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function WexPayDarkPanelHeaderBackdrop() {
@@ -199,6 +200,45 @@ export function WexPayErrorNotice({ message }: { message: string }) {
   return (
     <div className="rounded-[16px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 shadow-sm shadow-rose-900/5">
       {message}
+    </div>
+  );
+}
+
+export function WexPayEmptyAccess({ organizationId }: { organizationId?: string | null }) {
+  const dashboardHref = organizationId ? `/dashboard?organizationId=${encodeURIComponent(organizationId)}` : "/dashboard";
+  const supportHref = organizationId
+    ? `/dashboard/support?organizationId=${encodeURIComponent(organizationId)}`
+    : "/dashboard/support";
+  const adminHref = organizationId ? `/admin/organizations/${organizationId}` : "/admin";
+
+  return (
+    <div className="mx-auto max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-7 text-center">
+      <span className="mb-4 inline-flex rounded-full border border-amber-200 bg-white px-4 py-1.5 text-xs font-semibold text-amber-700">
+        Erişim gerekli
+      </span>
+      <h1 className="mt-2 text-lg font-black text-slate-950">WexPay erişiminiz aktif değil.</h1>
+      <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
+        Bu uygulamaya erişmek için WexPay lisansınızın ve kurulumunuzun aktif olması gerekir.
+      </p>
+      <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
+        <Link
+          href={dashboardHref}
+          className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-emerald-700"
+        >
+          Wexon Core paneline dön
+        </Link>
+        <Link
+          href={supportHref}
+          className="rounded-2xl border border-amber-300 bg-white px-5 py-3 text-sm font-bold text-amber-900 transition-colors hover:bg-amber-50"
+        >
+          Destek talebi oluştur
+        </Link>
+      </div>
+      {organizationId ? (
+        <Link href={adminHref} className="mt-4 inline-flex text-xs font-bold text-slate-500 hover:text-emerald-700">
+          Admin müşteri detayına git →
+        </Link>
+      ) : null}
     </div>
   );
 }

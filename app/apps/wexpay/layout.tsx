@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Suspense } from "react";
-import { WexPayEmptyAccess } from "@/components/wexpay/WexPayAppCards";
+import { WexPayEmptyAccess } from "@/components/wexpay/WexPayBusinessUI";
 import WexPayBusinessShell from "@/components/wexpay/WexPayBusinessShell";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
