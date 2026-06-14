@@ -1,6 +1,6 @@
 # WexPay Payment Provider Adapters
 
-Status: Phase 7 — manual active; PayTR adapter foundation + webhook route; live checkout UX kapali (varsayilan).
+Status: Phase 7.1 — manual active; PayTR operator UX + webhook route; public QR checkout kapali.
 
 ## Adapter registry
 
@@ -9,7 +9,7 @@ Implementation: `lib/wexpay-payment-provider.ts`, PayTR: `lib/wexpay-paytr-adapt
 | Provider key | Status | Behaviour |
 | --- | --- | --- |
 | `manual` | Active | Operator-recorded payment; sanal POS baglantisi gerekmez |
-| `paytr` | Foundation | Tenant sanal POS credential + `merchant_oid` (`providerRef`); Payment `PENDING`; webhook settles PAID/FAILED |
+| `paytr` | Active (operator) | Tenant credential + checkout token; Payment `PENDING`; webhook settles PAID/FAILED |
 | `iyzico` | Stub | Credential boundary only; `Provider adapter not configured.` |
 | `param` | Stub | Same as iyzico |
 
@@ -77,15 +77,28 @@ Eksik alan varsa adapter `provider_not_configured` doner. Plaintext yalnizca ser
 
 ### Odeme baslatma (`createPayment`, provider=`paytr`)
 
-- Manual gibi aninda `PAID` **yapilmaz**.
+- Manual gibi aninda `PAID` **yapilmaz**; client status alani PayTR icin yok sayilir (service `PENDING` yazar).
 - `providerRef` = PayTR `merchant_oid` (benzersiz, max 64).
-- `Payment.status` = `PENDING`.
+- `Payment.status` = `PENDING` yalnizca checkout token/URL basariyla uretildiyse kayit olusturulur.
 - Masa status `PAYMENT_PENDING` (`syncTableStatus`).
 - Audit metadata: `provider`, `providerRef`, `requiresExternalCheckout`.
 
-Varsayilan: **canli PayTR get-token cagrisi kapali** (`WEXPAY_PAYTR_ENABLE_API` unset). Foundation modunda checkout URL uretilmez.
+**API kapali veya token uretilemezse Payment olusturulmaz** (yari kayit yok):
 
-`WEXPAY_PAYTR_ENABLE_API=true` oldugunda token istegi `https://www.paytr.com/odeme/api/get-token` adresine gider (resmi iFrame API Step 1). Canli tahsilat UX hala operator/QR redirect ile acilmamis olabilir.
+- `WEXPAY_PAYTR_ENABLE_API` unset/false → adapter hata; UI: "PayTR sanal POS API henuz etkin degil."
+- Credential eksik → `provider_not_configured`; UI: "Sanal POS baglantisi eksik."
+- Token istegi basarisiz → hata; DB mutation yok.
+
+`WEXPAY_PAYTR_ENABLE_API=true` oldugunda token istegi `https://www.paytr.com/odeme/api/get-token` adresine gider (resmi iFrame API Step 1).
+
+### Operator panel UX (Phase 7.1)
+
+- Masa detayi (`/apps/wexpay/tables`) ve odeme formu (`/apps/wexpay/payments`): tahsilat yontemi secimi — **Manuel tahsilat** / **PayTR sanal POS**.
+- PayTR secildiginde aciklama: odeme PayTR uzerinden tamamlaninca webhook ile masa guncellenir.
+- Basarili oturum sonrasi redirect query: `paytrCheckout` + `paymentId`; banner ile PayTR guvenli odeme linki acilir.
+- Odeme listesinde provider etiketi, PayTR `PENDING` icin `merchant_oid` (`providerRef`) gosterilir.
+- Masa detayinda acik PayTR `PENDING` uyarisi.
+- Public QR checkout bu fazda acilmaz.
 
 ### Callback / webhook URL
 
@@ -118,7 +131,8 @@ Audit: `wexpay.webhook.paytr.processed`, `wexpay.payment.provider_settled`.
 ### Test / live notlari
 
 - `mode=TEST` → PayTR `test_mode=1`.
-- Production canli tahsilat UX varsayilan kapali; foundation guvenlik oncelikli.
+- Operator PayTR baslatma icin `WEXPAY_PAYTR_ENABLE_API=true` zorunlu.
+- Webhook settle: `success` → PAID + `paidAt`; `failed` → FAILED; duplicate webhook idempotent.
 - Demo route'lara dokunulmaz.
 
 ## Sanal POS baglantisi storage (Phase 6)
@@ -210,9 +224,9 @@ Before processing any inbound PSP webhook in production:
 ## PayTR / iyzico / Param — integration order
 
 1. [x] **PayTR foundation** — credential mapping, PENDING payment, webhook route, signature + idempotency.
-2. **PayTR live checkout UX** — operator/QR redirect to iframe (`WEXPAY_PAYTR_ENABLE_API` + UI).
-3. **iyzico / Param adapters** — credential + webhook parity.
-4. **Public QR checkout route** — separate from order creation.
+2. [x] **PayTR operator UX** — masa/odeme formlari, checkout banner, providerRef gorunumu.
+3. **Public QR checkout route** — separate from order creation.
+4. **iyzico / Param adapters** — credential + webhook parity.
 
 ## Schema reference
 

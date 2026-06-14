@@ -10,7 +10,7 @@ import {
 import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import type { WexPayMutationContext } from "@/lib/wexpay-service";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
-import { WexPayProviderNotConfiguredError } from "@/lib/wexpay-payment-provider";
+import { WexPayProviderNotConfiguredError, WexPayPaymentProviderError } from "@/lib/wexpay-payment-provider";
 import { WexPayAccessError } from "@/lib/wexpay-tenant";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 
@@ -363,9 +363,13 @@ export function wexpayApiErrorResponse(error: unknown, context?: WexPayApiErrorL
     return Response.json({ error: error.message, reason: "validation" }, { status: 400 });
   }
   if (error instanceof WexPayProviderNotConfiguredError) {
+    const message =
+      error.provider === "paytr"
+        ? "Sanal POS baglantisi eksik. Organization PayTR credential tanimlanmali."
+        : error.message;
     writeAuditFailure({
       action: "wexpay.api.provider_not_configured",
-      message: error.message,
+      message,
       level: "WARN",
       organizationId: context?.organizationId,
       userId: context?.userId,
@@ -373,7 +377,20 @@ export function wexpayApiErrorResponse(error: unknown, context?: WexPayApiErrorL
       source: "wexpay_api",
       metadata: { route: context?.route, reason: "provider_not_configured", provider: error.provider },
     });
-    return Response.json({ error: error.message, reason: "provider_not_configured" }, { status: 501 });
+    return Response.json({ error: message, reason: "provider_not_configured" }, { status: 501 });
+  }
+  if (error instanceof WexPayPaymentProviderError) {
+    writeAuditFailure({
+      action: "wexpay.api.provider",
+      message: error.message,
+      level: "WARN",
+      organizationId: context?.organizationId,
+      userId: context?.userId,
+      ipAddress: context?.ipAddress,
+      source: "wexpay_api",
+      metadata: { route: context?.route, reason: "provider" },
+    });
+    return Response.json({ error: error.message, reason: "provider" }, { status: 400 });
   }
   if (error instanceof WexPayAccessError) {
     writeAuditFailure({

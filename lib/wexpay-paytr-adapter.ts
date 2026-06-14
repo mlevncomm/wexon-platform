@@ -175,11 +175,16 @@ async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): 
   const merchantOid = generatePaytrMerchantOid();
   const urls = buildPaytrCheckoutUrls();
   const enableApi = process.env.WEXPAY_PAYTR_ENABLE_API === "true";
+  if (!enableApi) {
+    throw new WexPayPaymentProviderError(
+      "PayTR sanal POS API henüz etkin değil. Operasyonel tahsilat başlatılamaz.",
+    );
+  }
 
   let externalCheckoutUrl: string | null = null;
   let iframeToken: string | null = null;
 
-  if (enableApi) {
+  {
     const tokenPayload = buildPaytrGetTokenPayload({
       credentials,
       context,
@@ -201,19 +206,21 @@ async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): 
     externalCheckoutUrl = `${PAYTR_IFRAME_BASE}${body.token}`;
   }
 
+  if (!externalCheckoutUrl) {
+    throw new WexPayPaymentProviderError("PayTR ödeme oturumu oluşturulamadı. Lütfen tekrar deneyin.");
+  }
+
   return {
     provider: "paytr",
     providerRef: merchantOid,
     externalCheckoutUrl,
     requiresExternalCheckout: true,
     metadata: {
-      foundation: !enableApi,
       mode: credentials.mode,
       paymentAmountKurus,
       callbackUrl: urls.callbackUrl,
       successUrl: urls.successUrl,
       failUrl: urls.failUrl,
-      iframeTokenRequested: enableApi,
       iframeTokenPresent: Boolean(iframeToken),
     },
   };

@@ -10,12 +10,14 @@ import {
   WexPayPanel,
   WexPaySurface,
 } from "@/components/wexpay/WexPayBusinessUI";
+import { formatWexPayPaymentProvider, isPaytrPendingPayment } from "@/lib/wexpay-payment-display";
 
 type PaymentRow = {
   id: string;
   amount: number;
   status: PaymentStatus;
   provider: string | null;
+  providerRef: string | null;
   tableLabel: string;
   orderNo: string | null;
   createdAt: string;
@@ -72,7 +74,9 @@ export default function WexPayPaymentsBoard({ payments }: { payments: PaymentRow
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-black text-slate-950">{payment.provider ?? "Operasyonel ödeme"}</p>
+                    <p className="truncate text-sm font-black text-slate-950">
+                      {formatWexPayPaymentProvider(payment.provider)}
+                    </p>
                     <PaymentStatusBadge status={payment.status} />
                   </div>
                   <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -80,6 +84,11 @@ export default function WexPayPaymentsBoard({ payments }: { payments: PaymentRow
                     {payment.orderNo ? ` · Sipariş ${payment.orderNo}` : " · Masa ödemesi"} ·{" "}
                     {new Date(payment.createdAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}
                   </p>
+                  {isPaytrPendingPayment(payment.provider, payment.status) && payment.providerRef ? (
+                    <p className="mt-1 font-mono text-[11px] font-semibold text-slate-500">
+                      merchant_oid: {payment.providerRef}
+                    </p>
+                  ) : null}
                 </div>
                 <p className="shrink-0 text-lg font-black text-slate-950">{formatLira(payment.amount)}</p>
               </div>

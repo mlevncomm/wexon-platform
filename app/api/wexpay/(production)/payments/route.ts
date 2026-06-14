@@ -52,7 +52,16 @@ export async function POST(request: Request) {
   try {
     const input = parsePaymentCreatePayload(parsed.body);
     const payment = await createPayment(toWexPayMutationContext(context), input);
-    return Response.json({ id: payment.id, amount: Number(payment.amount), status: payment.status }, { status: 201 });
+    return Response.json(
+      {
+        id: payment.payment.id,
+        amount: Number(payment.payment.amount),
+        status: payment.payment.status,
+        providerRef: payment.payment.providerRef,
+        externalCheckoutUrl: payment.externalCheckoutUrl,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return wexpayApiErrorResponse(error, toWexPayApiErrorLogContext(context, "POST /api/wexpay/payments"));
   }

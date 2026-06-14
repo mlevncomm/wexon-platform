@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { closeTableAction, createPaymentAction, markReceiptPrintedAction, updateOrderStatusAction } from "@/lib/wexpay-actions";
+import { closeTableAction, markReceiptPrintedAction, updateOrderStatusAction } from "@/lib/wexpay-actions";
 import type { OperationsTable } from "@/lib/wexpay-read";
-import { WexPayReceiptRequestField } from "@/components/wexpay/WexPayReceiptRequestField";
+import { formatWexPayPaymentProvider, isPaytrPendingPayment } from "@/lib/wexpay-payment-display";
+import { WexPayPaytrPendingNotice } from "@/components/wexpay/WexPayPaytrCheckoutNotice";
+import { WexPayTablePaymentForm } from "@/components/wexpay/WexPayTablePaymentForm";
 import {
   DemoPrimaryButton,
-  DemoSecondaryButton,
   formatLira,
   InfoRow,
   OrderStatusBadge,
@@ -247,6 +248,9 @@ function TableDetailPanel({
   const paidPaymentTotal = table.payments
     .filter((payment) => payment.status === "PAID" || payment.status === "PARTIAL")
     .reduce((sum, payment) => sum + payment.amount, 0);
+  const pendingPaytrPayments = table.payments.filter((payment) =>
+    isPaytrPendingPayment(payment.provider, payment.status),
+  );
   const collectionProgress =
     table.totalAmount > 0
       ? Math.min(100, Math.round((table.paidAmount / table.totalAmount) * 100))
@@ -328,6 +332,12 @@ function TableDetailPanel({
           </div>
         ))}
       </div>
+
+      {pendingPaytrPayments.length > 0 ? (
+        <div className="border-b border-amber-100 bg-amber-50/80 px-4 py-4 sm:px-6">
+          <WexPayPaytrPendingNotice providerRef={pendingPaytrPayments[0]?.providerRef} />
+        </div>
+      ) : null}
 
       {table.receiptRequested ? (
         <div className="border-b border-amber-100 bg-amber-50/80 px-4 py-4 sm:px-6">
@@ -483,13 +493,20 @@ function TableDetailPanel({
                     className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-white px-3 py-2.5 shadow-sm shadow-slate-900/5"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-slate-800">{payment.provider ?? "Manuel ödeme"}</p>
-                      <div className="mt-1 flex items-center gap-2">
+                      <p className="truncate text-sm font-bold text-slate-800">
+                        {formatWexPayPaymentProvider(payment.provider)}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
                         <PaymentStatusBadge status={payment.status} />
                         <span className="text-[10px] font-semibold text-slate-400">
                           {new Date(payment.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
+                      {isPaytrPendingPayment(payment.provider, payment.status) && payment.providerRef ? (
+                        <p className="mt-1 truncate font-mono text-[10px] font-semibold text-slate-500">
+                          merchant_oid: {payment.providerRef}
+                        </p>
+                      ) : null}
                     </div>
                     <p className="shrink-0 text-sm font-black text-slate-950">{formatLira(payment.amount)}</p>
                   </div>
@@ -501,38 +518,12 @@ function TableDetailPanel({
           {canManage && (
             <div className="mt-auto space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-900/5">
               {hasRemainingAmount ? (
-                <div className="space-y-3">
-                  <form action={createPaymentAction} className="space-y-3">
-                    <input type="hidden" name="branchId" value={activeBranchId} />
-                    <input type="hidden" name="tableId" value={table.id} />
-                    <input type="hidden" name="status" value="PAID" />
-                    <input type="hidden" name="redirectTo" value={redirectTo} />
-                    <input type="hidden" name="amount" value={table.remainingAmount} />
-                    <WexPayReceiptRequestField />
-                    <button
-                      type="submit"
-                      className="w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-colors hover:bg-emerald-600"
-                    >
-                      Tamamını al ({formatLira(table.remainingAmount)})
-                    </button>
-                  </form>
-                  <form action={createPaymentAction} className="space-y-3">
-                    <input type="hidden" name="branchId" value={activeBranchId} />
-                    <input type="hidden" name="tableId" value={table.id} />
-                    <input type="hidden" name="status" value="PAID" />
-                    <input type="hidden" name="redirectTo" value={redirectTo} />
-                    <WexPayReceiptRequestField />
-                    <div className="flex gap-2">
-                      <input
-                        name="amount"
-                        defaultValue={table.remainingAmount}
-                        placeholder="Kısmi tutar"
-                        className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-bold outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
-                      />
-                      <DemoSecondaryButton className="shrink-0 !w-auto px-4 py-2.5 text-xs">Kısmi Al</DemoSecondaryButton>
-                    </div>
-                  </form>
-                </div>
+                <WexPayTablePaymentForm
+                  branchId={activeBranchId}
+                  tableId={table.id}
+                  remainingAmount={table.remainingAmount}
+                  redirectTo={redirectTo}
+                />
               ) : (
                 <div className="rounded-xl bg-emerald-50 px-3 py-3 text-center ring-1 ring-emerald-100">
                   <p className="text-xs font-black text-emerald-700">Tahsilat tamamlandı</p>

@@ -306,6 +306,7 @@ export type OperationsPayment = {
   amount: number;
   status: string;
   provider: string | null;
+  providerRef: string | null;
   createdAt: string;
 };
 
@@ -465,6 +466,7 @@ export async function listBranchTableOperations(
         amount: Number(payment.amount),
         status: payment.status,
         provider: payment.provider,
+        providerRef: payment.providerRef,
         createdAt: payment.createdAt.toISOString(),
       })),
     };

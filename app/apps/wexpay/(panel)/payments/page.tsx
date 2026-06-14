@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { PaymentStatus } from ".prisma/client";
 import WexPayPaymentsBoard from "@/components/wexpay/WexPayPaymentsBoard";
+import { WexPayPaytrCheckoutNotice } from "@/components/wexpay/WexPayPaytrCheckoutNotice";
+import { WexPayPaymentProviderField } from "@/components/wexpay/WexPayPaymentProviderField";
 import { WexPayReceiptRequestField } from "@/components/wexpay/WexPayReceiptRequestField";
 import {
   DemoInput,
   DemoPrimaryButton,
-  DemoSelect,
   WexPayEmptyNotice,
   WexPayErrorNotice,
   WexPayPage,
@@ -22,7 +23,13 @@ import {
 } from "@/lib/wexpay-read";
 import { resolveWexPaySessionContext } from "@/lib/wexpay-tenant";
 
-type SearchParams = Promise<{ wexpayError?: string; branchId?: string }>;
+type SearchParams = Promise<{
+  wexpayError?: string;
+  branchId?: string;
+  paytrCheckout?: string;
+  paymentId?: string;
+  paytr?: string;
+}>;
 
 const STATUS_OPTIONS: { value: PaymentStatus; label: string }[] = [
   { value: PaymentStatus.PENDING, label: "Bekliyor" },
@@ -36,7 +43,7 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
   const context = await resolveWexPaySessionContext();
   if (!context.ok) return null;
 
-  const { wexpayError, branchId } = await searchParams;
+  const { wexpayError, branchId, paytrCheckout, paymentId, paytr } = await searchParams;
   const branches = await listOrgBranches(context.organizationId);
 
   if (branches.length === 0) {
@@ -62,11 +69,14 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
   ]);
   const redirectTo = `/apps/wexpay/payments?branchId=${activeBranch.id}`;
 
+  const checkoutPayment = paymentId ? payments.find((payment) => payment.id === paymentId) : null;
+
   const paymentRows = payments.map((payment) => ({
     id: payment.id,
     amount: Number(payment.amount),
     status: payment.status,
     provider: payment.provider,
+    providerRef: payment.providerRef,
     tableLabel: payment.table.label,
     orderNo: payment.order?.orderNo ?? null,
     createdAt: payment.createdAt.toISOString(),
@@ -76,6 +86,26 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
     <WexPayPage>
       {wexpayError && <WexPayErrorNotice message={wexpayError} />}
 
+      {paytr === "success" && (
+        <div className="rounded-[16px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+          PayTR yönlendirmesi tamamlandı. Kesin sonuç webhook bildirimi ile operasyon kaydına yansır.
+        </div>
+      )}
+
+      {paytr === "failed" && (
+        <div className="rounded-[16px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+          PayTR ödeme ekranı başarısız veya iptal ile kapandı. Webhook geldiğinde kayıt FAILED olarak güncellenir.
+        </div>
+      )}
+
+      {paytrCheckout ? (
+        <WexPayPaytrCheckoutNotice
+          checkoutUrl={paytrCheckout}
+          paymentId={paymentId}
+          providerRef={checkoutPayment?.providerRef}
+        />
+      ) : null}
+
       <WexPayPaymentsBoard payments={paymentRows} />
 
       {context.canManage && payments.length > 0 && (
@@ -83,22 +113,36 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
           <div className="grid min-w-0 gap-3">
             {payments.slice(0, 10).map((payment) => (
               <WexPaySurface key={payment.id}>
-              <form action={updatePaymentAction} className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end">
-                <input type="hidden" name="paymentId" value={payment.id} />
-                <input type="hidden" name="redirectTo" value={redirectTo} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-950">{payment.table.label}</p>
-                  <p className="text-xs text-slate-500">{Number(payment.amount).toLocaleString("tr-TR")} ₺</p>
-                </div>
-                <DemoSelect
-                  label="Durum"
-                  name="status"
-                  defaultValue={payment.status}
-                  options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                  className="min-w-0"
-                />
-                <DemoPrimaryButton>Kaydet</DemoPrimaryButton>
-              </form>
+                <form
+                  action={updatePaymentAction}
+                  className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end"
+                >
+                  <input type="hidden" name="paymentId" value={payment.id} />
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-950">{payment.table.label}</p>
+                    <p className="text-xs text-slate-500">
+                      {Number(payment.amount).toLocaleString("tr-TR")} ₺ · {payment.provider ?? "manual"}
+                    </p>
+                  </div>
+                  <label className="block min-w-0">
+                    <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                      Durum
+                    </span>
+                    <select
+                      name="status"
+                      defaultValue={payment.status}
+                      className="w-full rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+                    >
+                      {STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <DemoPrimaryButton>Kaydet</DemoPrimaryButton>
+                </form>
               </WexPaySurface>
             ))}
           </div>
@@ -115,25 +159,41 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
             <form action={createPaymentAction} className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <input type="hidden" name="branchId" value={activeBranch.id} />
               <input type="hidden" name="redirectTo" value={redirectTo} />
-              <DemoSelect
-                label="Masa"
-                name="tableId"
-                required
-                options={tables.map((table) => ({ value: table.id, label: table.label }))}
-              />
-              <DemoSelect
-                label="Sipariş (opsiyonel)"
-                name="orderId"
-                defaultValue=""
-                options={[{ value: "", label: "Sipariş bağlama" }, ...orders.map((order) => ({ value: order.id, label: `${order.orderNo} · ${order.table.label}` }))]}
-              />
+              <label className="block min-w-0">
+                <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                  Masa
+                </span>
+                <select
+                  name="tableId"
+                  required
+                  className="w-full rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+                >
+                  {tables.map((table) => (
+                    <option key={table.id} value={table.id}>
+                      {table.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block min-w-0">
+                <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                  Sipariş (opsiyonel)
+                </span>
+                <select
+                  name="orderId"
+                  defaultValue=""
+                  className="w-full rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+                >
+                  <option value="">Sipariş bağlama</option>
+                  {orders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.orderNo} · {order.table.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <DemoInput label="Tutar (TRY)" name="amount" required placeholder="Örn. 250" />
-              <DemoSelect
-                label="Durum"
-                name="status"
-                defaultValue={PaymentStatus.PAID}
-                options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-              />
+              <WexPayPaymentProviderField showStatusField statusOptions={STATUS_OPTIONS} />
               <div className="md:col-span-2 xl:col-span-4">
                 <WexPayReceiptRequestField />
               </div>

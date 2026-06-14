@@ -8,17 +8,18 @@ import {
   WexPayPanel,
 } from "@/components/wexpay/WexPayBusinessUI";
 import { WexPayTableOperationsView } from "@/components/wexpay/WexPayTableOperations";
+import { WexPayPaytrCheckoutNotice } from "@/components/wexpay/WexPayPaytrCheckoutNotice";
 import { closeTableAction, createTableAction, updateTableAction } from "@/lib/wexpay-actions";
 import { listBranchTableOperations, listBranchTables, listOrgBranches, resolveActiveBranch } from "@/lib/wexpay-read";
 import { resolveWexPaySessionContext } from "@/lib/wexpay-tenant";
 
-type SearchParams = Promise<{ wexpayError?: string; branchId?: string }>;
+type SearchParams = Promise<{ wexpayError?: string; branchId?: string; paytrCheckout?: string; paymentId?: string }>;
 
 export default async function WexPayTablesPage({ searchParams }: { searchParams: SearchParams }) {
   const context = await resolveWexPaySessionContext();
   if (!context.ok) return null;
 
-  const { wexpayError, branchId } = await searchParams;
+  const { wexpayError, branchId, paytrCheckout, paymentId } = await searchParams;
   const branches = await listOrgBranches(context.organizationId);
 
   if (branches.length === 0) {
@@ -40,10 +41,22 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
   const tables = await listBranchTableOperations(context.organizationId, activeBranch.id);
   const adminTables = await listBranchTables(context.organizationId, activeBranch.id);
   const redirectTo = `/apps/wexpay/tables?branchId=${activeBranch.id}`;
+  const checkoutPayment =
+    paymentId && paytrCheckout
+      ? tables.flatMap((table) => table.payments).find((payment) => payment.id === paymentId)
+      : null;
 
   return (
     <WexPayPage>
       {wexpayError && <WexPayErrorNotice message={wexpayError} />}
+
+      {paytrCheckout ? (
+        <WexPayPaytrCheckoutNotice
+          checkoutUrl={paytrCheckout}
+          paymentId={paymentId}
+          providerRef={checkoutPayment?.providerRef}
+        />
+      ) : null}
 
       <WexPayTableOperationsView
         tables={tables}

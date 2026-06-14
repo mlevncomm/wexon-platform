@@ -884,6 +884,28 @@ export async function updateOrderStatus(
 // Payments (operational WexPay payments — NOT Core BillingPayment)
 // ---------------------------------------------------------------------------
 
+export type CreatePaymentResult = {
+  payment: PaymentWithRelations;
+  externalCheckoutUrl: string | null;
+};
+
+type PaymentWithRelations = {
+  id: string;
+  branchId: string;
+  tableId: string;
+  orderId: string | null;
+  amount: unknown;
+  currency: string;
+  status: PaymentStatus;
+  provider: string | null;
+  providerRef: string | null;
+  paidAt: Date | null;
+  receiptRequested: boolean;
+  createdAt: Date;
+  table: { id: string; label: string };
+  order: { id: string; orderNo: string } | null;
+};
+
 export async function createPayment(
   context: WexPayMutationContext,
   input: {
@@ -895,7 +917,7 @@ export async function createPayment(
     provider: WexPayPaymentProviderKey;
     receiptRequested?: boolean;
   },
-) {
+): Promise<CreatePaymentResult> {
   assertManage(context);
 
   return runInTransaction(async (tx) => {
@@ -925,7 +947,7 @@ export async function createPayment(
     }
 
     const receiptRequested = Boolean(input.receiptRequested);
-    const { key: providerKey, adapter } = resolveWexPayPaymentProvider(input.provider);
+    const { key: providerKey, adapter } = await resolveWexPayPaymentProvider(input.provider);
 
     const intent = await adapter.createPaymentIntent({
       organizationId: context.organizationId,
@@ -935,6 +957,10 @@ export async function createPayment(
       amount: input.amount,
       currency: "TRY",
     });
+
+    if (intent.requiresExternalCheckout && !intent.externalCheckoutUrl) {
+      throw new WexPayValidationError("PayTR ödeme oturumu oluşturulamadı. Lütfen tekrar deneyin.");
+    }
 
     const payment = await tx.payment.create({
       data: {
@@ -1006,10 +1032,11 @@ export async function createPayment(
         providerRef: intent.providerRef,
         requiresExternalCheckout: intent.requiresExternalCheckout,
         remainingAmount: account.remainingAmount,
+        externalCheckoutStarted: Boolean(intent.externalCheckoutUrl),
       },
     });
 
-    return payment;
+    return { payment, externalCheckoutUrl: intent.externalCheckoutUrl };
   });
 }
 

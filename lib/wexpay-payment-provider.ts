@@ -92,12 +92,12 @@ export function parseWexPayPaymentProviderKey(raw: string | null | undefined): W
   return normalized;
 }
 
-export function resolveWexPayPaymentProvider(raw: string | null | undefined): {
+export async function resolveWexPayPaymentProvider(raw: string | null | undefined): Promise<{
   key: WexPayPaymentProviderKey;
   adapter: WexPayPaymentProviderAdapter;
-} {
+}> {
   const key = parseWexPayPaymentProviderKey(raw);
-  return { key, adapter: getWexPayPaymentProviderAdapter(key) };
+  return { key, adapter: await getWexPayPaymentProviderAdapter(key) };
 }
 
 function mapCommonProviderStatus(rawStatus: string): PaymentStatus {
@@ -169,17 +169,17 @@ const STATIC_ADAPTERS: Record<Exclude<WexPayPaymentProviderKey, "paytr">, WexPay
   param: createUnconfiguredAdapter("param"),
 };
 
-let paytrAdapterCache: WexPayPaymentProviderAdapter | null = null;
+let paytrAdapterCache: Promise<WexPayPaymentProviderAdapter> | null = null;
 
-function loadPaytrAdapter(): WexPayPaymentProviderAdapter {
+function loadPaytrAdapter(): Promise<WexPayPaymentProviderAdapter> {
   if (!paytrAdapterCache) {
-    // Lazy load breaks circular dependency with wexpay-paytr-adapter.ts
-    paytrAdapterCache = require("@/lib/wexpay-paytr-adapter").paytrAdapter as WexPayPaymentProviderAdapter;
+    // Lazy import breaks circular dependency with wexpay-paytr-adapter.ts.
+    paytrAdapterCache = import("@/lib/wexpay-paytr-adapter").then((module) => module.paytrAdapter);
   }
   return paytrAdapterCache;
 }
 
-export function getWexPayPaymentProviderAdapter(key: WexPayPaymentProviderKey): WexPayPaymentProviderAdapter {
+export async function getWexPayPaymentProviderAdapter(key: WexPayPaymentProviderKey): Promise<WexPayPaymentProviderAdapter> {
   if (key === "paytr") return loadPaytrAdapter();
   return STATIC_ADAPTERS[key];
 }
@@ -194,7 +194,7 @@ export function getWexPayPaymentProviderAdapter(key: WexPayPaymentProviderKey): 
 export async function createPublicQrCheckoutSessionBoundary(
   input: WexPayPaymentCheckoutContext & { qrCode: string; provider?: string | null },
 ): Promise<WexPayPaymentIntentResult> {
-  const { adapter } = resolveWexPayPaymentProvider(input.provider);
+  const { adapter } = await resolveWexPayPaymentProvider(input.provider);
   return adapter.createCheckoutSession({
     organizationId: input.organizationId,
     branchId: input.branchId,

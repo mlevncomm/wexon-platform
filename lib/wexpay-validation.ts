@@ -329,13 +329,18 @@ export function parseOrderStatusUpdatePayload(body: unknown) {
 }
 
 export function parsePaymentCreate(formData: FormData) {
+  const provider = parsePaymentProvider(nullableString(formData, "provider"));
+  const status =
+    provider === "paytr"
+      ? PaymentStatus.PENDING
+      : validatePaymentStatus(readString(formData, "status") || "PAID");
   return {
     branchId: requiredString(formData, "branchId", "Şube"),
     tableId: requiredString(formData, "tableId", "Masa"),
     orderId: nullableString(formData, "orderId"),
     amount: validateAmount(formData.get("amount")),
-    status: validatePaymentStatus(readString(formData, "status") || "PAID"),
-    provider: parsePaymentProvider(nullableString(formData, "provider")),
+    status,
+    provider,
     receiptRequested: readBoolean(formData, "receiptRequested"),
   };
 }
@@ -346,15 +351,22 @@ export function parsePaymentCreatePayload(body: unknown) {
   const tableId = typeof data.tableId === "string" ? data.tableId.trim() : "";
   if (!branchId) throw new WexPayValidationError("Şube zorunludur.");
   if (!tableId) throw new WexPayValidationError("Masa zorunludur.");
+  const provider = parsePaymentProvider(
+    typeof data.provider === "string" && data.provider.trim() ? data.provider.trim() : null,
+  );
+  const status =
+    provider === "paytr"
+      ? PaymentStatus.PENDING
+      : data.status === undefined || data.status === null || data.status === ""
+        ? PaymentStatus.PAID
+        : validatePaymentStatus(data.status);
   return {
     branchId,
     tableId,
     orderId: typeof data.orderId === "string" && data.orderId.trim() ? data.orderId.trim() : null,
     amount: validateAmount(data.amount),
-    status: data.status === undefined || data.status === null || data.status === "" ? PaymentStatus.PAID : validatePaymentStatus(data.status),
-    provider: parsePaymentProvider(
-      typeof data.provider === "string" && data.provider.trim() ? data.provider.trim() : null,
-    ),
+    status,
+    provider,
     receiptRequested: data.receiptRequested === true,
   };
 }

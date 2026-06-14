@@ -45,7 +45,7 @@ import {
   parseProviderCredentialDeactivate,
   WexPayValidationError,
 } from "@/lib/wexpay-validation";
-import { WexPayProviderNotConfiguredError } from "@/lib/wexpay-payment-provider";
+import { WexPayProviderNotConfiguredError, WexPayPaymentProviderError } from "@/lib/wexpay-payment-provider";
 import {
   deactivateWexPayProviderCredential,
   prepareProviderCredentialUpsert,
@@ -87,22 +87,33 @@ function throwIfRedirectError(error: unknown) {
   }
 }
 
+function resolveWexPayUiErrorMessage(error: unknown): { message: string; reason: string } {
+  if (error instanceof WexPayValidationError) {
+    return { message: error.message, reason: "validation" };
+  }
+  if (error instanceof WexPayAccessError) {
+    return { message: error.message, reason: error.reason };
+  }
+  if (error instanceof WexPayProviderNotConfiguredError) {
+    return {
+      message:
+        error.provider === "paytr"
+          ? "Sanal POS bağlantısı eksik. Ayarlar bölümünden PayTR sanal POS bilgilerinizi girin."
+          : error.message,
+      reason: "provider_not_configured",
+    };
+  }
+  if (error instanceof WexPayPaymentProviderError) {
+    return { message: error.message, reason: "validation" };
+  }
+  if (error instanceof WexPayProviderCredentialStorageError) {
+    return { message: error.message, reason: "validation" };
+  }
+  return { message: "İşlem sırasında beklenmeyen bir hata oluştu.", reason: "internal" };
+}
+
 function redirectWithError(path: string, error: unknown, context?: WexPayMutationContext): never {
-  const isValidation = error instanceof WexPayValidationError;
-  const isAccess = error instanceof WexPayAccessError;
-  const isProviderNotConfigured = error instanceof WexPayProviderNotConfiguredError;
-  const isCredentialStorage = error instanceof WexPayProviderCredentialStorageError;
-  const message =
-    isValidation || isAccess || isProviderNotConfigured || isCredentialStorage
-      ? error.message
-      : "İşlem sırasında beklenmeyen bir hata oluştu.";
-  const reason = isAccess
-    ? error.reason
-    : isProviderNotConfigured
-      ? "provider_not_configured"
-      : isValidation || isCredentialStorage
-        ? "validation"
-        : "internal";
+  const { message, reason } = resolveWexPayUiErrorMessage(error);
 
   writeAuditFailure({
     action: `wexpay.ui.${reason}`,
@@ -369,9 +380,15 @@ export async function createPaymentAction(formData: FormData) {
   try {
     const input = parsePaymentCreate(formData);
     context = await getManageContext();
-    await createPayment(context, input);
+    const result = await createPayment(context, input);
     revalidatePath(PAYMENTS_PATH);
     revalidatePath(TABLES_PATH);
+    if (result.externalCheckoutUrl) {
+      const separator = redirectTo.includes("?") ? "&" : "?";
+      redirect(
+        `${redirectTo}${separator}paytrCheckout=${encodeURIComponent(result.externalCheckoutUrl)}&paymentId=${encodeURIComponent(result.payment.id)}`,
+      );
+    }
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(redirectTo, error, context);
