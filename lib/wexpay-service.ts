@@ -985,8 +985,10 @@ export async function createPayment(
         orderId: input.orderId,
         paymentId: payment.id,
         type: NotificationType.PAYMENT_RECEIVED,
-        title: "Ödeme kaydedildi",
-        message: `${table.label} için ${input.amount} tutarında ödeme kaydı oluşturuldu.`,
+        title: intent.requiresExternalCheckout ? "Sanal POS ödemesi bekleniyor" : "Ödeme kaydedildi",
+        message: intent.requiresExternalCheckout
+          ? `${table.label} için PayTR sanal POS ödemesi başlatıldı (${input.amount} TRY).`
+          : `${table.label} için ${input.amount} tutarında ödeme kaydı oluşturuldu.`,
       },
     });
 
@@ -1009,6 +1011,60 @@ export async function createPayment(
 
     return payment;
   });
+}
+
+export async function settlePaymentFromProviderWebhook(
+  input: {
+    paymentId: string;
+    organizationId: string;
+    status: PaymentStatus;
+    provider: WexPayPaymentProviderKey;
+    providerRef: string;
+    ipAddress?: string | null;
+    webhookEventId: string;
+  },
+  tx: TenantDb = prisma,
+) {
+  const payment = await assertPaymentInOrg(tx, input.organizationId, input.paymentId);
+  if (payment.provider !== input.provider || payment.providerRef !== input.providerRef) {
+    throw new WexPayValidationError("Ödeme sağlayıcı referansı eşleşmiyor.");
+  }
+
+  const terminalStatuses: PaymentStatus[] = [PaymentStatus.PAID, PaymentStatus.FAILED, PaymentStatus.REFUNDED];
+  if (terminalStatuses.includes(payment.status)) {
+    return { payment, skipped: true as const };
+  }
+
+  const isPaidLike = input.status === PaymentStatus.PAID || input.status === PaymentStatus.PARTIAL;
+  const updated = await tx.payment.update({
+    where: { id: payment.id },
+    data: {
+      status: input.status,
+      paidAt: isPaidLike ? new Date() : null,
+    },
+  });
+
+  await syncTableStatus(tx, payment.tableId);
+
+  await writeAuditLog(
+    {
+      action: "wexpay.payment.provider_settled",
+      organizationId: input.organizationId,
+      entityType: "Payment",
+      entityId: payment.id,
+      ipAddress: input.ipAddress ?? null,
+      source: "wexpay_webhook",
+      metadata: {
+        provider: input.provider,
+        providerRef: input.providerRef,
+        status: input.status,
+        webhookEventId: input.webhookEventId,
+      },
+    },
+    tx,
+  );
+
+  return { payment: updated, skipped: false as const };
 }
 
 export async function updatePayment(

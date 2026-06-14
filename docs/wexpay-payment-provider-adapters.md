@@ -1,6 +1,17 @@
 # WexPay Payment Provider Adapters
 
-Status: Phase 6 foundation — manual provider active; PSP adapters remain stubs with tenant credential + webhook event storage.
+Status: Phase 7 — manual active; PayTR adapter foundation + webhook route; live checkout UX kapali (varsayilan).
+
+## Adapter registry
+
+Implementation: `lib/wexpay-payment-provider.ts`, PayTR: `lib/wexpay-paytr-adapter.ts`
+
+| Provider key | Status | Behaviour |
+| --- | --- | --- |
+| `manual` | Active | Operator-recorded payment; sanal POS baglantisi gerekmez |
+| `paytr` | Foundation | Tenant sanal POS credential + `merchant_oid` (`providerRef`); Payment `PENDING`; webhook settles PAID/FAILED |
+| `iyzico` | Stub | Credential boundary only; `Provider adapter not configured.` |
+| `param` | Stub | Same as iyzico |
 
 ## Urun modeli: WexPay para tutmaz
 
@@ -26,17 +37,6 @@ Manuel operasyonel odeme (`provider=manual`) sanal POS baglantisi gerektirmez: o
 
 WexPay operational payments must not drive Core access, license, or subscription logic. **BillingPayment = Wexon aboneligi. Payment = restoran operasyon odemesi.**
 
-## Adapter registry
-
-Implementation: `lib/wexpay-payment-provider.ts`
-
-| Provider key | Status | Behaviour |
-| --- | --- | --- |
-| `manual` | Active | Operator-recorded payment; sanal POS baglantisi gerekmez |
-| `paytr` | Stub | Checks tenant credential boundary, then throws `Provider adapter not configured.` |
-| `iyzico` | Stub | Same as PayTR |
-| `param` | Stub | Same as PayTR |
-
 ### Common adapter interface
 
 Each adapter implements:
@@ -57,6 +57,69 @@ Response types (`WexPayPaymentIntentResult`, `WexPayProviderCallbackResult`) liv
 - `providerRef` remains `null`.
 
 Operator UI and server actions continue to use manual flow unchanged.
+
+## PayTR sanal POS (Phase 7 foundation)
+
+Implementation: `lib/wexpay-paytr-adapter.ts`, webhook: `app/api/wexpay/webhooks/paytr/route.ts`
+
+**WexPay para tutmaz.** Firma kendi PayTR panelinden aldigi merchant bilgilerini organization sanal POS baglantisina girer. WexPay yalnizca odeme baslatma hazirligi, operasyonel `Payment` kaydi ve callback sonucu tutar.
+
+### Credential alanlari (config JSON)
+
+| UI / config key | PayTR alani | Zorunlu |
+| --- | --- | --- |
+| `merchantId` | `merchant_id` | Evet |
+| `apiKey` veya `secretKey` | `merchant_key` | Evet |
+| `merchantSalt` | `merchant_salt` | Evet |
+| `mode` | `TEST` / `LIVE` (`test_mode`) | Evet |
+
+Eksik alan varsa adapter `provider_not_configured` doner. Plaintext yalnizca server adapter icinde decrypt edilir.
+
+### Odeme baslatma (`createPayment`, provider=`paytr`)
+
+- Manual gibi aninda `PAID` **yapilmaz**.
+- `providerRef` = PayTR `merchant_oid` (benzersiz, max 64).
+- `Payment.status` = `PENDING`.
+- Masa status `PAYMENT_PENDING` (`syncTableStatus`).
+- Audit metadata: `provider`, `providerRef`, `requiresExternalCheckout`.
+
+Varsayilan: **canli PayTR get-token cagrisi kapali** (`WEXPAY_PAYTR_ENABLE_API` unset). Foundation modunda checkout URL uretilmez.
+
+`WEXPAY_PAYTR_ENABLE_API=true` oldugunda token istegi `https://www.paytr.com/odeme/api/get-token` adresine gider (resmi iFrame API Step 1). Canli tahsilat UX hala operator/QR redirect ile acilmamis olabilir.
+
+### Callback / webhook URL
+
+PayTR panelinde bildirim URL:
+
+```text
+{NEXT_PUBLIC_APP_URL}/api/wexpay/webhooks/paytr
+```
+
+Redirect URL'ler (bilgi amacli):
+
+- `merchant_ok_url` → `/apps/wexpay/payments?paytr=success`
+- `merchant_fail_url` → `/apps/wexpay/payments?paytr=failed`
+
+**Onemli:** Siparis onay/iptal yalnizca notification URL uzerinden yapilir; ok/fail redirect guvenilir degildir (PayTR dokumani).
+
+### Webhook isleme ve idempotency
+
+1. Raw body okunur; `rawBodyHash` ledger'a yazilir.
+2. `receiveWexPayWebhookEvent` — `providerEventId = merchant_oid:status:total_amount`.
+3. Duplicate event → Payment ikinci kez mutate edilmez; PayTR'ye `OK` donulur.
+4. Signature: `base64(hmac_sha256(merchant_oid + merchant_salt + status + total_amount, merchant_key))` — hash eslesmezse `401`, ledger `FAILED`.
+5. Signature sonrasi `markWexPayWebhookEventVerified`.
+6. `Payment` `providerRef=merchant_oid` ile bulunur; tenant organization zinciri dogrulanir.
+7. `success` → `Payment` `PAID`; `failed` → `FAILED`; `paidAt` + `syncTableStatus` + audit `wexpay.payment.provider_settled`.
+8. Zaten terminal Payment → ignore + `OK`.
+
+Audit: `wexpay.webhook.paytr.processed`, `wexpay.payment.provider_settled`.
+
+### Test / live notlari
+
+- `mode=TEST` → PayTR `test_mode=1`.
+- Production canli tahsilat UX varsayilan kapali; foundation guvenlik oncelikli.
+- Demo route'lara dokunulmaz.
 
 ## Sanal POS baglantisi storage (Phase 6)
 
@@ -146,14 +209,10 @@ Before processing any inbound PSP webhook in production:
 
 ## PayTR / iyzico / Param — integration order
 
-1. **Credential UI/API** — secure upsert flow for operators (foundation helpers exist).
-2. **Adapter implementation** — replace stub methods with real API clients per provider.
-3. **Inbound webhook routes** — e.g. `/api/wexpay/webhooks/paytr` (production only; demo routes untouched).
-4. **Outbound idempotency** — use `providerEventId` unique constraint; skip duplicate processing.
-5. **Payment mutation** — update operational `Payment` + `syncTableStatus` inside transaction with audit.
-6. **Public QR checkout route** — separate from order creation; uses `createCheckoutSession`.
-
-Stub adapters intentionally throw `Provider adapter not configured.` even when credentials exist, until step 2 is complete.
+1. [x] **PayTR foundation** — credential mapping, PENDING payment, webhook route, signature + idempotency.
+2. **PayTR live checkout UX** — operator/QR redirect to iframe (`WEXPAY_PAYTR_ENABLE_API` + UI).
+3. **iyzico / Param adapters** — credential + webhook parity.
+4. **Public QR checkout route** — separate from order creation.
 
 ## Schema reference
 

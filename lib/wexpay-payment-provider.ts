@@ -92,10 +92,6 @@ export function parseWexPayPaymentProviderKey(raw: string | null | undefined): W
   return normalized;
 }
 
-export function getWexPayPaymentProviderAdapter(key: WexPayPaymentProviderKey): WexPayPaymentProviderAdapter {
-  return ADAPTERS[key];
-}
-
 export function resolveWexPayPaymentProvider(raw: string | null | undefined): {
   key: WexPayPaymentProviderKey;
   adapter: WexPayPaymentProviderAdapter;
@@ -167,12 +163,26 @@ function createUnconfiguredAdapter(key: Exclude<WexPayPaymentProviderKey, "manua
   };
 }
 
-const ADAPTERS: Record<WexPayPaymentProviderKey, WexPayPaymentProviderAdapter> = {
+const STATIC_ADAPTERS: Record<Exclude<WexPayPaymentProviderKey, "paytr">, WexPayPaymentProviderAdapter> = {
   manual: manualAdapter,
-  paytr: createUnconfiguredAdapter("paytr"),
   iyzico: createUnconfiguredAdapter("iyzico"),
   param: createUnconfiguredAdapter("param"),
 };
+
+let paytrAdapterCache: WexPayPaymentProviderAdapter | null = null;
+
+function loadPaytrAdapter(): WexPayPaymentProviderAdapter {
+  if (!paytrAdapterCache) {
+    // Lazy load breaks circular dependency with wexpay-paytr-adapter.ts
+    paytrAdapterCache = require("@/lib/wexpay-paytr-adapter").paytrAdapter as WexPayPaymentProviderAdapter;
+  }
+  return paytrAdapterCache;
+}
+
+export function getWexPayPaymentProviderAdapter(key: WexPayPaymentProviderKey): WexPayPaymentProviderAdapter {
+  if (key === "paytr") return loadPaytrAdapter();
+  return STATIC_ADAPTERS[key];
+}
 
 /**
  * Future public QR PSP checkout boundary (not wired to routes in Phase 5).
