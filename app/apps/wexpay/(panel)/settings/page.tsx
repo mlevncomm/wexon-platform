@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { InfoRow, WexPayPanel, WexPayPanelGrid } from "@/components/wexpay/WexPayBusinessUI";
+import { listOrganizationProviderCredentials } from "@/lib/wexpay-provider-credentials";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { getEntitlementUsage } from "@/lib/wexpay-read";
 import { coreEntitlementNumber } from "@/lib/wexon-core-access";
@@ -11,6 +12,7 @@ export default async function WexPaySettingsPage() {
   if (!access.allowed) return null;
 
   const usage = await getEntitlementUsage(access.organization.id, access.entitlementMap);
+  const providerCredentials = await listOrganizationProviderCredentials(access.organization.id);
 
   return (
     <WexPayPanelGrid className="xl:grid-cols-2">
@@ -44,6 +46,28 @@ export default async function WexPaySettingsPage() {
             return <InfoRow key={row.key} label={row.label} value={`${row.used} / ${limitLabel}`} />;
           })}
         </div>
+      </WexPayPanel>
+
+      <WexPayPanel
+        eyebrow="Ödeme altyapısı"
+        title="Provider credential durumu"
+        description="PSP anahtarları şifreli saklanır. Bu ekran yalnızca maskelenmiş özet gösterir; gerçek entegrasyon bir sonraki fazda aktif olacaktır."
+      >
+        {providerCredentials.length === 0 ? (
+          <p className="text-sm font-medium text-slate-500">
+            Kayıtlı PayTR, iyzico veya Param credential bulunmuyor. Manuel operasyonel ödeme akışı aktif.
+          </p>
+        ) : (
+          <div className="grid min-w-0 gap-3">
+            {providerCredentials.map((credential) => (
+              <InfoRow
+                key={credential.id}
+                label={`${credential.provider.toUpperCase()} · ${credential.mode}`}
+                value={`${credential.displayName} · ${credential.maskedKey} · ${credential.isActive ? "Aktif" : "Pasif"}`}
+              />
+            ))}
+          </div>
+        )}
       </WexPayPanel>
 
       <WexPayPanel eyebrow="Ayarlar" title="Paket açıklaması" className="xl:col-span-2">

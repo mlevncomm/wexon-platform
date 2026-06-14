@@ -1,6 +1,6 @@
 # WexPay Payment Provider Adapters
 
-Status: Phase 5 skeleton — manual provider only. PSP adapters are registered stubs.
+Status: Phase 6 foundation — manual provider active; PSP adapters remain stubs with tenant credential + webhook event storage.
 
 ## Payment vs BillingPayment
 
@@ -10,6 +10,7 @@ Status: Phase 5 skeleton — manual provider only. PSP adapters are registered s
 | Tenant scope | Restaurant branch / table session | Organization subscription |
 | Access decisions | Never used for Core license/entitlement | Source of truth for billing state |
 | Provider field | `Payment.provider` / `Payment.providerRef` | Separate Core billing models |
+| Credentials | `WexPayProviderCredential` | Core billing provider fields on `Subscription` |
 
 WexPay operational payments must not drive Core access, license, or subscription logic.
 
@@ -19,10 +20,10 @@ Implementation: `lib/wexpay-payment-provider.ts`
 
 | Provider key | Status | Behaviour |
 | --- | --- | --- |
-| `manual` | Active | Operator-recorded payment; no external checkout |
-| `paytr` | Stub | Throws `Provider adapter not configured.` |
-| `iyzico` | Stub | Throws `Provider adapter not configured.` |
-| `param` | Stub | Throws `Provider adapter not configured.` |
+| `manual` | Active | Operator-recorded payment; no credential required |
+| `paytr` | Stub | Checks tenant credential boundary, then throws `Provider adapter not configured.` |
+| `iyzico` | Stub | Same as PayTR |
+| `param` | Stub | Same as PayTR |
 
 ### Common adapter interface
 
@@ -38,11 +39,66 @@ Response types (`WexPayPaymentIntentResult`, `WexPayProviderCallbackResult`) liv
 ## Manual provider (current production path)
 
 - Default when `provider` is omitted or empty.
+- Does not require `WexPayProviderCredential`.
 - Does not emit `externalCheckoutUrl`.
 - `createPayment` in `lib/wexpay-service.ts` records the payment immediately with operator-selected `PaymentStatus` (typically `PAID`).
 - `providerRef` remains `null`.
 
 Operator UI and server actions continue to use manual flow unchanged.
+
+## Provider credential storage (Phase 6)
+
+Model: `WexPayProviderCredential` (`prisma/schema.prisma`)
+
+| Field | Purpose |
+| --- | --- |
+| `organizationId` | Tenant isolation |
+| `provider` | `paytr`, `iyzico`, `param` (not `manual`) |
+| `mode` | `TEST` or `LIVE` |
+| `configCiphertext` | AES-256-GCM encrypted JSON config |
+| `keyFingerprint` | Non-secret SHA-256 prefix for rotation audits |
+| `maskedKey` | Display-only masked secret suffix |
+| `isActive` | Soft disable without deleting history |
+
+Unique constraint: `(organizationId, provider, mode)`.
+
+Helpers: `lib/wexpay-provider-credentials.ts`
+
+- **Encryption key:** `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` (32-byte hex or base64). Missing key → credentials cannot be stored and PSP adapters remain not configured.
+- **Mode default:** `WEXPAY_PROVIDER_MODE=TEST|LIVE`, else non-production defaults to `TEST`.
+- **Never exposed:** `configCiphertext`, decrypted config, or raw secrets in API/UI/audit metadata.
+- **Audit actions:** `wexpay.provider_credential.upserted`, `wexpay.provider_credential.deactivated`
+
+Settings panel (`/apps/wexpay/settings`) shows read-only masked summaries only.
+
+## Inbound webhook events (Phase 6)
+
+Model: `WexPayWebhookEvent` — inbound PSP callbacks for operational WexPay payments.
+
+**Not** Core outbound `WebhookEndpoint` / future `WebhookDelivery` (see `docs/webhook-event-idempotency-design.md`).
+
+| Field | Purpose |
+| --- | --- |
+| `provider` + `providerEventId` | Unique idempotency key per PSP event |
+| `payloadHash` / `rawBodyHash` | Integrity checks without storing raw body |
+| `status` | `RECEIVED` → `VERIFIED` → `PROCESSED` / `FAILED` / `IGNORED` |
+| `organizationId` | Set when tenant is resolved from callback metadata |
+
+Helpers: `lib/wexpay-webhook-events.ts`
+
+- `receiveWexPayWebhookEvent` — idempotent create; duplicates return existing row
+- `markWexPayWebhookEventVerified` / `Processed` / `Failed` / `Ignored`
+- `attachOrganizationToWexPayWebhookEvent` — bind tenant after signature verification
+
+Audit actions:
+
+- `wexpay.webhook.received`
+- `wexpay.webhook.duplicate`
+- `wexpay.webhook.verified`
+- `wexpay.webhook.processed`
+- `wexpay.webhook.failed`
+- `wexpay.webhook.ignored`
+- `wexpay.webhook.tenant_attached`
 
 ## Public QR boundary (not enabled)
 
@@ -56,38 +112,45 @@ Future checkout (not wired):
 2. A dedicated checkout route resolves the branch/tenant provider adapter.
 3. `createPublicQrCheckoutSessionBoundary` calls `createCheckoutSession`.
 4. Client redirects to `externalCheckoutUrl` when `requiresExternalCheckout` is true.
-5. PSP callback/webhook updates `Payment` via `verifyCallback` + `mapProviderStatus`.
+5. Inbound webhook route receives PSP callback → `receiveWexPayWebhookEvent` → verify signature → update `Payment`.
 
 Do not add PSP calls to the order route.
 
-## PayTR / iyzico / Param — next steps
+## Raw body / signature verification checklist
 
-For each PSP adapter:
+Before processing any inbound PSP webhook in production:
 
-1. **Tenant credentials** — store encrypted keys per organization/branch (not in repo).
-2. **Adapter implementation** — replace stub with real API client in `lib/wexpay-payment-provider.ts` or split per-provider modules.
-3. **Webhook routes** — e.g. `/api/wexpay/webhooks/paytr` (production only; keep demo routes untouched).
-4. **Idempotency** — pass stable `idempotencyKey` on intent creation; dedupe webhook processing (see `docs/webhook-event-idempotency-design.md`).
-5. **Audit** — log `wexpay.payment.created`, callback verification, and status transitions inside transactions.
-6. **Status sync** — after callback, update `Payment.providerRef`, `Payment.status`, `paidAt`, then `syncTableStatus`.
+1. Read **raw body** bytes before JSON parsing.
+2. Compute and store `rawBodyHash`; compare on replay/debug.
+3. Verify provider signature using tenant credential from `loadActiveProviderCredentialConfig`.
+4. Resolve `organizationId` and attach to `WexPayWebhookEvent`.
+5. Call `markWexPayWebhookEventVerified` only after signature passes.
+6. Process payment mutation in a transaction; then `markWexPayWebhookEventProcessed`.
+7. On verification failure → `markWexPayWebhookEventFailed` (do not mutate `Payment`).
+8. On benign duplicate/unsupported event → `markWexPayWebhookEventIgnored`.
+9. Never log raw body, secrets, or decrypted config.
 
-Stub adapters intentionally throw `Provider adapter not configured.` if selected before steps 1–2 are complete.
+## PayTR / iyzico / Param — integration order
 
-## Webhook and idempotency requirements
+1. **Credential UI/API** — secure upsert flow for operators (foundation helpers exist).
+2. **Adapter implementation** — replace stub methods with real API clients per provider.
+3. **Inbound webhook routes** — e.g. `/api/wexpay/webhooks/paytr` (production only; demo routes untouched).
+4. **Outbound idempotency** — use `providerEventId` unique constraint; skip duplicate processing.
+5. **Payment mutation** — update operational `Payment` + `syncTableStatus` inside transaction with audit.
+6. **Public QR checkout route** — separate from order creation; uses `createCheckoutSession`.
 
-Before enabling PSP providers in production:
+Stub adapters intentionally throw `Provider adapter not configured.` even when credentials exist, until step 2 is complete.
 
-- **Verify signatures** in `verifyCallback` (never trust raw POST body).
-- **Idempotency key** — use `{organizationId}:{provider}:{providerRef}` or PSP-supplied event id; reject duplicates.
-- **Transactional updates** — payment row + table status + audit log in one DB transaction.
-- **Out-of-order events** — `mapProviderStatus` should tolerate late `PENDING` after `PAID` without corrupting closed sessions.
-- **Tenant isolation** — resolve payment by `providerRef` scoped to organization/branch chain.
+## Schema reference
 
-Refer to `docs/webhook-event-idempotency-design.md` for platform-wide webhook delivery design (separate from WexPay adapter stubs).
+Operational payment row (`Payment`):
 
-## Schema
+- `provider` — normalized adapter key
+- `providerRef` — PSP transaction / session id
 
-Existing `Payment` fields are sufficient — no migration required for Phase 5:
+Phase 6 additions:
 
-- `provider` — normalized adapter key (`manual`, `paytr`, …)
-- `providerRef` — PSP transaction / session id when external checkout is used
+- `WexPayProviderCredential` — encrypted tenant PSP config
+- `WexPayWebhookEvent` — inbound idempotent webhook ledger
+
+Core `BillingPayment` remains separate and must not be reused for table/checkout flows.

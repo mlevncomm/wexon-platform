@@ -1,4 +1,5 @@
 import { PaymentStatus } from ".prisma/client";
+import { isProviderCredentialConfigured } from "@/lib/wexpay-provider-credentials";
 
 /**
  * Operational WexPay payment provider adapters (NOT Core BillingPayment).
@@ -147,14 +148,19 @@ const manualAdapter: WexPayPaymentProviderAdapter = {
 };
 
 function createUnconfiguredAdapter(key: Exclude<WexPayPaymentProviderKey, "manual">): WexPayPaymentProviderAdapter {
-  const notConfigured = async () => {
+  const guardIntent = async (context: WexPayPaymentCheckoutContext) => {
+    await isProviderCredentialConfigured(context.organizationId, key);
+    throw new WexPayProviderNotConfiguredError(key);
+  };
+  const guardCallback = async (_payload: WexPayProviderCallbackPayload) => {
+    void _payload;
     throw new WexPayProviderNotConfiguredError(key);
   };
   return {
     key,
-    createPaymentIntent: notConfigured,
-    createCheckoutSession: notConfigured,
-    verifyCallback: notConfigured,
+    createPaymentIntent: guardIntent,
+    createCheckoutSession: guardIntent,
+    verifyCallback: guardCallback,
     mapProviderStatus: () => {
       throw new WexPayProviderNotConfiguredError(key);
     },

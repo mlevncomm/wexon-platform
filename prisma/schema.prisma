@@ -125,6 +125,19 @@ enum AppInstallationStatus {
   PENDING
 }
 
+enum WexPayProviderCredentialMode {
+  TEST
+  LIVE
+}
+
+enum WexPayWebhookEventStatus {
+  RECEIVED
+  VERIFIED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -149,6 +162,8 @@ model Organization {
   auditLogs         AuditLog[]
   apiKeys           ApiKey[]
   webhookEndpoints  WebhookEndpoint[]
+  wexPayProviderCredentials WexPayProviderCredential[]
+  wexPayWebhookEvents       WexPayWebhookEvent[]
 
   @@index([isDemo])
   @@index([isActive])
@@ -653,4 +668,51 @@ model BusinessNotification {
   @@index([orderId])
   @@index([paymentId])
   @@index([isRead])
+}
+
+/// Tenant-scoped PSP credentials for operational WexPay payments (NOT Core BillingPayment).
+model WexPayProviderCredential {
+  id               String                       @id @default(cuid())
+  organizationId   String
+  provider         String
+  displayName      String
+  mode             WexPayProviderCredentialMode @default(TEST)
+  isActive         Boolean                      @default(true)
+  configCiphertext String
+  keyFingerprint   String
+  maskedKey        String
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider, mode])
+  @@index([organizationId])
+  @@index([provider])
+  @@index([isActive])
+}
+
+/// Inbound PSP webhook events for WexPay operational payments. Separate from Core `WebhookEndpoint`.
+model WexPayWebhookEvent {
+  id              String                   @id @default(cuid())
+  organizationId  String?
+  provider        String
+  providerEventId String
+  eventType       String
+  payloadHash     String
+  rawBodyHash     String
+  status          WexPayWebhookEventStatus @default(RECEIVED)
+  errorMessage    String?
+  receivedAt      DateTime                 @default(now())
+  processedAt     DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerEventId])
+  @@index([organizationId])
+  @@index([provider])
+  @@index([status])
+  @@index([receivedAt])
 }
