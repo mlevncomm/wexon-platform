@@ -63,9 +63,10 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
   if (!parsed.ok) return parsed.response;
 
   try {
-    const body = (parsed.body ?? {}) as { items?: unknown; note?: unknown };
+    const body = (parsed.body ?? {}) as { items?: unknown; note?: unknown; receiptRequested?: unknown };
     const items = validateOrderItems(body.items);
     const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+    const receiptRequested = body.receiptRequested === true;
 
     const order = await createPublicOrder({
       organizationId: resolution.organizationId,
@@ -73,6 +74,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       tableId: resolution.table.id,
       items,
       note,
+      receiptRequested,
       ipAddress,
     });
 

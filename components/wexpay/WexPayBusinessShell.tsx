@@ -16,6 +16,7 @@ type TabItem = {
 const tabs: TabItem[] = [
   { label: "Genel Bakış", path: "/apps/wexpay", branchScoped: true },
   { label: "Masalar", path: "/apps/wexpay/tables", branchScoped: true },
+  { label: "Mutfak", path: "/apps/wexpay/kitchen", branchScoped: true },
   { label: "Siparişler", path: "/apps/wexpay/orders", branchScoped: true },
   { label: "Menü", path: "/apps/wexpay/menu", branchScoped: true },
   { label: "Ödemeler", path: "/apps/wexpay/payments", branchScoped: true },
@@ -42,6 +43,7 @@ function isBranchScopedPath(pathname: string) {
   return (
     pathname === "/apps/wexpay" ||
     pathname.startsWith("/apps/wexpay/tables") ||
+    pathname.startsWith("/apps/wexpay/kitchen") ||
     pathname.startsWith("/apps/wexpay/orders") ||
     pathname.startsWith("/apps/wexpay/menu") ||
     pathname.startsWith("/apps/wexpay/payments") ||

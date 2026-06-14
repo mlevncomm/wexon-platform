@@ -3,6 +3,7 @@ import { OrderStatus, PaymentStatus, TableStatus } from ".prisma/client";
 type AccountOrder = {
   status: OrderStatus | string;
   subtotal: number | { toString(): string };
+  receiptRequested?: boolean | null;
 };
 
 type AccountPayment = {
@@ -195,7 +196,8 @@ export function calculateTableAccount(input: {
   const hasPendingPayments = input.payments.some((payment) => payment.status === PaymentStatus.PENDING);
   const receiptRequested =
     (input.receiptRequests?.some((request) => request.status === "REQUESTED") ?? false) ||
-    input.payments.some((payment) => Boolean(payment.receiptRequested));
+    input.payments.some((payment) => Boolean(payment.receiptRequested)) ||
+    input.orders.some((order) => Boolean(order.receiptRequested));
 
   let status: TableStatus = TableStatus.EMPTY;
   if (receiptRequested) {

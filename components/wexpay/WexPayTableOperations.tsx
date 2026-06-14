@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { closeTableAction, createPaymentAction, updateOrderStatusAction } from "@/lib/wexpay-actions";
+import { closeTableAction, createPaymentAction, markReceiptPrintedAction, updateOrderStatusAction } from "@/lib/wexpay-actions";
 import type { OperationsTable } from "@/lib/wexpay-read";
 import {
   DemoPrimaryButton,
@@ -219,7 +219,9 @@ function TableCard({
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
         <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-slate-200">Aktif sipariş: {table.activeOrders.length}</span>
-        <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-slate-200">Fiş talebi: {table.receiptRequested ? "Var" : "Yok"}</span>
+        <span className={`rounded-full px-2.5 py-1 ring-1 ${table.receiptRequested ? "bg-amber-50 text-amber-800 ring-amber-100" : "bg-white/80 text-slate-500 ring-slate-200"}`}>
+          Fiş talebi: {table.receiptRequested ? "Var" : "Yok"}
+        </span>
       </div>
     </button>
   );
@@ -296,21 +298,55 @@ function TableDetailPanel({
           { label: "Toplam", value: formatLira(table.totalAmount) },
           { label: "Ödenen", value: formatLira(table.paidAmount) },
           { label: "Kalan", value: formatLira(table.remainingAmount), accent: table.remainingAmount > 0 },
-          { label: "Fiş", value: table.receiptRequested ? "Var" : "Yok" },
+          { label: "Fiş", value: table.receiptRequested ? "Talep var" : "Yok", accent: table.receiptRequested },
         ].map((stat) => (
           <div
             key={stat.label}
             className={`rounded-2xl border bg-white p-3.5 shadow-sm transition-colors sm:p-4 ${
-              stat.accent ? "border-emerald-200/80 shadow-emerald-900/5" : "border-slate-200/70 shadow-slate-900/5"
+              stat.label === "Fiş" && stat.accent
+                ? "border-amber-200/80 shadow-amber-900/5"
+                : stat.label === "Kalan" && stat.accent
+                  ? "border-emerald-200/80 shadow-emerald-900/5"
+                  : "border-slate-200/70 shadow-slate-900/5"
             }`}
           >
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{stat.label}</p>
-            <p className={`mt-1.5 text-base font-black tracking-tight sm:text-lg ${stat.accent ? "text-emerald-600" : "text-slate-950"}`}>
+            <p className={`text-[10px] font-bold uppercase tracking-[0.12em] ${stat.accent ? "text-amber-700" : "text-slate-400"}`}>
+              {stat.label}
+            </p>
+            <p
+              className={`mt-1.5 text-base font-black tracking-tight sm:text-lg ${
+                stat.label === "Fiş" && stat.accent
+                  ? "text-amber-800"
+                  : stat.label === "Kalan" && stat.accent
+                    ? "text-emerald-600"
+                    : "text-slate-950"
+              }`}
+            >
               {stat.value}
             </p>
           </div>
         ))}
       </div>
+
+      {table.receiptRequested ? (
+        <div className="border-b border-amber-100 bg-amber-50/80 px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-amber-900">Açık fiş talebi</p>
+              <p className="mt-1 text-xs font-medium text-amber-800/80">
+                Fiş yazdırıldıktan sonra masayı işaretleyin; masa durumu otomatik güncellenir.
+              </p>
+            </div>
+            {canManage ? (
+              <form action={markReceiptPrintedAction} className="shrink-0">
+                <input type="hidden" name="tableId" value={table.id} />
+                <input type="hidden" name="redirectTo" value={redirectTo} />
+                <DemoPrimaryButton className="!w-auto px-5 !py-2.5 text-xs">Fiş Yazdırıldı</DemoPrimaryButton>
+              </form>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_440px]">
         <div className="min-w-0 border-b border-slate-100 p-4 sm:p-5 lg:border-b-0 lg:border-r">

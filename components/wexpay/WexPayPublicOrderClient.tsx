@@ -34,6 +34,7 @@ export default function WexPayPublicOrderClient({
 }) {
   const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [note, setNote] = useState("");
+  const [receiptRequested, setReceiptRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ orderNo: string; subtotal: number } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -71,6 +72,7 @@ export default function WexPayPublicOrderClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           note,
+          receiptRequested,
           items: lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
         }),
       });
@@ -83,6 +85,7 @@ export default function WexPayPublicOrderClient({
 
       setCart({});
       setNote("");
+      setReceiptRequested(false);
       setSuccess({ orderNo: payload.orderNo ?? "-", subtotal: Number(payload.subtotal ?? subtotal) });
     });
   }
@@ -180,6 +183,30 @@ export default function WexPayPublicOrderClient({
             className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100"
           />
         </label>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-black text-slate-950">Fiş istiyorum</p>
+              <p className="mt-0.5 text-xs font-medium text-slate-500">Sipariş sonrası fiş talebi oluşturulur.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={receiptRequested}
+              onClick={() => setReceiptRequested((value) => !value)}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                receiptRequested ? "bg-[#10b981]" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  receiptRequested ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
 
         <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
           <span className="text-sm font-bold text-slate-600">Ara toplam</span>

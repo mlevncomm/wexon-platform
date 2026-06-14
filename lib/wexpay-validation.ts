@@ -150,6 +150,12 @@ export function parseTableClose(formData: FormData) {
   };
 }
 
+export function parseTableReceiptPrinted(formData: FormData) {
+  return {
+    tableId: requiredString(formData, "tableId", "Masa"),
+  };
+}
+
 export function parseCategoryCreate(formData: FormData) {
   const name = requiredString(formData, "name", "Kategori adı");
   return {

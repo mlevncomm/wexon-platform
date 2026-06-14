@@ -110,6 +110,56 @@ export async function listBranchOrders(organizationId: string, branchId: string)
   });
 }
 
+export type KitchenOrderRow = OperationsOrder & {
+  tableLabel: string;
+};
+
+const KITCHEN_ORDER_STATUSES: OrderStatus[] = [OrderStatus.NEW, OrderStatus.PREPARING, OrderStatus.SERVED];
+
+export async function listBranchKitchenOrders(
+  organizationId: string,
+  branchId: string,
+): Promise<KitchenOrderRow[]> {
+  const orders = await prisma.customerOrder.findMany({
+    where: {
+      branchId,
+      status: { in: KITCHEN_ORDER_STATUSES },
+      branch: { restaurant: { organizationId } },
+    },
+    include: {
+      table: { select: { label: true } },
+      items: { orderBy: { id: "asc" } },
+    },
+    orderBy: [{ createdAt: "asc" }],
+  });
+
+  const statusRank: Record<string, number> = { NEW: 0, PREPARING: 1, SERVED: 2 };
+
+  return orders
+    .map((order) => ({
+      id: order.id,
+      orderNo: order.orderNo,
+      status: order.status,
+      note: order.note,
+      subtotal: Number(order.subtotal),
+      createdAt: order.createdAt.toISOString(),
+      tableLabel: order.table.label,
+      items: order.items.map((item) => ({
+        id: item.id,
+        name: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        lineTotal: Number(item.totalPrice),
+      })),
+    }))
+    .sort((left, right) => {
+      const leftRank = statusRank[left.status] ?? 99;
+      const rightRank = statusRank[right.status] ?? 99;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    });
+}
+
 export async function listOrgOrders(organizationId: string) {
   return prisma.customerOrder.findMany({
     where: { branch: { restaurant: { organizationId } } },
@@ -334,6 +384,7 @@ export type OperationsOverview = {
     dailyPaymentCount: number;
     activeTableCount: number;
     openOrderCount: number;
+    kitchenServedCount: number;
     receiptRequestCount: number;
     averageTicket: number;
     unreadNotificationCount: number;
@@ -510,13 +561,16 @@ export async function getWexPayOperationsOverview(
   organizationId: string,
   branchId: string,
 ): Promise<OperationsOverview> {
-  const [tables, notifications, topProducts, dailySummary, openOrderCount, todayOrders, unreadNotificationCount] = await Promise.all([
+  const [tables, notifications, topProducts, dailySummary, openOrderCount, kitchenServedCount, todayOrders, unreadNotificationCount] = await Promise.all([
     listBranchTableOperations(organizationId, branchId),
     listBranchNotifications(organizationId, branchId, 8),
     getTopSellingProducts(organizationId, branchId, 3),
     getDailyPaymentSummary(organizationId, branchId),
     prisma.customerOrder.count({
       where: { branchId, status: { in: OPEN_ORDER_STATUSES }, branch: { restaurant: { organizationId } } },
+    }),
+    prisma.customerOrder.count({
+      where: { branchId, status: OrderStatus.SERVED, branch: { restaurant: { organizationId } } },
     }),
     prisma.customerOrder.aggregate({
       where: {
@@ -544,6 +598,7 @@ export async function getWexPayOperationsOverview(
       dailyPaymentCount: dailySummary.dailyPaymentCount,
       activeTableCount,
       openOrderCount,
+      kitchenServedCount,
       receiptRequestCount,
       averageTicket: Number(todayOrders._avg.subtotal ?? 0),
       unreadNotificationCount,

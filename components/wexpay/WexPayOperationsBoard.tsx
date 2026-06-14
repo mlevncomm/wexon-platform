@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { OperationsNotification, OperationsOverview, OperationsTopProduct } from "@/lib/wexpay-read";
 import {
   formatLira,
@@ -28,11 +29,16 @@ function formatTime(iso: string) {
 export default function WexPayOperationsBoard({
   overview,
   packageInfo,
+  branchId,
 }: {
   overview: OperationsOverview;
   packageInfo: { planName: string; licenseStatus: string; installationStatus: string };
+  branchId: string;
 }) {
-  const { notifications, topProducts, metrics } = overview;
+  const { notifications, topProducts, metrics, tables } = overview;
+  const receiptTables = tables.filter((table) => table.receiptRequested);
+  const kitchenHref = `/apps/wexpay/kitchen?branchId=${encodeURIComponent(branchId)}`;
+  const tablesHref = `/apps/wexpay/tables?branchId=${encodeURIComponent(branchId)}`;
 
   const metricCards = [
     {
@@ -50,13 +56,13 @@ export default function WexPayOperationsBoard({
     {
       label: "Bekleyen siparişler",
       value: String(metrics.openOrderCount),
-      detail: "Yeni ve hazırlanıyor durumunda",
+      detail: "Mutfakta yeni / hazırlanıyor",
       accent: metrics.openOrderCount > 0,
     },
     {
       label: "Fiş talepleri",
       value: String(metrics.receiptRequestCount),
-      detail: "Ödemelerden gelen talepler",
+      detail: "Açık fiş talebi olan masalar",
       accent: metrics.receiptRequestCount > 0,
     },
     {
@@ -86,6 +92,43 @@ export default function WexPayOperationsBoard({
           />
         ))}
       </WexPayMetricStrip>
+
+      {(metrics.receiptRequestCount > 0 || metrics.openOrderCount > 0) && (
+        <WexPayPanel
+          eyebrow="Operasyon"
+          title="Dikkat gerektiren kayıtlar"
+          description="Fiş talepleri ve mutfak kuyruğu için hızlı geçiş"
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <Link
+              href={tablesHref}
+              className={`rounded-2xl border p-4 transition-colors ${
+                metrics.receiptRequestCount > 0
+                  ? "border-amber-200 bg-amber-50/80 hover:border-amber-300"
+                  : "border-slate-200 bg-slate-50 hover:border-slate-300"
+              }`}
+            >
+              <p className="text-sm font-black text-slate-950">Fiş talepleri</p>
+              <p className="mt-1 text-2xl font-black text-amber-800">{metrics.receiptRequestCount}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">
+                {receiptTables.slice(0, 3).map((table) => table.label).join(", ") || "Açık talep yok"}
+              </p>
+            </Link>
+            <Link
+              href={kitchenHref}
+              className={`rounded-2xl border p-4 transition-colors ${
+                metrics.openOrderCount > 0
+                  ? "border-emerald-200 bg-emerald-50/80 hover:border-emerald-300"
+                  : "border-slate-200 bg-slate-50 hover:border-slate-300"
+              }`}
+            >
+              <p className="text-sm font-black text-slate-950">Mutfak kuyruğu</p>
+              <p className="mt-1 text-2xl font-black text-emerald-700">{metrics.openOrderCount}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">Yeni ve hazırlanan siparişler</p>
+            </Link>
+          </div>
+        </WexPayPanel>
+      )}
 
       <WexPayPanelGrid className="items-stretch xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <TopProducts products={topProducts.slice(0, 3)} />

@@ -111,7 +111,7 @@ async function getTableAccountSnapshot(tx: TenantDb, tableId: string): Promise<T
   const table = await tx.restaurantTable.findUnique({
     where: { id: tableId },
     include: {
-      orders: { select: { status: true, subtotal: true, createdAt: true } },
+      orders: { select: { status: true, subtotal: true, createdAt: true, receiptRequested: true } },
       payments: { select: { status: true, amount: true, receiptRequested: true, createdAt: true } },
       receiptRequests: { select: { status: true, createdAt: true } },
     },
@@ -133,6 +133,53 @@ async function syncTableStatus(tx: TenantDb, tableId: string) {
   const account = await getTableAccountSnapshot(tx, tableId);
   await tx.restaurantTable.update({ where: { id: tableId }, data: { status: account.status } });
   return account;
+}
+
+async function recordReceiptRequest(
+  tx: TenantDb,
+  input: {
+    tableId: string;
+    branchId: string;
+    tableLabel: string;
+    orderId?: string | null;
+    paymentId?: string | null;
+    note?: string | null;
+  },
+) {
+  await tx.receiptRequest.create({
+    data: {
+      tableId: input.tableId,
+      orderId: input.orderId ?? null,
+      paymentId: input.paymentId ?? null,
+      status: ReceiptStatus.REQUESTED,
+      note: input.note ?? null,
+    },
+  });
+
+  if (input.orderId) {
+    await tx.customerOrder.update({
+      where: { id: input.orderId },
+      data: { receiptRequested: true },
+    });
+  }
+
+  if (input.paymentId) {
+    await tx.payment.update({
+      where: { id: input.paymentId },
+      data: { receiptRequested: true },
+    });
+  }
+
+  await tx.businessNotification.create({
+    data: {
+      branchId: input.branchId,
+      orderId: input.orderId ?? null,
+      paymentId: input.paymentId ?? null,
+      type: NotificationType.RECEIPT_REQUESTED,
+      title: "Fiş talebi alındı",
+      message: `${input.tableLabel} için fiş talebi oluşturuldu.`,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +465,58 @@ export async function closeTable(context: WexPayMutationContext, input: { tableI
     });
 
     return table;
+  });
+}
+
+export async function markReceiptPrinted(context: WexPayMutationContext, input: { tableId: string }) {
+  assertManage(context);
+
+  return runInTransaction(async (tx) => {
+    const existing = await assertTableInOrg(tx, context.organizationId, input.tableId);
+    const account = await getTableAccountSnapshot(tx, existing.id);
+
+    if (!account.receiptRequested) {
+      throw new WexPayValidationError("Bu masada açık fiş talebi bulunmuyor.");
+    }
+
+    const updatedRequests = await tx.receiptRequest.updateMany({
+      where: { tableId: existing.id, status: ReceiptStatus.REQUESTED },
+      data: { status: ReceiptStatus.PRINTED, printedAt: new Date() },
+    });
+
+    await tx.payment.updateMany({
+      where: { tableId: existing.id, receiptRequested: true },
+      data: { receiptRequested: false },
+    });
+
+    await tx.customerOrder.updateMany({
+      where: { tableId: existing.id, receiptRequested: true },
+      data: { receiptRequested: false },
+    });
+
+    await syncTableStatus(tx, existing.id);
+
+    await tx.businessNotification.create({
+      data: {
+        branchId: existing.branchId,
+        type: NotificationType.RECEIPT_REQUESTED,
+        title: "Fiş yazdırıldı",
+        message: `${existing.label} için fiş yazdırıldı olarak işaretlendi.`,
+      },
+    });
+
+    await writeWexPayAudit(tx, context, {
+      action: "wexpay.receipt.printed",
+      entityType: "RestaurantTable",
+      entityId: existing.id,
+      metadata: {
+        branchId: existing.branchId,
+        label: existing.label,
+        requestCount: updatedRequests.count,
+      },
+    });
+
+    return existing;
   });
 }
 
@@ -936,6 +1035,7 @@ export async function createPublicOrder(input: {
   tableId: string;
   items: OrderItemInput[];
   note: string | null;
+  receiptRequested?: boolean;
   ipAddress: string | null;
 }) {
   try {
@@ -951,6 +1051,7 @@ export async function createPublicOrder(input: {
       if (!table) throw new WexPayValidationError("Masa bulunamadı.");
 
       const { orderItems, subtotal } = await resolveOrderItems(tx, input.branchId, input.items);
+      const receiptRequested = Boolean(input.receiptRequested);
 
       const order = await tx.customerOrder.create({
         data: {
@@ -960,10 +1061,41 @@ export async function createPublicOrder(input: {
           status: OrderStatus.NEW,
           note: input.note,
           subtotal,
+          receiptRequested,
           items: { create: orderItems },
         },
         include: { table: true, items: { orderBy: { id: "asc" } } },
       });
+
+      if (receiptRequested) {
+        await recordReceiptRequest(tx, {
+          tableId: table.id,
+          branchId: input.branchId,
+          tableLabel: table.label,
+          orderId: order.id,
+          note: input.note ? `QR sipariş fiş talebi: ${input.note}` : "QR sipariş ekranından fiş talep edildi.",
+        });
+
+        await writeAuditLog(
+          {
+            action: "wexpay.receipt.requested",
+            organizationId: input.organizationId,
+            userId: null,
+            entityType: "ReceiptRequest",
+            entityId: order.id,
+            ipAddress: input.ipAddress,
+            source: "wexpay_public",
+            metadata: {
+              source: "public_qr",
+              branchId: input.branchId,
+              tableId: table.id,
+              orderId: order.id,
+              orderNo: order.orderNo,
+            },
+          },
+          tx,
+        );
+      }
 
       await syncTableStatus(tx, table.id);
 
@@ -993,6 +1125,7 @@ export async function createPublicOrder(input: {
             orderNo: order.orderNo,
             itemCount: orderItems.length,
             subtotal,
+            receiptRequested,
           },
         },
         tx,

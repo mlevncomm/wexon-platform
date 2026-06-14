@@ -12,6 +12,7 @@ import {
   createProduct,
   createRestaurant,
   createTable,
+  markReceiptPrinted,
   updateBranch,
   updateCategory,
   updateOrderStatus,
@@ -38,6 +39,7 @@ import {
   parseRestaurantUpdate,
   parseTableClose,
   parseTableCreate,
+  parseTableReceiptPrinted,
   parseTableUpdate,
   WexPayValidationError,
 } from "@/lib/wexpay-validation";
@@ -48,6 +50,15 @@ const TABLES_PATH = "/apps/wexpay/tables";
 const MENU_PATH = "/apps/wexpay/menu";
 const ORDERS_PATH = "/apps/wexpay/orders";
 const PAYMENTS_PATH = "/apps/wexpay/payments";
+const KITCHEN_PATH = "/apps/wexpay/kitchen";
+const OVERVIEW_PATH = "/apps/wexpay";
+
+function revalidateWexPayOperations() {
+  revalidatePath(OVERVIEW_PATH);
+  revalidatePath(TABLES_PATH);
+  revalidatePath(ORDERS_PATH);
+  revalidatePath(KITCHEN_PATH);
+}
 
 function readRedirect(formData: FormData, fallback: string) {
   const value = formData.get("redirectTo");
@@ -209,7 +220,22 @@ export async function closeTableAction(formData: FormData) {
     const input = parseTableClose(formData);
     context = await getManageContext();
     await closeTable(context, input);
-    revalidatePath(TABLES_PATH);
+    revalidateWexPayOperations();
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function markReceiptPrintedAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, TABLES_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseTableReceiptPrinted(formData);
+    context = await getManageContext();
+    await markReceiptPrinted(context, input);
+    revalidateWexPayOperations();
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(redirectTo, error, context);
@@ -306,7 +332,7 @@ export async function updateOrderStatusAction(formData: FormData) {
     const input = parseOrderStatusUpdate(formData);
     context = await getManageContext();
     await updateOrderStatus(context, input);
-    revalidatePath(ORDERS_PATH);
+    revalidateWexPayOperations();
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(redirectTo, error, context);
