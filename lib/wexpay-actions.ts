@@ -43,6 +43,7 @@ import {
   parseTableUpdate,
   WexPayValidationError,
 } from "@/lib/wexpay-validation";
+import { WexPayProviderNotConfiguredError } from "@/lib/wexpay-payment-provider";
 
 const RESTAURANTS_PATH = "/apps/wexpay/restaurants";
 const BRANCHES_PATH = "/apps/wexpay/branches";
@@ -80,8 +81,18 @@ function throwIfRedirectError(error: unknown) {
 function redirectWithError(path: string, error: unknown, context?: WexPayMutationContext): never {
   const isValidation = error instanceof WexPayValidationError;
   const isAccess = error instanceof WexPayAccessError;
-  const message = isValidation || isAccess ? error.message : "İşlem sırasında beklenmeyen bir hata oluştu.";
-  const reason = isAccess ? error.reason : isValidation ? "validation" : "internal";
+  const isProviderNotConfigured = error instanceof WexPayProviderNotConfiguredError;
+  const message =
+    isValidation || isAccess || isProviderNotConfigured
+      ? error.message
+      : "İşlem sırasında beklenmeyen bir hata oluştu.";
+  const reason = isAccess
+    ? error.reason
+    : isProviderNotConfigured
+      ? "provider_not_configured"
+      : isValidation
+        ? "validation"
+        : "internal";
 
   writeAuditFailure({
     action: `wexpay.ui.${reason}`,

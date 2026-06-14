@@ -1,4 +1,9 @@
 import { OrderStatus, PaymentStatus } from ".prisma/client";
+import {
+  parseWexPayPaymentProviderKey,
+  WexPayPaymentProviderError,
+  type WexPayPaymentProviderKey,
+} from "@/lib/wexpay-payment-provider";
 
 /**
  * Input validation for the real WexPay operator app. Mirrors the existing
@@ -274,6 +279,17 @@ function validatePaymentStatus(raw: unknown): PaymentStatus {
   throw new WexPayValidationError("Geçerli bir ödeme durumu seçilmelidir.");
 }
 
+function parsePaymentProvider(raw: string | null): WexPayPaymentProviderKey {
+  try {
+    return parseWexPayPaymentProviderKey(raw);
+  } catch (error) {
+    if (error instanceof WexPayPaymentProviderError) {
+      throw new WexPayValidationError(error.message);
+    }
+    throw error;
+  }
+}
+
 export function parseOrderCreate(formData: FormData) {
   return {
     branchId: requiredString(formData, "branchId", "Şube"),
@@ -318,7 +334,7 @@ export function parsePaymentCreate(formData: FormData) {
     orderId: nullableString(formData, "orderId"),
     amount: validateAmount(formData.get("amount")),
     status: validatePaymentStatus(readString(formData, "status") || "PAID"),
-    provider: nullableString(formData, "provider"),
+    provider: parsePaymentProvider(nullableString(formData, "provider")),
     receiptRequested: readBoolean(formData, "receiptRequested"),
   };
 }
@@ -335,7 +351,9 @@ export function parsePaymentCreatePayload(body: unknown) {
     orderId: typeof data.orderId === "string" && data.orderId.trim() ? data.orderId.trim() : null,
     amount: validateAmount(data.amount),
     status: data.status === undefined || data.status === null || data.status === "" ? PaymentStatus.PAID : validatePaymentStatus(data.status),
-    provider: typeof data.provider === "string" && data.provider.trim() ? data.provider.trim() : null,
+    provider: parsePaymentProvider(
+      typeof data.provider === "string" && data.provider.trim() ? data.provider.trim() : null,
+    ),
     receiptRequested: data.receiptRequested === true,
   };
 }

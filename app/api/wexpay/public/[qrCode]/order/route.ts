@@ -12,7 +12,9 @@ import { validateOrderItems } from "@/lib/wexpay-validation";
  * qrCode, requires Core WexPay access, then creates an order with a server-side
  * computed subtotal (client totals are never trusted). Audited as
  * `wexpay.order.created` with metadata source `public_qr`. This is a scaffold,
- * NOT a full PSP checkout.
+ * NOT a full PSP checkout. Future PSP redirect must use
+ * `createPublicQrCheckoutSessionBoundary` from a dedicated checkout route — see
+ * docs/wexpay-payment-provider-adapters.md.
  */
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;

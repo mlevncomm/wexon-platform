@@ -10,6 +10,7 @@ import {
 import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import type { WexPayMutationContext } from "@/lib/wexpay-service";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
+import { WexPayProviderNotConfiguredError } from "@/lib/wexpay-payment-provider";
 import { WexPayAccessError } from "@/lib/wexpay-tenant";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 
@@ -360,6 +361,19 @@ export function wexpayApiErrorResponse(error: unknown, context?: WexPayApiErrorL
       metadata: { route: context?.route, reason: "validation" },
     });
     return Response.json({ error: error.message, reason: "validation" }, { status: 400 });
+  }
+  if (error instanceof WexPayProviderNotConfiguredError) {
+    writeAuditFailure({
+      action: "wexpay.api.provider_not_configured",
+      message: error.message,
+      level: "WARN",
+      organizationId: context?.organizationId,
+      userId: context?.userId,
+      ipAddress: context?.ipAddress,
+      source: "wexpay_api",
+      metadata: { route: context?.route, reason: "provider_not_configured", provider: error.provider },
+    });
+    return Response.json({ error: error.message, reason: "provider_not_configured" }, { status: 501 });
   }
   if (error instanceof WexPayAccessError) {
     writeAuditFailure({

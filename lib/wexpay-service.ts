@@ -19,6 +19,7 @@ import {
   WexPayAccessError,
 } from "@/lib/wexpay-tenant";
 import { type OrderItemInput, WexPayValidationError } from "@/lib/wexpay-validation";
+import { resolveWexPayPaymentProvider, type WexPayPaymentProviderKey } from "@/lib/wexpay-payment-provider";
 
 /**
  * Pure tenant-aware mutation service for the real WexPay operator app. Every
@@ -891,7 +892,7 @@ export async function createPayment(
     orderId: string | null;
     amount: number;
     status: PaymentStatus;
-    provider: string | null;
+    provider: WexPayPaymentProviderKey;
     receiptRequested?: boolean;
   },
 ) {
@@ -924,6 +925,16 @@ export async function createPayment(
     }
 
     const receiptRequested = Boolean(input.receiptRequested);
+    const { key: providerKey, adapter } = resolveWexPayPaymentProvider(input.provider);
+
+    const intent = await adapter.createPaymentIntent({
+      organizationId: context.organizationId,
+      branchId: input.branchId,
+      tableId: table.id,
+      orderId: input.orderId,
+      amount: input.amount,
+      currency: "TRY",
+    });
 
     const payment = await tx.payment.create({
       data: {
@@ -932,9 +943,10 @@ export async function createPayment(
         orderId: input.orderId,
         amount: input.amount,
         currency: "TRY",
-        status: input.status,
-        provider: input.provider ?? "manual",
-        paidAt: isPaidLike ? new Date() : null,
+        status: intent.requiresExternalCheckout ? PaymentStatus.PENDING : input.status,
+        provider: providerKey,
+        providerRef: intent.providerRef,
+        paidAt: isPaidLike && !intent.requiresExternalCheckout ? new Date() : null,
         receiptRequested,
       },
       include: { table: true, order: true },
@@ -987,7 +999,10 @@ export async function createPayment(
         tableId: table.id,
         orderId: input.orderId,
         amount: input.amount,
-        status: input.status,
+        status: payment.status,
+        provider: providerKey,
+        providerRef: intent.providerRef,
+        requiresExternalCheckout: intent.requiresExternalCheckout,
         remainingAmount: account.remainingAmount,
       },
     });
