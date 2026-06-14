@@ -90,3 +90,15 @@ public/fonts/Urbanist-VariableFont_wght.ttf
 ```
 
 CSS fallback kalir, fakat hedef font family her zaman `Urbanist`tir.
+
+## Environment (WexPay provider credentials)
+
+| Degisken | Local dev | Production (PSP acilacaksa) |
+|----------|-----------|------------------------------|
+| `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` | Manual operasyonel odeme icin **gerekmez** | PayTR / iyzico / Param credential kaydi ve inbound webhook isleme icin **zorunlu** |
+
+- **Manual provider** (`provider=manual`): Operator panelinden kaydedilen operasyonel odemeler encryption key olmadan calisir.
+- **Gercek PSP credential islemleri**: `upsertWexPayProviderCredential` ve stub adapter credential kontrolu icin en az **32 byte** guclu rastgele key gerekir (or. `openssl rand -hex 32`). Plaintext secret repoda veya loglarda tutulmaz.
+- Opsiyonel: `WEXPAY_PROVIDER_MODE=TEST|LIVE` (varsayilan: non-production `TEST`, production `LIVE`).
+
+Detay: `docs/wexpay-payment-provider-adapters.md`, `PRODUCTION_CHECKLIST.md`.
