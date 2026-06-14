@@ -3,7 +3,7 @@
 import { createPaymentAction } from "@/lib/wexpay-actions";
 import { WexPayPaymentProviderField } from "@/components/wexpay/WexPayPaymentProviderField";
 import { WexPayReceiptRequestField } from "@/components/wexpay/WexPayReceiptRequestField";
-import { DemoSecondaryButton, formatLira } from "@/components/wexpay/WexPayBusinessUI";
+import { formatLira } from "@/components/wexpay/WexPayBusinessUI";
 
 export function WexPayTablePaymentForm({
   branchId,
@@ -17,38 +17,41 @@ export function WexPayTablePaymentForm({
   redirectTo: string;
 }) {
   return (
-    <div className="space-y-3">
-      <form action={createPaymentAction} className="space-y-3">
-        <input type="hidden" name="branchId" value={branchId} />
-        <input type="hidden" name="tableId" value={tableId} />
-        <input type="hidden" name="redirectTo" value={redirectTo} />
-        <input type="hidden" name="amount" value={remainingAmount} />
-        <WexPayPaymentProviderField />
-        <WexPayReceiptRequestField />
-        <button
-          type="submit"
-          className="w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-colors hover:bg-emerald-600"
-        >
-          Tamamını al ({formatLira(remainingAmount)})
-        </button>
-      </form>
+    <form action={createPaymentAction} className="space-y-3">
+      <input type="hidden" name="branchId" value={branchId} />
+      <input type="hidden" name="tableId" value={tableId} />
+      <input type="hidden" name="redirectTo" value={redirectTo} />
 
-      <form action={createPaymentAction} className="space-y-3">
-        <input type="hidden" name="branchId" value={branchId} />
-        <input type="hidden" name="tableId" value={tableId} />
-        <input type="hidden" name="redirectTo" value={redirectTo} />
-        <WexPayPaymentProviderField />
-        <WexPayReceiptRequestField />
-        <div className="flex gap-2">
+      <WexPayPaymentProviderField />
+      <WexPayReceiptRequestField />
+
+      <div className="space-y-2">
+        <div className="flex items-end justify-between gap-3">
+          <label htmlFor="table-payment-amount" className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+            Tahsilat tutarı
+          </label>
+          <span className="text-[11px] font-bold text-slate-500">Kalan: {formatLira(remainingAmount)}</span>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <input
+            id="table-payment-amount"
             name="amount"
             defaultValue={remainingAmount}
-            placeholder="Kısmi tutar"
-            className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-bold outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+            inputMode="decimal"
+            placeholder="Tahsil edilecek tutar"
+            className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
           />
-          <DemoSecondaryButton className="shrink-0 !w-auto px-4 py-2.5 text-xs">Kısmi Al</DemoSecondaryButton>
+          <button
+            type="submit"
+            className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-colors hover:bg-emerald-600"
+          >
+            Tahsilatı al
+          </button>
         </div>
-      </form>
-    </div>
+        <p className="text-[11px] font-semibold leading-relaxed text-slate-500">
+          Tam ödeme için kalan tutarı değiştirmeyin. Kısmi ödeme alacaksanız tutarı düşürüp aynı butonla kaydedin.
+        </p>
+      </div>
+    </form>
   );
 }
