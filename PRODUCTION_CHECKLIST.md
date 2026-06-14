@@ -62,14 +62,14 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 | `ADMIN_SESSION_SECRET` | Evet | Admin oturum cookie imza secret'i. |
 | `CUSTOMER_SESSION_SECRET` | Evet | Musteri oturum cookie imza secret'i. |
 | `API_KEY_HASH_SECRET` | Evet | API key hashleme icin HMAC secret/pepper. |
-| `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` | WexPay PSP credential kullanilacaksa | WexPay operasyonel odeme provider credential sifreleme anahtari (AES-256-GCM). Manual provider akisi icin zorunlu degil. |
+| `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` | Sanal POS baglantisi kullanilacaksa | Organization sanal POS API bilgilerinin sifrelenmesi (AES-256-GCM). Manuel tahsilat icin zorunlu degil. |
 | `NEXT_PUBLIC_APP_URL` | Evet | Public canonical app URL (redirect/link uretimi). |
 
 **Deploy oncesi kontrol:**
 
 - [ ] Tum zorunlu degiskenler **Production** environment'inda set edildi.
 - [ ] `API_KEY_HASH_SECRET`: Zorunlu (local `.env.local` + Vercel Production). API key hashleme icin HMAC secret/pepper olarak kullanilir; kodda fallback yoktur, eksikse uygulama kontrollu hata verir. **Vercel Production environment'a eklenmeden deploy yapilmamali.**
-- [ ] `WEXPAY_CREDENTIAL_ENCRYPTION_KEY`: PayTR / iyzico / Param credential kaydi veya PSP webhook isleme acilacaksa zorunlu. En az **32 byte** guclu rastgele deger (or. `openssl rand -hex 32`). Manual operasyonel odeme (`provider=manual`) icin deploy bloklayici degildir; eksikse PSP credential upsert ve stub adapter credential kontrolu calismaz.
+- [ ] `WEXPAY_CREDENTIAL_ENCRYPTION_KEY`: PayTR / iyzico / Param sanal POS baglantisi veya inbound webhook acilacaksa zorunlu. En az **32 byte** guclu rastgele deger (or. `openssl rand -hex 32`). Manuel tahsilat (`provider=manual`) icin deploy bloklayici degildir.
 - [ ] Smoke: `npm run build` sonrasi `npm run test:smoke` (Playwright) gecti.
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
@@ -89,7 +89,7 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 - `ADMIN_SESSION_SECRET`
 - `CUSTOMER_SESSION_SECRET`
 - `API_KEY_HASH_SECRET`
-- `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` (WexPay PSP credential / inbound webhook isleme acilacaksa)
+- `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` (sanal POS baglantisi / inbound webhook acilacaksa)
 - `NEXT_PUBLIC_APP_URL`
 
 ### Database
@@ -115,6 +115,13 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 ### Billing And Webhooks
 
+**Odeme mimarisi (WexPay):**
+
+- Wexon / WexPay odeme kurulusu veya para saklama katmani degildir; musteri odemesi firma–PSP–banka akisinda ilerler.
+- Restoran operasyon tahsilati (`Payment`) ile Wexon SaaS aboneligi (`BillingPayment`) ayri urun hatlaridir.
+- Sanal POS entegrasyonu organization bazli `WexPayProviderCredential` (urun dili: sanal POS baglantisi) ile yapilir; firma kendi PayTR / iyzico / Param anlasmasini baglar.
+- Manuel tahsilat (`provider=manual`) sanal POS baglantisi gerektirmez.
+
 **Core billing (platform abonelik / fatura):**
 
 - Invoice numbering policy.
@@ -125,9 +132,9 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 **WexPay operasyonel odeme (masa / QR checkout — Core BillingPayment'dan ayri):**
 
-- [x] Provider credential storage foundation (`WexPayProviderCredential`, sifreli `configCiphertext`). Bkz. `lib/wexpay-provider-credentials.ts`, `docs/wexpay-payment-provider-adapters.md`.
+- [x] Sanal POS baglantisi storage foundation (`WexPayProviderCredential`, sifreli API bilgileri). Bkz. `lib/wexpay-provider-credentials.ts`, `docs/wexpay-payment-provider-adapters.md`.
 - [x] Inbound webhook event / idempotency ledger foundation (`WexPayWebhookEvent`). Bkz. `lib/wexpay-webhook-events.ts`.
-- [ ] Provider credential rotation policy: yeni key ile upsert, eski credential `isActive=false`, audit (`wexpay.provider_credential.deactivated`) ve fingerprint takibi.
+- [ ] Sanal POS baglantisi rotation policy: yeni API bilgisi ile upsert, eski baglanti `isActive=false`, audit (`wexpay.provider_credential.deactivated`) ve fingerprint takibi.
 - [ ] **Phase 7 on kosullari (gercek PSP acilmadan once):**
   - [ ] Inbound webhook route'lari (or. `/api/wexpay/webhooks/paytr`) — demo route'lara dokunulmadan.
   - [ ] Raw body okuma (JSON parse oncesi byte dizisi).

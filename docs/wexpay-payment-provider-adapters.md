@@ -2,17 +2,29 @@
 
 Status: Phase 6 foundation — manual provider active; PSP adapters remain stubs with tenant credential + webhook event storage.
 
+## Urun modeli: WexPay para tutmaz
+
+WexPay bir odeme kurulusu veya para saklama katmani degildir.
+
+- **Restoran / firma** kendi banka veya sanal POS anlasmasini (PayTR, iyzico, Param vb.) dogrudan yapar.
+- **WexPay** yalnizca sanal POS API baglantisi, operasyon kaydi (masa adisyonu, tahsilat durumu) ve webhook isleme altyapisini saglar.
+- **Para akisi** musteriden firmaya / PSP'ye / bankaya gider; Wexon veya WexPay hesabinda birikmez.
+- Teknik model adi `WexPayProviderCredential` kalir; urun dilinde buna **sanal POS baglantisi** denir.
+
+Manuel operasyonel odeme (`provider=manual`) sanal POS baglantisi gerektirmez: operator tahsilati kaydeder, para fiziksel POS / kasa akisinda kalir.
+
 ## Payment vs BillingPayment
 
 | Concern | WexPay `Payment` | Core `BillingPayment` |
 | --- | --- | --- |
-| Purpose | In-venue table/checkout operations | Platform subscription & license billing |
+| Purpose | Restoran masa / QR operasyonel tahsilat kaydi | Wexon platform abonelik ve lisans faturalandirmasi |
+| Para | Firmanin PSP / banka akisinda; WexPay tutmaz | Wexon SaaS abonelik odemesi (ayri urun hattı) |
 | Tenant scope | Restaurant branch / table session | Organization subscription |
 | Access decisions | Never used for Core license/entitlement | Source of truth for billing state |
 | Provider field | `Payment.provider` / `Payment.providerRef` | Separate Core billing models |
-| Credentials | `WexPayProviderCredential` | Core billing provider fields on `Subscription` |
+| Credentials | `WexPayProviderCredential` (sanal POS API bilgileri) | Core billing provider fields on `Subscription` |
 
-WexPay operational payments must not drive Core access, license, or subscription logic.
+WexPay operational payments must not drive Core access, license, or subscription logic. **BillingPayment = Wexon aboneligi. Payment = restoran operasyon odemesi.**
 
 ## Adapter registry
 
@@ -20,7 +32,7 @@ Implementation: `lib/wexpay-payment-provider.ts`
 
 | Provider key | Status | Behaviour |
 | --- | --- | --- |
-| `manual` | Active | Operator-recorded payment; no credential required |
+| `manual` | Active | Operator-recorded payment; sanal POS baglantisi gerekmez |
 | `paytr` | Stub | Checks tenant credential boundary, then throws `Provider adapter not configured.` |
 | `iyzico` | Stub | Same as PayTR |
 | `param` | Stub | Same as PayTR |
@@ -39,16 +51,18 @@ Response types (`WexPayPaymentIntentResult`, `WexPayProviderCallbackResult`) liv
 ## Manual provider (current production path)
 
 - Default when `provider` is omitted or empty.
-- Does not require `WexPayProviderCredential`.
+- Sanal POS baglantisi (`WexPayProviderCredential`) gerektirmez.
 - Does not emit `externalCheckoutUrl`.
 - `createPayment` in `lib/wexpay-service.ts` records the payment immediately with operator-selected `PaymentStatus` (typically `PAID`).
 - `providerRef` remains `null`.
 
 Operator UI and server actions continue to use manual flow unchanged.
 
-## Provider credential storage (Phase 6)
+## Sanal POS baglantisi storage (Phase 6)
 
-Model: `WexPayProviderCredential` (`prisma/schema.prisma`)
+Urun dili: **Sanal POS baglantisi**. Teknik model: `WexPayProviderCredential` (`prisma/schema.prisma`)
+
+Firma kendi PayTR / iyzico / Param merchant bilgilerini girer; WexPay yalnizca sifreli saklar ve adapter/webhook katmaninda kullanir. Odeme tutari WexPay uzerinden gecmez.
 
 | Field | Purpose |
 | --- | --- |
@@ -69,7 +83,7 @@ Helpers: `lib/wexpay-provider-credentials.ts`
 - **Never exposed:** `configCiphertext`, decrypted config, or raw secrets in API/UI/audit metadata.
 - **Audit actions:** `wexpay.provider_credential.upserted`, `wexpay.provider_credential.deactivated`
 
-Settings panel (`/apps/wexpay/settings`) shows read-only masked summaries only.
+Settings panel (`/apps/wexpay/settings`) shows masked sanal POS baglanti ozetleri only; plaintext API secret gosterilmez.
 
 ## Inbound webhook events (Phase 6)
 
@@ -150,7 +164,7 @@ Operational payment row (`Payment`):
 
 Phase 6 additions:
 
-- `WexPayProviderCredential` — encrypted tenant PSP config
+- `WexPayProviderCredential` — encrypted tenant sanal POS API config
 - `WexPayWebhookEvent` — inbound idempotent webhook ledger
 
 Core `BillingPayment` remains separate and must not be reused for table/checkout flows.

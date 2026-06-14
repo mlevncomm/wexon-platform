@@ -66,8 +66,8 @@ export default async function WexPaySettingsPage({ searchParams }: { searchParam
 
       <WexPayPanel
         eyebrow="Ödeme altyapısı"
-        title="Provider credential yönetimi"
-        description="Operasyonel WexPay ödemeleri için PSP anahtarları şifreli saklanır. Plaintext secret veya configCiphertext asla gösterilmez."
+        title="Sanal POS bağlantısı"
+        description="WexPay para tutmaz. Restoran kendi PayTR, iyzico veya Param sanal POS anlaşmasını yapar; WexPay yalnızca API bağlantısı ve operasyon kaydı sağlar. API bilgileri şifreli saklanır; plaintext secret gösterilmez."
         className="xl:col-span-2"
       >
         <WexPayProviderCredentialsPanel
@@ -81,8 +81,8 @@ export default async function WexPaySettingsPage({ searchParams }: { searchParam
       <WexPayPanel eyebrow="Ayarlar" title="Paket açıklaması" className="xl:col-span-2">
         <p className="max-w-4xl text-sm font-medium leading-relaxed text-slate-600">
           QR menü ve temel operasyon tüm WexPay paketlerinde bulunur. Limitler, raporlama, yetki, destek ve
-          entegrasyon seviyesi Wexon Core entitlement kararından gelir. BillingPayment (Core faturalandırması) ile
-          operasyonel WexPay Payment kayıtları ayrı tutulur.
+          entegrasyon seviyesi Wexon Core entitlement kararından gelir. Wexon abonelik faturalandırması (BillingPayment)
+          ile restoran operasyon tahsilat kayıtları (Payment) ayrı tutulur; WexPay restoran müşterisinden para toplamaz.
         </p>
       </WexPayPanel>
 
