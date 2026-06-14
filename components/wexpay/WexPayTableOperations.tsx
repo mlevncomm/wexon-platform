@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { closeTableAction, createPaymentAction, markReceiptPrintedAction, updateOrderStatusAction } from "@/lib/wexpay-actions";
 import type { OperationsTable } from "@/lib/wexpay-read";
+import { WexPayReceiptRequestField } from "@/components/wexpay/WexPayReceiptRequestField";
 import {
   DemoPrimaryButton,
   DemoSecondaryButton,
@@ -501,12 +502,13 @@ function TableDetailPanel({
             <div className="mt-auto space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-900/5">
               {hasRemainingAmount ? (
                 <div className="space-y-3">
-                  <form action={createPaymentAction}>
+                  <form action={createPaymentAction} className="space-y-3">
                     <input type="hidden" name="branchId" value={activeBranchId} />
                     <input type="hidden" name="tableId" value={table.id} />
                     <input type="hidden" name="status" value="PAID" />
                     <input type="hidden" name="redirectTo" value={redirectTo} />
                     <input type="hidden" name="amount" value={table.remainingAmount} />
+                    <WexPayReceiptRequestField />
                     <button
                       type="submit"
                       className="w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-colors hover:bg-emerald-600"
@@ -514,18 +516,21 @@ function TableDetailPanel({
                       Tamamını al ({formatLira(table.remainingAmount)})
                     </button>
                   </form>
-                  <form action={createPaymentAction} className="flex gap-2">
+                  <form action={createPaymentAction} className="space-y-3">
                     <input type="hidden" name="branchId" value={activeBranchId} />
                     <input type="hidden" name="tableId" value={table.id} />
                     <input type="hidden" name="status" value="PAID" />
                     <input type="hidden" name="redirectTo" value={redirectTo} />
-                    <input
-                      name="amount"
-                      defaultValue={table.remainingAmount}
-                      placeholder="Kısmi tutar"
-                      className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-bold outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
-                    />
-                    <DemoSecondaryButton className="shrink-0 !w-auto px-4 py-2.5 text-xs">Kısmi Al</DemoSecondaryButton>
+                    <WexPayReceiptRequestField />
+                    <div className="flex gap-2">
+                      <input
+                        name="amount"
+                        defaultValue={table.remainingAmount}
+                        placeholder="Kısmi tutar"
+                        className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-bold outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+                      />
+                      <DemoSecondaryButton className="shrink-0 !w-auto px-4 py-2.5 text-xs">Kısmi Al</DemoSecondaryButton>
+                    </div>
                   </form>
                 </div>
               ) : (

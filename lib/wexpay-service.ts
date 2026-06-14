@@ -892,6 +892,7 @@ export async function createPayment(
     amount: number;
     status: PaymentStatus;
     provider: string | null;
+    receiptRequested?: boolean;
   },
 ) {
   assertManage(context);
@@ -922,6 +923,8 @@ export async function createPayment(
       throw new WexPayValidationError("Ödeme tutarı kalan adisyondan büyük olamaz.");
     }
 
+    const receiptRequested = Boolean(input.receiptRequested);
+
     const payment = await tx.payment.create({
       data: {
         branchId: input.branchId,
@@ -932,9 +935,35 @@ export async function createPayment(
         status: input.status,
         provider: input.provider ?? "manual",
         paidAt: isPaidLike ? new Date() : null,
+        receiptRequested,
       },
       include: { table: true, order: true },
     });
+
+    if (receiptRequested) {
+      await recordReceiptRequest(tx, {
+        tableId: table.id,
+        branchId: input.branchId,
+        tableLabel: table.label,
+        orderId: input.orderId,
+        paymentId: payment.id,
+        note: "Operasyon panelinden ödeme sırasında fiş talep edildi.",
+      });
+
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.receipt.requested",
+        entityType: "ReceiptRequest",
+        entityId: payment.id,
+        metadata: {
+          source: "operator_payment",
+          branchId: input.branchId,
+          tableId: table.id,
+          paymentId: payment.id,
+          orderId: input.orderId,
+          amount: input.amount,
+        },
+      });
+    }
 
     const account = await syncTableStatus(tx, table.id);
 

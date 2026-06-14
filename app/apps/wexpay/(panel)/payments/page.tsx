@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PaymentStatus } from ".prisma/client";
 import WexPayPaymentsBoard from "@/components/wexpay/WexPayPaymentsBoard";
+import { WexPayReceiptRequestField } from "@/components/wexpay/WexPayReceiptRequestField";
 import {
   DemoInput,
   DemoPrimaryButton,
@@ -133,6 +134,9 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
                 defaultValue={PaymentStatus.PAID}
                 options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
               />
+              <div className="md:col-span-2 xl:col-span-4">
+                <WexPayReceiptRequestField />
+              </div>
               <div className="md:col-span-2">
                 <DemoPrimaryButton>Ödeme kaydet</DemoPrimaryButton>
               </div>

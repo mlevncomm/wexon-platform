@@ -319,6 +319,7 @@ export function parsePaymentCreate(formData: FormData) {
     amount: validateAmount(formData.get("amount")),
     status: validatePaymentStatus(readString(formData, "status") || "PAID"),
     provider: nullableString(formData, "provider"),
+    receiptRequested: readBoolean(formData, "receiptRequested"),
   };
 }
 
@@ -335,6 +336,7 @@ export function parsePaymentCreatePayload(body: unknown) {
     amount: validateAmount(data.amount),
     status: data.status === undefined || data.status === null || data.status === "" ? PaymentStatus.PAID : validatePaymentStatus(data.status),
     provider: typeof data.provider === "string" && data.provider.trim() ? data.provider.trim() : null,
+    receiptRequested: data.receiptRequested === true,
   };
 }
 
