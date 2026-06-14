@@ -1,9 +1,10 @@
-import { OrderStatus, PaymentStatus } from ".prisma/client";
+import { OrderStatus, PaymentStatus, WexPayProviderCredentialMode } from ".prisma/client";
 import {
   parseWexPayPaymentProviderKey,
   WexPayPaymentProviderError,
   type WexPayPaymentProviderKey,
 } from "@/lib/wexpay-payment-provider";
+import { WEXPAY_PSP_PROVIDER_KEYS, type WexPayPspProviderKey } from "@/lib/wexpay-provider-credentials";
 
 /**
  * Input validation for the real WexPay operator app. Mirrors the existing
@@ -370,4 +371,71 @@ export function parsePaymentUpdatePayload(body: unknown) {
   const paymentId = typeof data.paymentId === "string" ? data.paymentId.trim() : "";
   if (!paymentId) throw new WexPayValidationError("Ödeme zorunludur.");
   return { paymentId, status: validatePaymentStatus(data.status) };
+}
+
+// ---------------------------------------------------------------------------
+// Provider credentials (Phase 6.2). Secrets never returned from parsers.
+// ---------------------------------------------------------------------------
+
+const PROVIDER_CREDENTIAL_DISPLAY_NAME_MAX = 80;
+const PROVIDER_CREDENTIAL_FIELD_MAX = 256;
+
+function parseProviderCredentialProvider(raw: string): WexPayPspProviderKey {
+  const normalized = raw.trim().toLowerCase();
+  if (!(WEXPAY_PSP_PROVIDER_KEYS as readonly string[]).includes(normalized)) {
+    throw new WexPayValidationError("Geçerli bir ödeme sağlayıcısı seçilmelidir.");
+  }
+  return normalized as WexPayPspProviderKey;
+}
+
+function parseProviderCredentialMode(raw: string): WexPayProviderCredentialMode {
+  const normalized = raw.trim().toUpperCase();
+  if (normalized === "TEST") return WexPayProviderCredentialMode.TEST;
+  if (normalized === "LIVE") return WexPayProviderCredentialMode.LIVE;
+  throw new WexPayValidationError("Geçerli bir credential modu seçilmelidir.");
+}
+
+function parseBoundedCredentialField(formData: FormData, key: string, label: string, required = false) {
+  const value = readString(formData, key);
+  if (!value) {
+    if (required) throw new WexPayValidationError(`${label} zorunludur.`);
+    return "";
+  }
+  if (value.length > PROVIDER_CREDENTIAL_FIELD_MAX) {
+    throw new WexPayValidationError(`${label} en fazla ${PROVIDER_CREDENTIAL_FIELD_MAX} karakter olabilir.`);
+  }
+  return value;
+}
+
+export function parseProviderCredentialUpsert(formData: FormData) {
+  const provider = parseProviderCredentialProvider(requiredString(formData, "provider", "Sağlayıcı"));
+  const mode = parseProviderCredentialMode(requiredString(formData, "mode", "Mod"));
+  const displayName = requiredString(formData, "displayName", "Görünen ad");
+  if (displayName.length > PROVIDER_CREDENTIAL_DISPLAY_NAME_MAX) {
+    throw new WexPayValidationError(`Görünen ad en fazla ${PROVIDER_CREDENTIAL_DISPLAY_NAME_MAX} karakter olabilir.`);
+  }
+
+  const merchantId = parseBoundedCredentialField(formData, "merchantId", "Merchant ID", true);
+  const apiKey = parseBoundedCredentialField(formData, "apiKey", "API key");
+  const secretKey = parseBoundedCredentialField(formData, "secretKey", "Secret key");
+  const merchantSalt = parseBoundedCredentialField(formData, "merchantSalt", "Merchant salt");
+
+  const config: Record<string, string> = { merchantId };
+  if (apiKey) config.apiKey = apiKey;
+  if (secretKey) config.secretKey = secretKey;
+  if (merchantSalt) config.merchantSalt = merchantSalt;
+
+  return {
+    provider,
+    mode,
+    displayName,
+    config,
+    primarySecret: secretKey || null,
+  };
+}
+
+export function parseProviderCredentialDeactivate(formData: FormData) {
+  return {
+    credentialId: requiredString(formData, "credentialId", "Credential"),
+  };
 }

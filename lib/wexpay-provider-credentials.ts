@@ -24,6 +24,13 @@ export type WexPayProviderCredentialSummary = {
 
 export type WexPayProviderCredentialConfig = Record<string, string>;
 
+export class WexPayProviderCredentialStorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WexPayProviderCredentialStorageError";
+  }
+}
+
 type CredentialAuditContext = {
   organizationId: string;
   userId?: string | null;
@@ -37,12 +44,14 @@ function isPspProviderKey(provider: string): provider is WexPayPspProviderKey {
 function getCredentialEncryptionKey(): Buffer {
   const raw = process.env.WEXPAY_CREDENTIAL_ENCRYPTION_KEY?.trim();
   if (!raw) {
-    throw new Error("WEXPAY_CREDENTIAL_ENCRYPTION_KEY is not configured.");
+    throw new WexPayProviderCredentialStorageError(
+      "PSP credential kaydı için WEXPAY_CREDENTIAL_ENCRYPTION_KEY tanımlı olmalıdır.",
+    );
   }
 
   const key = Buffer.from(raw, raw.length === 64 && /^[0-9a-f]+$/i.test(raw) ? "hex" : "base64");
   if (key.length !== 32) {
-    throw new Error("WEXPAY_CREDENTIAL_ENCRYPTION_KEY must decode to 32 bytes.");
+    throw new WexPayProviderCredentialStorageError("WEXPAY_CREDENTIAL_ENCRYPTION_KEY 32 byte olmalıdır.");
   }
   return key;
 }
@@ -111,6 +120,81 @@ export function decryptProviderConfig(ciphertext: string): WexPayProviderCredent
     }
   }
   return config;
+}
+
+function sanitizeProviderConfig(config: WexPayProviderCredentialConfig): WexPayProviderCredentialConfig {
+  const result: WexPayProviderCredentialConfig = {};
+  for (const [key, value] of Object.entries(config)) {
+    const trimmed = value.trim();
+    if (trimmed) result[key] = trimmed;
+  }
+  return result;
+}
+
+function resolvePrimarySecret(
+  incomingSecret: string | null | undefined,
+  config: WexPayProviderCredentialConfig,
+): string {
+  return (
+    incomingSecret?.trim() ||
+    config.secretKey?.trim() ||
+    config.apiKey?.trim() ||
+    config.merchantSalt?.trim() ||
+    ""
+  );
+}
+
+export async function prepareProviderCredentialUpsert(
+  organizationId: string,
+  input: {
+    provider: WexPayPspProviderKey;
+    mode: WexPayProviderCredentialMode;
+    displayName: string;
+    config: WexPayProviderCredentialConfig;
+    primarySecret?: string | null;
+  },
+) {
+  if (!isProviderCredentialEncryptionAvailable()) {
+    throw new WexPayProviderCredentialStorageError(
+      "PSP credential kaydı için WEXPAY_CREDENTIAL_ENCRYPTION_KEY tanımlı olmalıdır.",
+    );
+  }
+
+  const existing = await prisma.wexPayProviderCredential.findUnique({
+    where: {
+      organizationId_provider_mode: {
+        organizationId,
+        provider: input.provider,
+        mode: input.mode,
+      },
+    },
+  });
+
+  if (!existing) {
+    const config = sanitizeProviderConfig(input.config);
+    if (!config.merchantId) {
+      throw new WexPayProviderCredentialStorageError("Merchant ID zorunludur.");
+    }
+    const primarySecret = resolvePrimarySecret(input.primarySecret, config);
+    if (!primarySecret) {
+      throw new WexPayProviderCredentialStorageError("Yeni credential için secret key zorunludur.");
+    }
+    return { config, primarySecret };
+  }
+
+  const existingConfig = decryptProviderConfig(existing.configCiphertext);
+  const merged: WexPayProviderCredentialConfig = { ...existingConfig };
+  for (const [key, value] of Object.entries(input.config)) {
+    const trimmed = value.trim();
+    if (trimmed) merged[key] = trimmed;
+  }
+
+  const primarySecret = resolvePrimarySecret(input.primarySecret, merged);
+  if (!primarySecret) {
+    throw new WexPayProviderCredentialStorageError("Credential güncellemesi için secret bulunamadı.");
+  }
+
+  return { config: merged, primarySecret };
 }
 
 function toSummary(record: {
@@ -217,7 +301,9 @@ export async function upsertWexPayProviderCredential(
   },
 ) {
   if (!isProviderCredentialEncryptionAvailable()) {
-    throw new Error("Provider credentials cannot be stored without WEXPAY_CREDENTIAL_ENCRYPTION_KEY.");
+    throw new WexPayProviderCredentialStorageError(
+      "PSP credential kaydı için WEXPAY_CREDENTIAL_ENCRYPTION_KEY tanımlı olmalıdır.",
+    );
   }
 
   const ciphertext = encryptProviderConfig(input.config);
@@ -279,7 +365,7 @@ export async function deactivateWexPayProviderCredential(
     where: { id: input.credentialId, organizationId: context.organizationId },
   });
   if (!existing) {
-    throw new Error("Provider credential not found.");
+    throw new WexPayProviderCredentialStorageError("Provider credential bulunamadı.");
   }
 
   const record = await prisma.wexPayProviderCredential.update({

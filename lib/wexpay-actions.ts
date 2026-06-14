@@ -41,9 +41,17 @@ import {
   parseTableCreate,
   parseTableReceiptPrinted,
   parseTableUpdate,
+  parseProviderCredentialUpsert,
+  parseProviderCredentialDeactivate,
   WexPayValidationError,
 } from "@/lib/wexpay-validation";
 import { WexPayProviderNotConfiguredError } from "@/lib/wexpay-payment-provider";
+import {
+  deactivateWexPayProviderCredential,
+  prepareProviderCredentialUpsert,
+  upsertWexPayProviderCredential,
+  WexPayProviderCredentialStorageError,
+} from "@/lib/wexpay-provider-credentials";
 
 const RESTAURANTS_PATH = "/apps/wexpay/restaurants";
 const BRANCHES_PATH = "/apps/wexpay/branches";
@@ -52,6 +60,7 @@ const MENU_PATH = "/apps/wexpay/menu";
 const ORDERS_PATH = "/apps/wexpay/orders";
 const PAYMENTS_PATH = "/apps/wexpay/payments";
 const KITCHEN_PATH = "/apps/wexpay/kitchen";
+const SETTINGS_PATH = "/apps/wexpay/settings";
 const OVERVIEW_PATH = "/apps/wexpay";
 
 function revalidateWexPayOperations() {
@@ -82,15 +91,16 @@ function redirectWithError(path: string, error: unknown, context?: WexPayMutatio
   const isValidation = error instanceof WexPayValidationError;
   const isAccess = error instanceof WexPayAccessError;
   const isProviderNotConfigured = error instanceof WexPayProviderNotConfiguredError;
+  const isCredentialStorage = error instanceof WexPayProviderCredentialStorageError;
   const message =
-    isValidation || isAccess || isProviderNotConfigured
+    isValidation || isAccess || isProviderNotConfigured || isCredentialStorage
       ? error.message
       : "İşlem sırasında beklenmeyen bir hata oluştu.";
   const reason = isAccess
     ? error.reason
     : isProviderNotConfigured
       ? "provider_not_configured"
-      : isValidation
+      : isValidation || isCredentialStorage
         ? "validation"
         : "internal";
 
@@ -377,6 +387,54 @@ export async function updatePaymentAction(formData: FormData) {
     context = await getManageContext();
     await updatePayment(context, input);
     revalidatePath(PAYMENTS_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+// --- Provider credentials --------------------------------------------------
+
+function credentialAuditContext(context: WexPayMutationContext) {
+  return {
+    organizationId: context.organizationId,
+    userId: context.actor.type === "customer_session" ? context.actor.userId : null,
+    ipAddress: context.ipAddress ?? null,
+  };
+}
+
+export async function upsertProviderCredentialAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, SETTINGS_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseProviderCredentialUpsert(formData);
+    context = await getManageContext();
+    const prepared = await prepareProviderCredentialUpsert(context.organizationId, input);
+    await upsertWexPayProviderCredential(credentialAuditContext(context), {
+      provider: input.provider,
+      displayName: input.displayName,
+      mode: input.mode,
+      config: prepared.config,
+      primarySecret: prepared.primarySecret,
+      isActive: true,
+    });
+    revalidatePath(SETTINGS_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function deactivateProviderCredentialAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, SETTINGS_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseProviderCredentialDeactivate(formData);
+    context = await getManageContext();
+    await deactivateWexPayProviderCredential(credentialAuditContext(context), input);
+    revalidatePath(SETTINGS_PATH);
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(redirectTo, error, context);
