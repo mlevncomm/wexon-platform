@@ -92,10 +92,6 @@ export async function validatePublicCheckoutContext(input: {
   if (!table) throw new WexPayValidationError("Masa bulunamadı.");
 
   const account = await getTableAccountSnapshot(prisma, table.id);
-  if (account.remainingAmount <= 0) {
-    throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
-  }
-
   const orderId: string | null = input.orderId ?? null;
   let amount = account.remainingAmount;
 
@@ -108,6 +104,10 @@ export async function validatePublicCheckoutContext(input: {
       orderSubtotal: Number(order.subtotal),
       remainingAmount: account.remainingAmount,
     });
+  }
+
+  if (account.remainingAmount <= 0) {
+    throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
   }
 
   if (amount <= 0) {

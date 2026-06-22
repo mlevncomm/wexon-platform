@@ -7,9 +7,25 @@
  * Logs provider names and payment IDs only — never secret values.
  */
 
-import "dotenv/config";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+
+function loadLocalEnvFile(fileName, { override = false } = {}) {
+  const fullPath = resolve(process.cwd(), fileName);
+  if (!existsSync(fullPath)) return;
+  const parsed = dotenv.parse(readFileSync(fullPath));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (override || !process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadLocalEnvFile(".env");
+loadLocalEnvFile(".env.local", { override: true });
 
 const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) {
