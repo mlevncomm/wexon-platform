@@ -31,8 +31,9 @@ describe("processPaytrWebhookRequest", () => {
         assert.equal(result.body, "payment_not_found");
       }
     } catch (error) {
+      const name = error instanceof Error ? error.name : "";
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("ENOTFOUND") || message.includes("database")) {
+      if (name.startsWith("PrismaClient") || message.includes("ENOTFOUND") || message.includes("database")) {
         t.skip(`database unavailable: ${message}`);
         return;
       }
