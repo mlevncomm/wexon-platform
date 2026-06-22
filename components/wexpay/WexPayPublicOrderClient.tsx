@@ -39,7 +39,12 @@ export default function WexPayPublicOrderClient({
   const [receiptRequested, setReceiptRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ orderId: string; orderNo: string; subtotal: number } | null>(null);
+  const [success, setSuccess] = useState<{
+    orderId: string;
+    orderNo: string;
+    subtotal: number;
+    receiptRequested: boolean;
+  } | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isCheckoutPending, startCheckoutTransition] = useTransition();
@@ -95,6 +100,7 @@ export default function WexPayPublicOrderClient({
 
       setCart({});
       setNote("");
+      const hadReceiptRequest = receiptRequested;
       setReceiptRequested(false);
       setCheckoutUrl(null);
       setCheckoutError(null);
@@ -102,6 +108,7 @@ export default function WexPayPublicOrderClient({
         orderId: payload.id ?? "",
         orderNo: payload.orderNo ?? "-",
         subtotal: Number(payload.subtotal ?? subtotal),
+        receiptRequested: hadReceiptRequest,
       });
     });
   }
@@ -234,29 +241,42 @@ export default function WexPayPublicOrderClient({
           />
         </label>
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setReceiptRequested((value) => !value);
+          }}
+          aria-pressed={receiptRequested}
+          className={`mt-4 w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+            receiptRequested
+              ? "border-emerald-200 bg-emerald-50"
+              : "border-slate-200 bg-slate-50 hover:bg-slate-100/80"
+          }`}
+        >
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-black text-slate-950">Fiş istiyorum</p>
-              <p className="mt-0.5 text-xs font-medium text-slate-500">Sipariş sonrası fiş talebi oluşturulur.</p>
+              <p className="mt-0.5 text-xs font-medium text-slate-500">
+                {receiptRequested
+                  ? "Fiş talebiniz sipariş ile işletme paneline iletilir."
+                  : "Sipariş sonrası fiş talebi oluşturulur."}
+              </p>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={receiptRequested}
-              onClick={() => setReceiptRequested((value) => !value)}
-              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+            <span
+              aria-hidden="true"
+              className={`relative flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors ${
                 receiptRequested ? "bg-[#10b981]" : "bg-slate-200"
               }`}
             >
               <span
-                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-                  receiptRequested ? "translate-x-5" : "translate-x-0.5"
+                className={`h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  receiptRequested ? "translate-x-5" : "translate-x-0"
                 }`}
               />
-            </button>
+            </span>
           </div>
-        </div>
+        </button>
 
         <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
           <span className="text-sm font-bold text-slate-600">Ara toplam</span>
@@ -283,6 +303,9 @@ export default function WexPayPublicOrderClient({
             <p className="text-sm font-bold text-emerald-800">
               Siparişiniz alındı: {success.orderNo} · {formatTry(success.subtotal)}
             </p>
+            {success.receiptRequested && (
+              <p className="text-xs font-semibold text-emerald-700">Fiş talebiniz işletmeye iletildi.</p>
+            )}
             <button
               type="button"
               onClick={startCheckout}
