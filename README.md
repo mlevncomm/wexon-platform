@@ -62,9 +62,13 @@ npm run dev
 npm run lint
 npx tsc --noEmit
 npm run build
+npm run test:unit
+npm run production:check
 npm run prisma:generate
 npm run prisma:migrate
 npm run prisma:seed
+npm run prisma:seed:real
+npm run test:smoke:build
 ```
 
 Windows PowerShell script policy `npm` komutunu engellerse `npm.cmd` kullan:

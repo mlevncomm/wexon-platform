@@ -11,6 +11,9 @@
     "test:smoke": "playwright test",
     "test:smoke:build": "npm run build && playwright test",
     "test:smoke:ci": "npm run build && playwright test",
+    "test:unit": "tsx --test lib/wexpay-public-checkout.test.ts lib/wexpay-paytr-adapter.test.ts lib/wexpay-paytr-webhook.test.ts",
+    "production:check": "node scripts/check-production-env.mjs",
+    "production:check:psp": "node scripts/check-production-env.mjs --strict-psp",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
@@ -38,6 +41,7 @@
     "eslint-config-next": "16.2.6",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.5",
     "typescript": "^5"
   }
 }

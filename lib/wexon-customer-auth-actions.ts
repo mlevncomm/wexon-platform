@@ -19,9 +19,9 @@ function safeNextPath(value: string) {
   return value;
 }
 
-function redirectLoginError(message: string, nextPath: string, details?: { email?: string; userId?: string }): never {
+function redirectLoginError(message: string, nextPath: string, details?: { email?: string; userId?: string; reason?: string }): never {
   writeAuditFailure({
-    action: "customer.auth.login_failed",
+    action: details?.reason === "rate_limited" ? "customer.auth.rate_limited" : "customer.auth.login_failed",
     message,
     level: "WARN",
     userId: details?.userId,
@@ -40,13 +40,19 @@ export async function loginCustomerAction(formData: FormData) {
 
   const ipLimit = enforceRateLimit("customer.login.ip", ipAddress, RATE_LIMITS.customerLoginIp);
   if (!ipLimit.ok) {
-    redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, { email });
+    redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, {
+      email,
+      reason: "rate_limited",
+    });
   }
 
   if (email) {
     const emailLimit = enforceRateLimit("customer.login.email", email, RATE_LIMITS.customerLoginEmail);
     if (!emailLimit.ok) {
-      redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, { email });
+      redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, {
+        email,
+        reason: "rate_limited",
+      });
     }
   }
 

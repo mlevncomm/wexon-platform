@@ -31,7 +31,15 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
     );
   }
 
-  const resolution = await resolvePublicTableByQr(qrCode);
+  let resolution;
+  try {
+    resolution = await resolvePublicTableByQr(qrCode);
+  } catch {
+    return Response.json(
+      { error: "Servis geçici olarak kullanılamıyor.", reason: "service_unavailable" },
+      { status: 503 },
+    );
+  }
   if (!resolution) {
     writeAuditFailure({
       action: "wexpay.public.qr_not_found",
@@ -60,7 +68,10 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
   if (!parsed.ok) return parsed.response;
 
   try {
-    const body = (parsed.body ?? {}) as { orderId?: unknown };
+    const body = (parsed.body ?? {}) as { orderId?: unknown; amount?: unknown };
+    // Client-supplied amount is never trusted; only orderId is accepted for checkout scope.
+    void body.amount;
+
     const orderId =
       typeof body.orderId === "string" && body.orderId.trim() ? body.orderId.trim() : null;
 

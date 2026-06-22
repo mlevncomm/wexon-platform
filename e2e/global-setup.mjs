@@ -23,6 +23,15 @@ function emptyFixtures(reason) {
   };
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
 export default async function globalSetup() {
   const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -35,7 +44,8 @@ export default async function globalSetup() {
   const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 
   try {
-    const [realOrg, demoOrg, realUser, qrTable, inactiveWexPay] = await Promise.all([
+    const [realOrg, demoOrg, realUser, qrTable, inactiveWexPay] = await withTimeout(
+      Promise.all([
       prisma.organization.findFirst({
         where: { slug: "wexpay-real-test" },
         select: { id: true, name: true },
@@ -89,7 +99,10 @@ export default async function globalSetup() {
         },
         select: { organizationId: true, status: true },
       }),
-    ]);
+    ]),
+      8000,
+      "database fixture query",
+    );
 
     const customerOrgId = realUser?.memberships[0]?.organizationId ?? realOrg?.id ?? demoOrg?.id ?? null;
     const customerEmail = realUser?.email ?? (realOrg ? "real@wexon.dev" : "demo@wexon.dev");

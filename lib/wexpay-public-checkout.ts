@@ -54,6 +54,19 @@ async function syncTableStatus(tx: TenantDb, tableId: string) {
   return account;
 }
 
+/** Server-side checkout amount: never trust client totals; cap by remaining table balance. */
+export function resolvePublicCheckoutAmount(input: {
+  orderSubtotal: number | null;
+  remainingAmount: number;
+}): number {
+  const remaining = Number(input.remainingAmount);
+  if (!Number.isFinite(remaining) || remaining <= 0) return 0;
+  if (input.orderSubtotal === null) return remaining;
+  const orderTotal = Number(input.orderSubtotal);
+  if (!Number.isFinite(orderTotal) || orderTotal <= 0) return 0;
+  return Math.min(orderTotal, remaining);
+}
+
 export async function createPublicCheckoutPayment(input: {
   organizationId: string;
   branchId: string;
@@ -77,6 +90,7 @@ export async function createPublicCheckoutPayment(input: {
       branchId: input.branchId,
       provider: "paytr",
       status: PaymentStatus.PENDING,
+      branch: { restaurant: { organizationId: input.organizationId } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -117,18 +131,23 @@ export async function createPublicCheckoutPayment(input: {
     });
     if (!table) throw new WexPayValidationError("Masa bulunamadı.");
 
-    let amount = 0;
+    const account = await getTableAccountSnapshot(tx, table.id);
+    if (account.remainingAmount <= 0) {
+      throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
+    }
+
     const orderId: string | null = input.orderId ?? null;
+    let amount = account.remainingAmount;
 
     if (orderId) {
       const order = await tx.customerOrder.findFirst({
         where: { id: orderId, branchId: input.branchId, tableId: table.id },
       });
       if (!order) throw new WexPayValidationError("Sipariş bulunamadı.");
-      amount = Number(order.subtotal);
-    } else {
-      const account = await getTableAccountSnapshot(tx, table.id);
-      amount = account.remainingAmount;
+      amount = resolvePublicCheckoutAmount({
+        orderSubtotal: Number(order.subtotal),
+        remainingAmount: account.remainingAmount,
+      });
     }
 
     if (amount <= 0) {
