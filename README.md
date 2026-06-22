@@ -65,11 +65,46 @@ npm run build
 npm run test:unit
 npm run production:check
 npm run prisma:generate
-npm run prisma:migrate
+npm run prisma:migrate:dev
 npm run prisma:seed
 npm run prisma:seed:real
 npm run test:smoke:build
 ```
+
+### Staging deploy (merge sonrasi, DB-backed dogrulama)
+
+**Migration oncesi (seed/smoke calistirmaz):**
+
+```bash
+npm run production:preflight
+npm run prisma:generate
+```
+
+`production:preflight` = `production:check` + `db:check:payment-provider-ref` + `prisma:migrate:deploy`.
+
+**Tam staging dogrulama (migrate sonrasi):**
+
+```bash
+npm run production:check
+npm run db:check:payment-provider-ref
+npm run prisma:migrate:deploy
+npm run prisma:generate
+npm run prisma:seed:real
+npm run test:unit
+npm run test:smoke:build
+```
+
+Kisa yol (migrate sonrasi seed + testler): `npm run staging:validate`
+
+Sanal POS acilacaksa ayrica: `npm run production:check:psp`
+
+**Local development** (`migrate dev`):
+
+```bash
+npm run prisma:migrate:dev
+```
+
+`prisma:migrate` geriye uyumluluk icin `migrate dev` alias'idir. Staging/production icin `prisma:migrate:deploy` kullanin.
 
 Windows PowerShell script policy `npm` komutunu engellerse `npm.cmd` kullan:
 

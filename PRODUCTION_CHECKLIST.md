@@ -71,7 +71,11 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 **Production env script:** `npm.cmd run production:check` (zorunlu degiskenler). Sanal POS icin: `npm.cmd run production:check:psp`.
 
-**Unit tests:** `npm.cmd run test:unit` (PayTR hash/amount + public checkout amount; webhook smoke requires DB for ledger).
+**Migration preflight (seed/smoke calistirmaz):** `npm.cmd run production:preflight` — env check + `db:check:payment-provider-ref` + `prisma:migrate:deploy`.
+
+**Staging validation (migrate sonrasi):** `npm.cmd run staging:validate` — `prisma:seed:real` + `test:unit` + `test:smoke:build`.
+
+**Unit tests:** `npm.cmd run test:unit` (PayTR hash/amount + public checkout amount; webhook integration requires DB).
 
 **Deploy oncesi kontrol:**
 
@@ -80,6 +84,10 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 - [ ] `WEXPAY_CREDENTIAL_ENCRYPTION_KEY`: PayTR / iyzico / Param sanal POS baglantisi veya inbound webhook acilacaksa zorunlu. En az **32 byte** guclu rastgele deger (or. `openssl rand -hex 32`). Manuel tahsilat (`provider=manual`) icin deploy bloklayici degildir.
 - [ ] Smoke: `npm run build` sonrasi `npm run test:smoke` (Playwright) gecti.
 - [ ] `npm run production:check` exit 0 (deploy oncesi env dogrulama).
+- [ ] `npm run db:check:payment-provider-ref` exit 0 (duplicate providerRef yok).
+- [ ] `npm run production:preflight` exit 0 (env + duplicate check + migrate deploy; seed/smoke icermez).
+- [ ] `npm run prisma:generate` basarili (migrate deploy sonrasi).
+- [ ] `npm run staging:validate` exit 0 (seed:real + unit + smoke:build; staging DB gerekir).
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
 
@@ -103,8 +111,39 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 ### Database
 
-- `npx prisma migrate deploy`
-- `npx prisma generate`
+**Local development:** `npm run prisma:migrate:dev` (`prisma migrate dev`). `prisma:migrate` geriye uyumluluk alias'idir.
+
+#### Staging deploy runbook (onerilen sira)
+
+**1. Migration oncesi** (seed/smoke calistirmaz):
+
+```bash
+npm run production:preflight
+npm run prisma:generate
+```
+
+`production:preflight` = `production:check` + `db:check:payment-provider-ref` + `prisma:migrate:deploy`.
+
+**2. Tam staging dogrulama** (migrate sonrasi):
+
+```bash
+npm run production:check
+npm run db:check:payment-provider-ref
+npm run prisma:migrate:deploy
+npm run prisma:generate
+npm run prisma:seed:real
+npm run test:unit
+npm run test:smoke:build
+```
+
+Kisa yol (adim 2 icin migrate sonrasi): `npm run staging:validate`
+
+**Alias notlari:**
+
+- `npm run db:check:payment-provider-ref` — `prisma:preflight:provider-ref` ile ayni script.
+- `npm run prisma:migrate:deploy` — staging/production icin; asla `migrate dev` kullanmayin.
+- Migration `20260609120000_payment_provider_ref_unique` oncesi duplicate check zorunlu.
+
 - Production products/plans seed dogrulamasi.
 - WexPay plans ve entitlements dogrulamasi.
 - WexPay provider credential + inbound webhook foundation migration'i (`WexPayProviderCredential`, `WexPayWebhookEvent`) deploy edildi. Bkz. `prisma/migrations/20260608160000_add_wexpay_provider_webhook_foundation`.
@@ -157,6 +196,13 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
   - [ ] Duplicate event protection (`provider` + `providerEventId` unique; `receiveWexPayWebhookEvent` duplicate donusu).
   - [ ] Transaction icinde `Payment` guncelleme + `syncTableStatus` + audit.
 - [ ] PayTR / iyzico / Param adapter implementasyonu (stub yerine gercek API; Phase 7).
+
+**Stale pending reconciliation (operasyonel Payment, BillingPayment degil):**
+
+- Public checkout stale `PENDING` kayitlari `FAILED` + audit `wexpay.public.checkout.stale_pending_failed` ile kapatilir.
+- `PaymentStatus` enum'unda `EXPIRED` yok; masa bakiyesi ve ciro raporlari (`PAID`/`PARTIAL`) etkilenmez.
+- Risk: Eski PayTR checkout URL'si ile gec tahsilat + webhook `FAILED` terminal kaydina duserse reconciliation gerekir.
+- Playbook: Audit'te `stale_pending_failed` ara → PayTR panelinde `providerRef` (merchant_oid) kontrol et → gerekirse manuel `PAID` duzeltmesi veya iade; secret/log'a dokunma.
 
 ### Data Governance
 
