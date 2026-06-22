@@ -69,12 +69,25 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 **Smoke oncesi seed:** `npm.cmd run prisma:seed` (demo) + `npm.cmd run prisma:seed:real` (real tenant + QR `WEXPAY-real-test-MASA-01`). Sonra `npm.cmd run test:smoke:build`.
 
+**Production env script:** `npm.cmd run production:check` (zorunlu degiskenler). Sanal POS icin: `npm.cmd run production:check:psp`.
+
+**Migration preflight (seed/smoke calistirmaz):** `npm.cmd run production:preflight` — env check + `db:check:payment-provider-ref` + `prisma:migrate:deploy`.
+
+**Staging validation (migrate sonrasi):** `npm.cmd run staging:validate` — `prisma:seed:real` + `test:unit` + `test:smoke:build`.
+
+**Unit tests:** `npm.cmd run test:unit` (PayTR hash/amount + public checkout amount; webhook integration requires DB).
+
 **Deploy oncesi kontrol:**
 
 - [ ] Tum zorunlu degiskenler **Production** environment'inda set edildi.
 - [ ] `API_KEY_HASH_SECRET`: Zorunlu (local `.env.local` + Vercel Production). API key hashleme icin HMAC secret/pepper olarak kullanilir; kodda fallback yoktur, eksikse uygulama kontrollu hata verir. **Vercel Production environment'a eklenmeden deploy yapilmamali.**
 - [ ] `WEXPAY_CREDENTIAL_ENCRYPTION_KEY`: PayTR / iyzico / Param sanal POS baglantisi veya inbound webhook acilacaksa zorunlu. En az **32 byte** guclu rastgele deger (or. `openssl rand -hex 32`). Manuel tahsilat (`provider=manual`) icin deploy bloklayici degildir.
 - [ ] Smoke: `npm run build` sonrasi `npm run test:smoke` (Playwright) gecti.
+- [ ] `npm run production:check` exit 0 (deploy oncesi env dogrulama).
+- [ ] `npm run db:check:payment-provider-ref` exit 0 (duplicate providerRef yok).
+- [ ] `npm run production:preflight` exit 0 (env + duplicate check + migrate deploy; seed/smoke icermez).
+- [ ] `npm run prisma:generate` basarili (migrate deploy sonrasi).
+- [ ] `npm run staging:validate` exit 0 (seed:real + unit + smoke:build; staging DB gerekir).
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
 
@@ -98,8 +111,39 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 ### Database
 
-- `npx prisma migrate deploy`
-- `npx prisma generate`
+**Local development:** `npm run prisma:migrate:dev` (`prisma migrate dev`). `prisma:migrate` geriye uyumluluk alias'idir.
+
+#### Staging deploy runbook (onerilen sira)
+
+**1. Migration oncesi** (seed/smoke calistirmaz):
+
+```bash
+npm run production:preflight
+npm run prisma:generate
+```
+
+`production:preflight` = `production:check` + `db:check:payment-provider-ref` + `prisma:migrate:deploy`.
+
+**2. Tam staging dogrulama** (migrate sonrasi):
+
+```bash
+npm run production:check
+npm run db:check:payment-provider-ref
+npm run prisma:migrate:deploy
+npm run prisma:generate
+npm run prisma:seed:real
+npm run test:unit
+npm run test:smoke:build
+```
+
+Kisa yol (adim 2 icin migrate sonrasi): `npm run staging:validate`
+
+**Alias notlari:**
+
+- `npm run db:check:payment-provider-ref` — `prisma:preflight:provider-ref` ile ayni script.
+- `npm run prisma:migrate:deploy` — staging/production icin; asla `migrate dev` kullanmayin.
+- Migration `20260609120000_payment_provider_ref_unique` oncesi duplicate check zorunlu.
+
 - Production products/plans seed dogrulamasi.
 - WexPay plans ve entitlements dogrulamasi.
 - WexPay provider credential + inbound webhook foundation migration'i (`WexPayProviderCredential`, `WexPayWebhookEvent`) deploy edildi. Bkz. `prisma/migrations/20260608160000_add_wexpay_provider_webhook_foundation`.
@@ -110,12 +154,18 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 ### Security
 
 - HTTPS ve secure cookie zorunlulugu.
-- Admin/customer login rate limiting.
+- Admin/customer login rate limiting (`lib/wexon-rate-limit.ts` — IP + e-posta bucket'lari).
+- PayTR inbound webhook rate limiting (`paytrWebhook` bucket, IP bazli; cok instance icin Redis notu).
+- Public QR order/checkout rate limiting (`publicQrOrder`, `publicQrCheckout`).
+- WexPay API rate limiting (`wexpayApi` bucket).
 - Brute-force protection.
 - Password reset flow.
-- Session hardening.
+- Session hardening (`secure` production cookie, `sameSite`, TTL dokumantasyonu).
+- Webhook amount validation (PayTR `total_amount` vs `Payment.amount`).
+- Error message sanitization (public/API/webhook route'lari; secret/plaintext log yok).
 - Monitoring ve structured logging.
 - Error reporting.
+- **Cok instance deploy:** In-memory rate limit store process-bazlidir; production'da Redis/Upstash ile degistirin.
 
 ### Billing And Webhooks
 
@@ -146,6 +196,13 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
   - [ ] Duplicate event protection (`provider` + `providerEventId` unique; `receiveWexPayWebhookEvent` duplicate donusu).
   - [ ] Transaction icinde `Payment` guncelleme + `syncTableStatus` + audit.
 - [ ] PayTR / iyzico / Param adapter implementasyonu (stub yerine gercek API; Phase 7).
+
+**Stale pending reconciliation (operasyonel Payment, BillingPayment degil):**
+
+- Public checkout stale `PENDING` kayitlari `FAILED` + audit `wexpay.public.checkout.stale_pending_failed` ile kapatilir.
+- `PaymentStatus` enum'unda `EXPIRED` yok; masa bakiyesi ve ciro raporlari (`PAID`/`PARTIAL`) etkilenmez.
+- Risk: Eski PayTR checkout URL'si ile gec tahsilat + webhook `FAILED` terminal kaydina duserse reconciliation gerekir.
+- Playbook: Audit'te `stale_pending_failed` ara → PayTR panelinde `providerRef` (merchant_oid) kontrol et → gerekirse manuel `PAID` duzeltmesi veya iade; secret/log'a dokunma.
 
 ### Data Governance
 

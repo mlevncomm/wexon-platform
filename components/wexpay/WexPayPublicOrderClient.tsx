@@ -28,16 +28,21 @@ function formatTry(value: number) {
 export default function WexPayPublicOrderClient({
   qrCode,
   categories,
+  paytrStatus,
 }: {
   qrCode: string;
   categories: PublicCategory[];
+  paytrStatus?: "success" | "failed" | null;
 }) {
   const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [note, setNote] = useState("");
   const [receiptRequested, setReceiptRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ orderNo: string; subtotal: number } | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ orderId: string; orderNo: string; subtotal: number } | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isCheckoutPending, startCheckoutTransition] = useTransition();
 
   const lines = useMemo(() => Object.values(cart), [cart]);
   const subtotal = lines.reduce((sum, line) => sum + line.product.price * line.quantity, 0);
@@ -77,7 +82,12 @@ export default function WexPayPublicOrderClient({
         }),
       });
 
-      const payload = (await response.json().catch(() => ({}))) as { error?: string; orderNo?: string; subtotal?: number };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        id?: string;
+        orderNo?: string;
+        subtotal?: number;
+      };
       if (!response.ok) {
         setError(payload.error ?? "Sipariş gönderilemedi. Lütfen personelden destek isteyin.");
         return;
@@ -86,7 +96,47 @@ export default function WexPayPublicOrderClient({
       setCart({});
       setNote("");
       setReceiptRequested(false);
-      setSuccess({ orderNo: payload.orderNo ?? "-", subtotal: Number(payload.subtotal ?? subtotal) });
+      setCheckoutUrl(null);
+      setCheckoutError(null);
+      setSuccess({
+        orderId: payload.id ?? "",
+        orderNo: payload.orderNo ?? "-",
+        subtotal: Number(payload.subtotal ?? subtotal),
+      });
+    });
+  }
+
+  function startCheckout() {
+    if (!success?.orderId) return;
+    setCheckoutError(null);
+    setCheckoutUrl(null);
+
+    startCheckoutTransition(async () => {
+      const response = await fetch(`/api/wexpay/public/${encodeURIComponent(qrCode)}/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: success.orderId }),
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        externalCheckoutUrl?: string;
+      };
+
+      if (!response.ok) {
+        setCheckoutError(
+          payload.error ??
+            (response.status === 503
+              ? "Online ödeme şu anda aktif değil. Ödeme için işletme personeline başvurun."
+              : "Ödeme başlatılamadı. Lütfen personelden destek isteyin."),
+        );
+        return;
+      }
+
+      if (payload.externalCheckoutUrl) {
+        setCheckoutUrl(payload.externalCheckoutUrl);
+        window.location.href = payload.externalCheckoutUrl;
+      }
     });
   }
 
@@ -218,9 +268,40 @@ export default function WexPayPublicOrderClient({
             {error}
           </div>
         )}
-        {success && (
+        {paytrStatus === "success" && (
           <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">
-            Siparişiniz alındı: {success.orderNo} · {formatTry(success.subtotal)}
+            Ödemeniz alındı. Teşekkür ederiz.
+          </div>
+        )}
+        {paytrStatus === "failed" && (
+          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+            Ödeme tamamlanamadı. Tekrar deneyebilir veya personelden yardım isteyebilirsiniz.
+          </div>
+        )}
+        {success && (
+          <div className="mt-3 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+            <p className="text-sm font-bold text-emerald-800">
+              Siparişiniz alındı: {success.orderNo} · {formatTry(success.subtotal)}
+            </p>
+            <button
+              type="button"
+              onClick={startCheckout}
+              disabled={isCheckoutPending || !success.orderId}
+              className="w-full rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-black text-emerald-800 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isCheckoutPending ? "Ödeme hazırlanıyor..." : "Ödeme Yap"}
+            </button>
+            {checkoutError && (
+              <p className="text-xs font-bold leading-relaxed text-rose-700">{checkoutError}</p>
+            )}
+            {checkoutUrl && !isCheckoutPending && (
+              <a
+                href={checkoutUrl}
+                className="block text-center text-xs font-bold text-emerald-700 underline"
+              >
+                Ödeme sayfasına git
+              </a>
+            )}
           </div>
         )}
 

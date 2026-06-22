@@ -608,6 +608,123 @@ export async function getWexPayOperationsOverview(
   };
 }
 
+export type OperationsSnapshot = {
+  generatedAt: string;
+  metrics: OperationsOverview["metrics"] & { pendingPaytrCount: number };
+  tableStatus: {
+    empty: number;
+    occupied: number;
+    paymentPending: number;
+    partiallyPaid: number;
+    paid: number;
+  };
+  openTablesCount: number;
+};
+
+export async function getOperationsSnapshot(organizationId: string, branchId: string): Promise<OperationsSnapshot> {
+  const [overview, pendingPaytrCount] = await Promise.all([
+    getWexPayOperationsOverview(organizationId, branchId),
+    prisma.payment.count({
+      where: {
+        branchId,
+        provider: "paytr",
+        status: PaymentStatus.PENDING,
+        branch: { restaurant: { organizationId } },
+      },
+    }),
+  ]);
+
+  const tables = overview.tables;
+  return {
+    generatedAt: new Date().toISOString(),
+    metrics: { ...overview.metrics, pendingPaytrCount },
+    tableStatus: {
+      empty: tables.filter((table) => table.status === "EMPTY").length,
+      occupied: tables.filter((table) => table.status === "OCCUPIED").length,
+      paymentPending: tables.filter((table) => table.status === "PAYMENT_PENDING").length,
+      partiallyPaid: tables.filter((table) => table.status === "PARTIALLY_PAID").length,
+      paid: tables.filter((table) => table.status === "PAID").length,
+    },
+    openTablesCount: tables.filter((table) => table.remainingAmount > 0).length,
+  };
+}
+
+function getIstanbulDayBounds(): { start: Date; end: Date } {
+  const dayKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return {
+    start: new Date(`${dayKey}T00:00:00+03:00`),
+    end: new Date(`${dayKey}T23:59:59.999+03:00`),
+  };
+}
+
+export async function getBranchDailyReport(organizationId: string, branchId: string) {
+  const { start, end } = getIstanbulDayBounds();
+  const result = await prisma.payment.aggregate({
+    where: {
+      branchId,
+      status: PaymentStatus.PAID,
+      paidAt: { gte: start, lte: end },
+      branch: { restaurant: { organizationId } },
+    },
+    _sum: { amount: true },
+    _count: true,
+  });
+  return {
+    dayStart: start.toISOString(),
+    dayEnd: end.toISOString(),
+    paidTotal: Number(result._sum.amount ?? 0),
+    paidCount: result._count,
+  };
+}
+
+export type ProviderPaymentBreakdownRow = {
+  provider: string;
+  total: number;
+  count: number;
+};
+
+export async function getPaymentBreakdownByProvider(
+  organizationId: string,
+  branchId: string,
+): Promise<ProviderPaymentBreakdownRow[]> {
+  const { start } = getIstanbulDayBounds();
+  const groups = await prisma.payment.groupBy({
+    by: ["provider"],
+    where: {
+      branchId,
+      status: PaymentStatus.PAID,
+      paidAt: { gte: start },
+      branch: { restaurant: { organizationId } },
+    },
+    _sum: { amount: true },
+    _count: true,
+  });
+  return groups.map((group) => ({
+    provider: group.provider ?? "unknown",
+    total: Number(group._sum.amount ?? 0),
+    count: group._count,
+  }));
+}
+
+export async function getOpenTablesSummary(organizationId: string, branchId: string) {
+  const tables = await listBranchTableOperations(organizationId, branchId);
+  return tables
+    .filter((table) => table.remainingAmount > 0)
+    .map((table) => ({
+      id: table.id,
+      label: table.label,
+      status: table.status,
+      remainingAmount: table.remainingAmount,
+      totalAmount: table.totalAmount,
+      paidAmount: table.paidAmount,
+    }));
+}
+
 export type EntitlementUsageRow = {
   key: string;
   label: string;

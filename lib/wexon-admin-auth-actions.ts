@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getServerActionIpAddress } from "@/lib/wexon-audit";
+import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { adminDebug, clearAdminSessionCookie, createAdminSessionCookie, isAdminEmailAllowed } from "@/lib/wexon-admin-auth";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 
@@ -17,8 +17,15 @@ function safeNextPath(value: string) {
   return value;
 }
 
-function redirectLoginError(message: string, nextPath: string) {
+function redirectLoginError(message: string, nextPath: string, details?: { email?: string; reason?: string }) {
   adminDebug("login:error_redirect", { message, next: safeNextPath(nextPath) });
+  writeAuditFailure({
+    action: details?.reason === "rate_limited" ? "admin.auth.rate_limited" : "admin.auth.login_failed",
+    message,
+    level: "WARN",
+    source: "admin_auth",
+    metadata: { email: details?.email, next: safeNextPath(nextPath) },
+  });
   const params = new URLSearchParams({ adminError: message });
   if (nextPath) {
     params.set("next", safeNextPath(nextPath));
@@ -35,13 +42,19 @@ export async function loginAdminAction(formData: FormData) {
 
   const ipLimit = enforceRateLimit("admin.login.ip", ipAddress, RATE_LIMITS.adminLoginIp);
   if (!ipLimit.ok) {
-    redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath);
+    redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, {
+      email,
+      reason: "rate_limited",
+    });
   }
 
   if (email) {
     const emailLimit = enforceRateLimit("admin.login.email", email, RATE_LIMITS.adminLoginEmail);
     if (!emailLimit.ok) {
-      redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath);
+      redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, {
+        email,
+        reason: "rate_limited",
+      });
     }
   }
 
@@ -71,7 +84,7 @@ export async function loginAdminAction(formData: FormData) {
   }
 
   if (!passwordValid) {
-    redirectLoginError("E-posta veya şifre hatalı.", nextPath);
+    redirectLoginError("E-posta veya şifre hatalı.", nextPath, { email });
   }
 
   await createAdminSessionCookie(email);

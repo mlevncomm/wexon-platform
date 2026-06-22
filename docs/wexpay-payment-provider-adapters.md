@@ -1,6 +1,6 @@
 # WexPay Payment Provider Adapters
 
-Status: Phase 7.1 — manual active; PayTR operator UX + webhook route; public QR checkout kapali.
+Status: Phase 10 — manual active; PayTR operator + public QR checkout; webhook amount validation.
 
 ## Adapter registry
 
@@ -196,21 +196,23 @@ Audit actions:
 - `wexpay.webhook.ignored`
 - `wexpay.webhook.tenant_attached`
 
-## Public QR boundary (not enabled)
+## Public QR checkout (Phase 10)
 
 Public diners use:
 
 - `POST /api/wexpay/public/[qrCode]/order` — order creation only (no PSP redirect)
+- `POST /api/wexpay/public/[qrCode]/checkout` — PayTR checkout start (`createPublicCheckoutPayment`)
 
-Future checkout (not wired):
+Flow:
 
-1. Diner completes order (or selects pay-at-table).
-2. A dedicated checkout route resolves the branch/tenant provider adapter.
-3. `createPublicQrCheckoutSessionBoundary` calls `createCheckoutSession`.
-4. Client redirects to `externalCheckoutUrl` when `requiresExternalCheckout` is true.
-5. Inbound webhook route receives PSP callback → `receiveWexPayWebhookEvent` → verify signature → update `Payment`.
+1. Diner completes order via order route (or pays remaining table balance with empty `orderId`).
+2. Checkout route resolves tenant from `qrCode`, evaluates Core access, computes amount server-side.
+3. Active PayTR credential + `WEXPAY_PAYTR_ENABLE_API=true` required; otherwise `503 checkout_unavailable`.
+4. `Payment` `PENDING` created only after PayTR token succeeds; audit `wexpay.public.checkout.started`.
+5. Redirect URLs: `/wexpay/t/[qrCode]?paytr=success|failed`.
+6. Webhook settles PAID/FAILED (amount validation applies).
 
-Do not add PSP calls to the order route.
+Manual provider is not available on public checkout. Do not add PSP calls to the order route.
 
 ## Raw body / signature verification checklist
 
@@ -230,8 +232,8 @@ Before processing any inbound PSP webhook in production:
 
 1. [x] **PayTR foundation** — credential mapping, PENDING payment, webhook route, signature + idempotency.
 2. [x] **PayTR operator UX** — masa/odeme formlari, checkout banner, providerRef gorunumu.
-3. **Public QR checkout route** — separate from order creation.
-4. **iyzico / Param adapters** — credential + webhook parity.
+3. [x] **Public QR checkout route** — separate from order creation.
+4. **iyzico / Param adapters** — credential schema + stub adapters (`lib/wexpay-iyzico-adapter.ts`, `lib/wexpay-param-adapter.ts`); canlı API yok.
 
 ## Schema reference
 

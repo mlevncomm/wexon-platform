@@ -11,8 +11,17 @@
     "test:smoke": "playwright test",
     "test:smoke:build": "npm run build && playwright test",
     "test:smoke:ci": "npm run build && playwright test",
+    "test:unit": "tsx --test lib/wexpay-public-checkout.test.ts lib/wexpay-paytr-adapter.test.ts lib/wexpay-paytr-webhook-lookup.test.ts lib/wexpay-paytr-webhook.test.ts lib/wexon-rate-limit.test.ts",
+    "production:check": "node scripts/check-production-env.mjs",
+    "production:check:psp": "node scripts/check-production-env.mjs --strict-psp",
+    "production:preflight": "npm run production:check && npm run db:check:payment-provider-ref && npm run prisma:migrate:deploy",
+    "db:check:payment-provider-ref": "node scripts/check-payment-provider-ref-duplicates.mjs",
+    "staging:validate": "npm run prisma:seed:real && npm run test:unit && npm run test:smoke:build",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:preflight:provider-ref": "node scripts/check-payment-provider-ref-duplicates.mjs",
     "prisma:seed": "prisma db seed",
     "prisma:seed:real": "node prisma/seed-real-tenant.mjs"
   },
@@ -38,6 +47,7 @@
     "eslint-config-next": "16.2.6",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.5",
     "typescript": "^5"
   }
 }

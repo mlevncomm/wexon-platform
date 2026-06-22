@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import type { OperationsNotification, OperationsOverview, OperationsTopProduct } from "@/lib/wexpay-read";
+import { useCallback, useEffect, useState } from "react";
+import type { OperationsNotification, OperationsOverview, OperationsSnapshot, OperationsTopProduct } from "@/lib/wexpay-read";
 import {
   formatLira,
   WexPayEmptyNotice,
@@ -30,12 +31,55 @@ export default function WexPayOperationsBoard({
   overview,
   packageInfo,
   branchId,
+  organizationId,
 }: {
   overview: OperationsOverview;
   packageInfo: { planName: string; licenseStatus: string; installationStatus: string };
   branchId: string;
+  organizationId: string;
 }) {
-  const { notifications, topProducts, metrics, tables } = overview;
+  const [metrics, setMetrics] = useState<OperationsOverview["metrics"] & { pendingPaytrCount?: number }>({
+    ...overview.metrics,
+    pendingPaytrCount: 0,
+  });
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const refreshSnapshot = useCallback(async () => {
+    if (document.visibilityState === "hidden") return;
+    setIsRefreshing(true);
+    try {
+      const response = await fetch(
+        `/api/wexpay/operations/snapshot?organizationId=${encodeURIComponent(organizationId)}&branchId=${encodeURIComponent(branchId)}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) return;
+      const snapshot = (await response.json()) as OperationsSnapshot;
+      setMetrics(snapshot.metrics);
+      setLastUpdated(snapshot.generatedAt);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [branchId, organizationId]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void refreshSnapshot();
+    }, 20_000);
+    return () => window.clearInterval(interval);
+  }, [refreshSnapshot]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refreshSnapshot();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [refreshSnapshot]);
+
+  const { notifications, topProducts, tables } = overview;
   const receiptTables = tables.filter((table) => table.receiptRequested);
   const kitchenHref = `/apps/wexpay/kitchen?branchId=${encodeURIComponent(branchId)}`;
   const tablesHref = `/apps/wexpay/tables?branchId=${encodeURIComponent(branchId)}`;
@@ -66,6 +110,12 @@ export default function WexPayOperationsBoard({
       accent: metrics.receiptRequestCount > 0,
     },
     {
+      label: "Bekleyen PayTR",
+      value: String(metrics.pendingPaytrCount ?? 0),
+      detail: "Onay bekleyen sanal POS ödemesi",
+      accent: (metrics.pendingPaytrCount ?? 0) > 0,
+    },
+    {
       label: "Okunmamış olay",
       value: String(metrics.unreadNotificationCount),
       detail: "Canlı akışta bekleyen",
@@ -81,6 +131,21 @@ export default function WexPayOperationsBoard({
 
   return (
     <WexPayPage>
+      <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs font-semibold text-slate-500">
+          {lastUpdated
+            ? `Son güncelleme: ${new Date(lastUpdated).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+            : "Canlı özet yükleniyor..."}
+        </p>
+        <button
+          type="button"
+          onClick={() => void refreshSnapshot()}
+          disabled={isRefreshing}
+          className="self-start rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+        >
+          {isRefreshing ? "Yenileniyor..." : "Şimdi yenile"}
+        </button>
+      </div>
       <WexPayMetricStrip eyebrow="Genel bakış" title="Günlük özet" description="Şube operasyon metrikleri">
         {metricCards.map((metric) => (
           <WexPayMetricCard

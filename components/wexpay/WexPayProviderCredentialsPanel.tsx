@@ -1,5 +1,6 @@
 import {
   deactivateProviderCredentialAction,
+  testProviderCredentialAction,
   upsertProviderCredentialAction,
 } from "@/lib/wexpay-actions";
 import type { WexPayProviderCredentialSummary } from "@/lib/wexpay-provider-credentials";
@@ -28,10 +29,24 @@ function formatConnectionMode(mode: string) {
   return mode === "LIVE" ? "Canlı bağlantı" : "Test bağlantısı";
 }
 
+function ModeBadge({ mode }: { mode: string }) {
+  const live = mode === "LIVE";
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
+        live ? "bg-rose-100 text-rose-800" : "bg-sky-100 text-sky-800"
+      }`}
+    >
+      {live ? "LIVE" : "TEST"}
+    </span>
+  );
+}
+
 type WexPayProviderCredentialsPanelProps = {
   credentials: WexPayProviderCredentialSummary[];
   canManage: boolean;
   encryptionAvailable: boolean;
+  paytrApiEnabled: boolean;
   redirectTo: string;
 };
 
@@ -39,6 +54,7 @@ export default function WexPayProviderCredentialsPanel({
   credentials,
   canManage,
   encryptionAvailable,
+  paytrApiEnabled,
   redirectTo,
 }: WexPayProviderCredentialsPanelProps) {
   return (
@@ -55,6 +71,16 @@ export default function WexPayProviderCredentialsPanel({
             Sanal POS bağlantısı kaydetmek için sunucuda{" "}
             <code className="font-mono text-xs">WEXPAY_CREDENTIAL_ENCRYPTION_KEY</code> (32 byte) tanımlı olmalıdır.
             Manuel tahsilat akışı bu anahtar olmadan çalışmaya devam eder; sanal POS entegrasyonu için gerekir.
+          </p>
+        </div>
+      ) : null}
+
+      {!paytrApiEnabled ? (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p className="text-sm font-black text-slate-900">PayTR canlı token üretimi kapalı</p>
+          <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+            Sunucuda <code className="font-mono text-xs">WEXPAY_PAYTR_ENABLE_API=true</code> olmadan operasyon ve QR
+            checkout PayTR token üretmez. Bağlantı testi yine de yerel yapılandırmayı doğrular.
           </p>
         </div>
       ) : null}
@@ -82,10 +108,10 @@ export default function WexPayProviderCredentialsPanel({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 grid gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-black text-slate-950">
-                        {credential.provider.toUpperCase()} · {formatConnectionMode(credential.mode)}
-                      </p>
+                      <p className="text-sm font-black text-slate-950">{credential.provider.toUpperCase()}</p>
+                      <ModeBadge mode={credential.mode} />
                       <ActiveBadge active={credential.isActive} />
+                      <span className="text-xs font-semibold text-slate-500">{formatConnectionMode(credential.mode)}</span>
                     </div>
                     <InfoRow label="Bağlantı adı" value={credential.displayName} />
                     <InfoRow label="Maskelenmiş API anahtarı" value={credential.maskedKey} />
@@ -100,11 +126,20 @@ export default function WexPayProviderCredentialsPanel({
                   </div>
 
                   {canManage && credential.isActive ? (
-                    <form action={deactivateProviderCredentialAction} className="shrink-0">
-                      <input type="hidden" name="credentialId" value={credential.id} />
-                      <input type="hidden" name="redirectTo" value={redirectTo} />
-                      <DemoSecondaryButton className="!w-auto px-4 py-2.5 text-xs">Bağlantıyı kapat</DemoSecondaryButton>
-                    </form>
+                    <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                      <form action={testProviderCredentialAction}>
+                        <input type="hidden" name="credentialId" value={credential.id} />
+                        <input type="hidden" name="redirectTo" value={redirectTo} />
+                        <DemoSecondaryButton className="!w-auto px-4 py-2.5 text-xs">
+                          Bağlantıyı test et
+                        </DemoSecondaryButton>
+                      </form>
+                      <form action={deactivateProviderCredentialAction}>
+                        <input type="hidden" name="credentialId" value={credential.id} />
+                        <input type="hidden" name="redirectTo" value={redirectTo} />
+                        <DemoSecondaryButton className="!w-auto px-4 py-2.5 text-xs">Bağlantıyı kapat</DemoSecondaryButton>
+                      </form>
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -118,8 +153,8 @@ export default function WexPayProviderCredentialsPanel({
           <h3 className="text-sm font-black text-slate-950">Sanal POS bağlantısı ekle / güncelle</h3>
           <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">
             Firmanızın kendi sanal POS API bilgilerini girin. Aynı ödeme sağlayıcı ve bağlantı modu için kayıt varsa
-            güncellenir. Secret alanını boş bırakırsanız mevcut API bilgisi korunur. Gerçek sanal POS checkout Phase
-            7&apos;de aktif olacaktır.
+            güncellenir. Secret alanını boş bırakırsanız mevcut şifreli API bilgisi korunur. Bağlantı testi gerçek
+            ödeme çekmez; yalnızca yerel yapılandırmayı doğrular.
           </p>
 
           <form action={upsertProviderCredentialAction} className="mt-4 grid min-w-0 gap-4 md:grid-cols-2">

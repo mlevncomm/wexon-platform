@@ -41,6 +41,35 @@ export function mapPaytrCredentialConfig(
   return { merchantId, merchantKey, merchantSalt };
 }
 
+export type PaytrCredentialReadiness = {
+  ready: boolean;
+  messages: string[];
+};
+
+/** Local-only PayTR credential validation (no get-token API call). */
+export function assertPaytrCredentialReady(
+  config: WexPayProviderCredentialConfig,
+  mode: WexPayProviderCredentialMode,
+): PaytrCredentialReadiness {
+  const messages: string[] = [];
+  const mapped = mapPaytrCredentialConfig(config);
+  if (!mapped) {
+    return { ready: false, messages: ["Merchant ID, secret key ve merchant salt eksik veya geçersiz."] };
+  }
+  if (mode === WexPayProviderCredentialMode.TEST) {
+    messages.push("Test modu: PayTR test mağaza bilgileri kullanılmalıdır.");
+  }
+  if (!process.env.NEXT_PUBLIC_APP_URL?.trim()) {
+    messages.push("NEXT_PUBLIC_APP_URL tanımlı değil; checkout yönlendirmeleri çalışmaz.");
+  }
+  if (process.env.WEXPAY_PAYTR_ENABLE_API !== "true") {
+    messages.push(
+      "WEXPAY_PAYTR_ENABLE_API=true olmadan canlı PayTR token üretilmez. Yerel yapılandırma doğrulandı.",
+    );
+  }
+  return { ready: true, messages };
+}
+
 export async function loadPaytrCredentialBundle(
   organizationId: string,
   mode?: WexPayProviderCredentialMode,
@@ -138,9 +167,13 @@ export function buildPaytrGetTokenPayload(input: {
   };
 }
 
-export function verifyPaytrCallbackHash(input: PaytrCallbackFields & { merchantKey: string; merchantSalt: string }) {
+export function buildPaytrCallbackHash(input: PaytrCallbackFields & { merchantKey: string; merchantSalt: string }) {
   const payload = `${input.merchantOid}${input.merchantSalt}${input.status}${input.totalAmount}`;
-  const expected = createHmac("sha256", input.merchantKey).update(payload).digest("base64");
+  return createHmac("sha256", input.merchantKey).update(payload).digest("base64");
+}
+
+export function verifyPaytrCallbackHash(input: PaytrCallbackFields & { merchantKey: string; merchantSalt: string }) {
+  const expected = buildPaytrCallbackHash(input);
   const left = Buffer.from(expected);
   const right = Buffer.from(input.hash);
   if (left.length !== right.length) return false;
@@ -223,7 +256,10 @@ async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): 
 
   const paymentAmountKurus = validatePaytrCheckoutAmount(context.amount, context.currency);
   const merchantOid = context.existingProviderRef?.trim() || generatePaytrMerchantOid();
-  const urls = buildPaytrCheckoutUrls();
+  const baseUrls = buildPaytrCheckoutUrls();
+  const urls = context.checkoutRedirect
+    ? { ...baseUrls, successUrl: context.checkoutRedirect.successUrl, failUrl: context.checkoutRedirect.failUrl }
+    : baseUrls;
   const enableApi = process.env.WEXPAY_PAYTR_ENABLE_API === "true";
   if (!enableApi) {
     throw new WexPayPaymentProviderError(

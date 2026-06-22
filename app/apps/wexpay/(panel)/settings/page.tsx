@@ -13,13 +13,13 @@ import { dashboardPreviewHref } from "@/lib/wexon-organization-context";
 
 const SETTINGS_PATH = "/apps/wexpay/settings";
 
-type SearchParams = Promise<{ wexpayError?: string }>;
+type SearchParams = Promise<{ wexpayError?: string; wexpayTest?: string; wexpayTestMsg?: string; wexpayTestDetails?: string }>;
 
 export default async function WexPaySettingsPage({ searchParams }: { searchParams: SearchParams }) {
   const access = await getWexPayAccess();
   if (!access.allowed) return null;
 
-  const { wexpayError } = await searchParams;
+  const { wexpayError, wexpayTest, wexpayTestMsg, wexpayTestDetails } = await searchParams;
   const usage = await getEntitlementUsage(access.organization.id, access.entitlementMap);
   const providerCredentials = await listOrganizationProviderCredentials(access.organization.id);
   const encryptionAvailable = isProviderCredentialEncryptionAvailable();
@@ -29,6 +29,24 @@ export default async function WexPaySettingsPage({ searchParams }: { searchParam
       {wexpayError ? (
         <div className="xl:col-span-2">
           <WexPayErrorNotice message={wexpayError} />
+        </div>
+      ) : null}
+      {wexpayTest && wexpayTestMsg ? (
+        <div className="xl:col-span-2">
+          <div
+            className={`rounded-2xl border px-4 py-4 ${
+              wexpayTest === "ok"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-amber-200 bg-amber-50 text-amber-900"
+            }`}
+          >
+            <p className="text-sm font-black">{decodeURIComponent(wexpayTestMsg)}</p>
+            {wexpayTestDetails ? (
+              <p className="mt-2 text-xs font-medium leading-relaxed opacity-90">
+                {decodeURIComponent(wexpayTestDetails)}
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -74,6 +92,7 @@ export default async function WexPaySettingsPage({ searchParams }: { searchParam
           credentials={providerCredentials}
           canManage={access.canManage}
           encryptionAvailable={encryptionAvailable}
+          paytrApiEnabled={process.env.WEXPAY_PAYTR_ENABLE_API === "true"}
           redirectTo={SETTINGS_PATH}
         />
       </WexPayPanel>

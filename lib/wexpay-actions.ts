@@ -44,12 +44,14 @@ import {
   parseTableUpdate,
   parseProviderCredentialUpsert,
   parseProviderCredentialDeactivate,
+  parseProviderCredentialTest,
   WexPayValidationError,
 } from "@/lib/wexpay-validation";
 import { WexPayProviderNotConfiguredError, WexPayPaymentProviderError } from "@/lib/wexpay-payment-provider";
 import {
   deactivateWexPayProviderCredential,
   prepareProviderCredentialUpsert,
+  testProviderCredential,
   upsertWexPayProviderCredential,
   WexPayProviderCredentialStorageError,
 } from "@/lib/wexpay-provider-credentials";
@@ -476,6 +478,26 @@ export async function deactivateProviderCredentialAction(formData: FormData) {
     context = await getManageContext();
     await deactivateWexPayProviderCredential(credentialAuditContext(context), input);
     revalidatePath(SETTINGS_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function testProviderCredentialAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, SETTINGS_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseProviderCredentialTest(formData);
+    context = await getManageContext();
+    const result = await testProviderCredential(credentialAuditContext(context), input);
+    revalidatePath(SETTINGS_PATH);
+    const separator = redirectTo.includes("?") ? "&" : "?";
+    const status = result.ok ? "ok" : "warn";
+    redirect(
+      `${redirectTo}${separator}wexpayTest=${status}&wexpayTestMsg=${encodeURIComponent(result.message)}&wexpayTestDetails=${encodeURIComponent(result.details.join(" · "))}`,
+    );
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(redirectTo, error, context);

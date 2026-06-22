@@ -451,3 +451,9 @@ export function parseProviderCredentialDeactivate(formData: FormData) {
     credentialId: requiredString(formData, "credentialId", "Credential"),
   };
 }
+
+export function parseProviderCredentialTest(formData: FormData) {
+  return {
+    credentialId: requiredString(formData, "credentialId", "Credential"),
+  };
+}

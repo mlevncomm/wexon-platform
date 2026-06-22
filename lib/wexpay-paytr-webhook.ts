@@ -1,6 +1,7 @@
 import { PaymentStatus, WexPayProviderCredentialMode } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequestIpAddress, writeAuditLog } from "@/lib/wexon-audit";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import {
   attachOrganizationToWexPayWebhookEvent,
   markWexPayWebhookEventFailed,
@@ -18,6 +19,7 @@ import {
   verifyPaytrCallbackAmount,
   verifyPaytrCallbackHash,
 } from "@/lib/wexpay-paytr-adapter";
+import { resolvePaytrWebhookPaymentCandidates } from "@/lib/wexpay-paytr-webhook-lookup";
 import { settlePaymentFromProviderWebhook } from "@/lib/wexpay-service";
 
 export type PaytrWebhookProcessResult =
@@ -45,8 +47,13 @@ async function verifyPaytrSignatureForOrganization(
 }
 
 export async function processPaytrWebhookRequest(request: Request): Promise<PaytrWebhookProcessResult> {
+  const ipAddress = getRequestIpAddress(request) ?? "unknown";
+  const rateLimit = enforceRateLimit("wexpay.webhook.paytr", ipAddress, RATE_LIMITS.paytrWebhook);
+  if (!rateLimit.ok) {
+    return { ok: false, status: 429, body: "rate_limited" };
+  }
+
   const rawBody = await request.text();
-  const ipAddress = getRequestIpAddress(request);
   const fields = parsePaytrCallbackFields(rawBody);
   if (!fields) {
     return { ok: false, status: 400, body: "invalid_payload" };
@@ -68,17 +75,23 @@ export async function processPaytrWebhookRequest(request: Request): Promise<Payt
     return { ok: true, body: "OK", duplicate: true, skipped: true };
   }
 
-  const payment = await prisma.payment.findFirst({
+  const candidates = await prisma.payment.findMany({
     where: { provider: "paytr", providerRef: fields.merchantOid },
     include: { branch: { include: { restaurant: true } } },
   });
 
-  if (!payment?.branch.restaurant?.organizationId) {
-    await markWexPayWebhookEventFailed(received.event.id, "payment_not_found", { ipAddress });
+  const resolved = resolvePaytrWebhookPaymentCandidates(candidates);
+  if (!resolved.ok) {
+    const failureReason = resolved.reason;
+    await markWexPayWebhookEventFailed(received.event.id, failureReason, { ipAddress });
+    if (failureReason === "ambiguous_payment_ref") {
+      return { ok: false, status: 409, body: failureReason };
+    }
     return { ok: false, status: 404, body: "payment_not_found" };
   }
 
-  const organizationId = payment.branch.restaurant.organizationId;
+  const payment = resolved.payment;
+  const organizationId = payment.branch.restaurant!.organizationId!;
   await attachOrganizationToWexPayWebhookEvent(received.event.id, organizationId, { ipAddress });
 
   const signatureValid = await verifyPaytrSignatureForOrganization(organizationId, fields);

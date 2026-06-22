@@ -1,7 +1,10 @@
 import { getPublicBranchMenu, resolvePublicTableByQr } from "@/lib/wexpay-read";
 import WexPayPublicOrderClient from "@/components/wexpay/WexPayPublicOrderClient";
 
-type PageProps = { params: Promise<{ qrCode: string }> };
+type PageProps = {
+  params: Promise<{ qrCode: string }>;
+  searchParams: Promise<{ paytr?: string }>;
+};
 
 /**
  * PUBLIC QR ordering page -> /wexpay/t/[qrCode].
@@ -10,8 +13,10 @@ type PageProps = { params: Promise<{ qrCode: string }> };
  * qrCode through Wexon Core; the menu is read-only here. Order placement runs
  * through POST /api/wexpay/public/[qrCode]/order with server-side subtotal calculation.
  */
-export default async function PublicTablePage({ params }: PageProps) {
+export default async function PublicTablePage({ params, searchParams }: PageProps) {
   const { qrCode } = await params;
+  const { paytr } = await searchParams;
+  const paytrStatus = paytr === "success" ? "success" : paytr === "failed" ? "failed" : null;
   const resolution = await resolvePublicTableByQr(qrCode);
 
   if (!resolution || !resolution.allowed) {
@@ -52,6 +57,7 @@ export default async function PublicTablePage({ params }: PageProps) {
         ) : (
           <WexPayPublicOrderClient
             qrCode={qrCode}
+            paytrStatus={paytrStatus}
             categories={categories.map((category) => ({
               id: category.id,
               name: category.name,
