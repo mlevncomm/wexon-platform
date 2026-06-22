@@ -26,7 +26,7 @@ export default defineConfig({
     : {
         command: `npm run start -- -p ${port}`,
         url: baseURL,
-        reuseExistingServer: false,
+        reuseExistingServer: Boolean(process.env.SMOKE_REUSE_SERVER),
         timeout: 120_000,
       },
 });

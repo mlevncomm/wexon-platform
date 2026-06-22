@@ -5,13 +5,14 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const fixturesPath = resolve(process.cwd(), "e2e", ".fixtures.json");
+const SMOKE_QR_CODE = "WEXPAY-real-test-MASA-01";
 
 function emptyFixtures(reason) {
   return {
     dbAvailable: false,
     setupError: reason,
     adminEmail: (process.env.ADMIN_EMAILS ?? "").split(",")[0]?.trim() || null,
-    customerEmail: "demo@wexon.dev",
+    customerEmail: "real@wexon.dev",
     customerOrgId: null,
     licensedCustomerEmail: "real@wexon.dev",
     licensedOrgId: null,
@@ -34,7 +35,7 @@ export default async function globalSetup() {
   const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 
   try {
-    const [realOrg, demoOrg, customerUser, qrTable, inactiveWexPay] = await Promise.all([
+    const [realOrg, demoOrg, realUser, qrTable, inactiveWexPay] = await Promise.all([
       prisma.organization.findFirst({
         where: { slug: "wexpay-real-test" },
         select: { id: true, name: true },
@@ -45,15 +46,22 @@ export default async function globalSetup() {
       }),
       prisma.user.findFirst({
         where: {
-          email: { in: ["real@wexon.dev", "demo@wexon.dev"] },
+          email: "real@wexon.dev",
           isActive: true,
-          memberships: { some: { status: "ACTIVE" } },
+          memberships: {
+            some: {
+              status: "ACTIVE",
+              organization: { slug: "wexpay-real-test" },
+            },
+          },
         },
-        orderBy: { email: "asc" },
         select: {
           email: true,
           memberships: {
-            where: { status: "ACTIVE" },
+            where: {
+              status: "ACTIVE",
+              organization: { slug: "wexpay-real-test" },
+            },
             take: 1,
             select: { organizationId: true },
           },
@@ -61,37 +69,39 @@ export default async function globalSetup() {
       }),
       prisma.restaurantTable.findFirst({
         where: {
-          qrCode: { not: "" },
+          qrCode: SMOKE_QR_CODE,
           isActive: true,
           branch: {
             isActive: true,
             restaurant: {
               isActive: true,
-              organization: { isDemo: false, isActive: true },
+              organization: { slug: "wexpay-real-test", isDemo: false, isActive: true },
             },
           },
         },
         select: { qrCode: true },
-        orderBy: { createdAt: "asc" },
       }),
       prisma.appInstallation.findFirst({
-        where: { product: { key: "wexpay" }, status: { not: "ACTIVE" } },
+        where: {
+          product: { key: "wexpay" },
+          status: { not: "ACTIVE" },
+          organization: { slug: "wexpay-inactive-test" },
+        },
         select: { organizationId: true, status: true },
       }),
     ]);
 
-    const fallbackOrg = realOrg ?? demoOrg;
-    const customerOrgId = customerUser?.memberships[0]?.organizationId ?? fallbackOrg?.id ?? null;
-    const licensedCustomerEmail = realOrg ? "real@wexon.dev" : customerUser?.email ?? "demo@wexon.dev";
+    const customerOrgId = realUser?.memberships[0]?.organizationId ?? realOrg?.id ?? demoOrg?.id ?? null;
+    const customerEmail = realUser?.email ?? (realOrg ? "real@wexon.dev" : "demo@wexon.dev");
     const licensedOrgId = realOrg?.id ?? customerOrgId;
 
     const fixtures = {
       dbAvailable: true,
       setupError: null,
       adminEmail: (process.env.ADMIN_EMAILS ?? "").split(",")[0]?.trim() || null,
-      customerEmail: customerUser?.email ?? "demo@wexon.dev",
+      customerEmail,
       customerOrgId,
-      licensedCustomerEmail,
+      licensedCustomerEmail: "real@wexon.dev",
       licensedOrgId,
       realOrgId: realOrg?.id ?? null,
       demoOrgId: demoOrg?.id ?? null,

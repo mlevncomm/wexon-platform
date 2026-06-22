@@ -31,7 +31,7 @@ Bu dosya iki ayrimi net tutar:
 - Seed edilen stok demo data gercek WexPay app'in kendisi degildir.
 - Gercek WexPay app `/api/wexpay/demo/*` endpoint'lerini kullanmaz.
 - Gercek WexPay app `Organization.isDemo = false` olan musteri tenant'lari icin tasarlanir.
-- Gercek WexPay app testi icin `npm.cmd run prisma:seed:real` ile bos bir `isDemo=false` tenant olusturulabilir.
+- Gercek WexPay app testi icin `npm.cmd run prisma:seed:real` ile `isDemo=false` tenant olusturulabilir (restoran, masa, QR menu + inactive license fixture dahil).
 - Sabit demo restaurant/branch slug'lari gercek app icine tasinmaz.
 - Her WexPay server action/API once Core karar katmanindan gecmeli.
 - Session tabanli isteklerde organization/tenant session'dan cozulmeli.
@@ -64,6 +64,10 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 | `API_KEY_HASH_SECRET` | Evet | API key hashleme icin HMAC secret/pepper. |
 | `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` | Sanal POS baglantisi kullanilacaksa | Organization sanal POS API bilgilerinin sifrelenmesi (AES-256-GCM). Manuel tahsilat icin zorunlu degil. |
 | `NEXT_PUBLIC_APP_URL` | Evet | Public canonical app URL (redirect/link uretimi). |
+
+**Local / smoke (opsiyonel):** `.env.example` dosyasina bakin — `SMOKE_PORT`, `SMOKE_BASE_URL`, `SMOKE_CUSTOMER_PASSWORD`, `SMOKE_SKIP_WEB_SERVER`, `SMOKE_REUSE_SERVER`.
+
+**Smoke oncesi seed:** `npm.cmd run prisma:seed` (demo) + `npm.cmd run prisma:seed:real` (real tenant + QR `WEXPAY-real-test-MASA-01`). Sonra `npm.cmd run test:smoke:build`.
 
 **Deploy oncesi kontrol:**
 

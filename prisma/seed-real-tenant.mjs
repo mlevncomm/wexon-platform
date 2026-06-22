@@ -17,6 +17,39 @@ const REAL_TENANT = {
   userPassword: "Wexon-Customer-2026",
 };
 
+const INACTIVE_TENANT = {
+  organizationName: "WexPay Inactive License Test",
+  organizationSlug: "wexpay-inactive-test",
+  organizationEmail: "inactive@wexon.dev",
+};
+
+/** Deterministic smoke / public QR fixture (non-demo org). */
+const REAL_OPS = {
+  restaurantSlug: "wexpay-real-restaurant",
+  restaurantName: "WexPay Real Test Restaurant",
+  branchSlug: "merkez-sube",
+  branchName: "Merkez Şube",
+  tableLabel: "Masa 01",
+  qrCode: "WEXPAY-real-test-MASA-01",
+  categoryName: "Ana Yemekler",
+  products: [
+    {
+      idSuffix: "mercimek-corbasi",
+      name: "Mercimek Corbasi",
+      description: "Gunluk hazirlanan sicak mercimek corbasi.",
+      price: "120.00",
+      isPopular: true,
+    },
+    {
+      idSuffix: "izgara-tavuk",
+      name: "Izgara Tavuk",
+      description: "Mevsim garnituru ile servis edilir.",
+      price: "390.00",
+      isPopular: true,
+    },
+  ],
+};
+
 const wexPayEntitlements = {
   branch_limit: 2,
   table_limit: 75,
@@ -110,6 +143,158 @@ async function ensureWexPayPlan() {
   }
 
   return { product, plan };
+}
+
+async function seedRealWexPayOperations(organization) {
+  const restaurant = await prisma.restaurant.upsert({
+    where: { slug: REAL_OPS.restaurantSlug },
+    update: {
+      organizationId: organization.id,
+      name: REAL_OPS.restaurantName,
+      isActive: true,
+    },
+    create: {
+      organizationId: organization.id,
+      name: REAL_OPS.restaurantName,
+      slug: REAL_OPS.restaurantSlug,
+      isActive: true,
+    },
+  });
+
+  const branch = await prisma.branch.upsert({
+    where: {
+      restaurantId_slug: {
+        restaurantId: restaurant.id,
+        slug: REAL_OPS.branchSlug,
+      },
+    },
+    update: {
+      name: REAL_OPS.branchName,
+      isActive: true,
+    },
+    create: {
+      restaurantId: restaurant.id,
+      name: REAL_OPS.branchName,
+      slug: REAL_OPS.branchSlug,
+      isActive: true,
+    },
+  });
+
+  await prisma.restaurantTable.upsert({
+    where: {
+      branchId_label: {
+        branchId: branch.id,
+        label: REAL_OPS.tableLabel,
+      },
+    },
+    update: {
+      qrCode: REAL_OPS.qrCode,
+      isActive: true,
+      seats: 4,
+    },
+    create: {
+      branchId: branch.id,
+      label: REAL_OPS.tableLabel,
+      seats: 4,
+      qrCode: REAL_OPS.qrCode,
+      isActive: true,
+    },
+  });
+
+  const category = await prisma.menuCategory.upsert({
+    where: {
+      branchId_name: {
+        branchId: branch.id,
+        name: REAL_OPS.categoryName,
+      },
+    },
+    update: { sortOrder: 0, isActive: true },
+    create: {
+      branchId: branch.id,
+      name: REAL_OPS.categoryName,
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+
+  for (const [index, product] of REAL_OPS.products.entries()) {
+    const productId = `${branch.id}-${product.idSuffix}`;
+    await prisma.menuProduct.upsert({
+      where: { id: productId },
+      update: {
+        categoryId: category.id,
+        description: product.description,
+        price: product.price,
+        isActive: true,
+        inStock: true,
+        isPopular: product.isPopular,
+        sortOrder: index,
+      },
+      create: {
+        id: productId,
+        branchId: branch.id,
+        categoryId: category.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        currency: "TRY",
+        isActive: true,
+        inStock: true,
+        isPopular: product.isPopular,
+        sortOrder: index,
+      },
+    });
+  }
+
+  return { restaurant, branch, qrCode: REAL_OPS.qrCode };
+}
+
+async function seedInactiveWexPayTenant(product) {
+  const organization = await prisma.organization.upsert({
+    where: { slug: INACTIVE_TENANT.organizationSlug },
+    update: {
+      name: INACTIVE_TENANT.organizationName,
+      email: INACTIVE_TENANT.organizationEmail,
+      country: "TR",
+      isDemo: false,
+      isActive: true,
+    },
+    create: {
+      name: INACTIVE_TENANT.organizationName,
+      slug: INACTIVE_TENANT.organizationSlug,
+      email: INACTIVE_TENANT.organizationEmail,
+      country: "TR",
+      isDemo: false,
+      isActive: true,
+    },
+  });
+
+  await prisma.appInstallation.upsert({
+    where: {
+      organizationId_productId: {
+        organizationId: organization.id,
+        productId: product.id,
+      },
+    },
+    update: {
+      status: "DISABLED",
+      settingsJson: {
+        environment: "inactive_test",
+        onboardingStatus: "READY",
+      },
+    },
+    create: {
+      organizationId: organization.id,
+      productId: product.id,
+      status: "DISABLED",
+      settingsJson: {
+        environment: "inactive_test",
+        onboardingStatus: "READY",
+      },
+    },
+  });
+
+  return organization;
 }
 
 async function main() {
@@ -322,6 +507,9 @@ async function main() {
     },
   });
 
+  const ops = await seedRealWexPayOperations(organization);
+  const inactiveOrg = await seedInactiveWexPayTenant(product);
+
   console.log(
     JSON.stringify(
       {
@@ -332,6 +520,10 @@ async function main() {
         user: {
           email: user.email,
           password: REAL_TENANT.userPassword,
+        },
+        smoke: {
+          qrCode: ops.qrCode,
+          inactiveWexPayOrgSlug: inactiveOrg.slug,
         },
       },
       null,

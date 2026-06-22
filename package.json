@@ -10,6 +10,7 @@
     "playwright:install": "playwright install chromium",
     "test:smoke": "playwright test",
     "test:smoke:build": "npm run build && playwright test",
+    "test:smoke:ci": "npm run build && playwright test",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
