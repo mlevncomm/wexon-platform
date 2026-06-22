@@ -28,6 +28,7 @@ export const RATE_LIMITS = {
   customerLoginIp: { limit: 15, windowMs: 15 * 60 * 1000 },
   customerLoginEmail: { limit: 8, windowMs: 15 * 60 * 1000 },
   publicQrOrder: { limit: 30, windowMs: 60 * 1000 },
+  publicQrCheckout: { limit: 20, windowMs: 60 * 1000 },
   wexpayApi: { limit: 120, windowMs: 60 * 1000 },
 } as const satisfies Record<string, RateLimitConfig>;
 

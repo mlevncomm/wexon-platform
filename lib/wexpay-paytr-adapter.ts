@@ -223,7 +223,10 @@ async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): 
 
   const paymentAmountKurus = validatePaytrCheckoutAmount(context.amount, context.currency);
   const merchantOid = context.existingProviderRef?.trim() || generatePaytrMerchantOid();
-  const urls = buildPaytrCheckoutUrls();
+  const baseUrls = buildPaytrCheckoutUrls();
+  const urls = context.checkoutRedirect
+    ? { ...baseUrls, successUrl: context.checkoutRedirect.successUrl, failUrl: context.checkoutRedirect.failUrl }
+    : baseUrls;
   const enableApi = process.env.WEXPAY_PAYTR_ENABLE_API === "true";
   if (!enableApi) {
     throw new WexPayPaymentProviderError(

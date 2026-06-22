@@ -47,6 +47,8 @@ export type WexPayPaymentCheckoutContext = {
   clientIp?: string | null;
   /** Reuse existing PayTR merchant_oid when regenerating checkout. */
   existingProviderRef?: string | null;
+  /** Optional PayTR redirect URLs (public QR checkout). */
+  checkoutRedirect?: { successUrl: string; failUrl: string };
 };
 
 export type WexPayPaymentIntentResult = {
