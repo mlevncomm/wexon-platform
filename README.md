@@ -96,7 +96,22 @@ npm run test:smoke:build
 
 Kisa yol (migrate sonrasi seed + testler): `npm run staging:validate`
 
-Sanal POS acilacaksa ayrica: `npm run production:check:psp`
+Sanal POS acilacaksa ayrica: `npm run production:check:psp` (PayTR/PSP acilmayacaksa zorunlu degil).
+
+**Env kaynagi:**
+
+- Local/staging preflight: `.env` + `.env.local` veya shell env gerekir. `production:check` bu dosyalari okur; host uzerindeki `process.env` her zaman onceliklidir.
+- Production deploy: env degiskenleri Vercel (veya kullanilan host) dashboard / env provider uzerinden gelmelidir; secret degerler loglanmaz.
+
+**DB troubleshooting (staging:validate / seed:real):**
+
+Staging validation DB erisimi olmadan full pass sayilmaz. `ENOTFOUND` veya connection hatasi gorurseniz:
+
+- Supabase project aktif ve paused degil mi?
+- `DIRECT_URL` dogru mu? (migrate/seed icin direct connection)
+- `DATABASE_URL` dogru mu? (runtime pooler)
+- Pooler vs direct host uyumlu mu? (Session pooler port 6543, direct 5432)
+- DNS / network / VPN erisimi var mi?
 
 **Local development** (`migrate dev`):
 
