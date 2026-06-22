@@ -956,6 +956,7 @@ export async function createPayment(
       orderId: input.orderId,
       amount: input.amount,
       currency: "TRY",
+      clientIp: context.ipAddress,
     });
 
     if (intent.requiresExternalCheckout && !intent.externalCheckoutUrl) {
@@ -1094,6 +1095,55 @@ export async function settlePaymentFromProviderWebhook(
   return { payment: updated, skipped: false as const };
 }
 
+export async function regeneratePaytrCheckout(
+  context: WexPayMutationContext,
+  input: { paymentId: string },
+): Promise<{ paymentId: string; externalCheckoutUrl: string; providerRef: string }> {
+  assertManage(context);
+
+  const existing = await assertPaymentInOrg(prisma, context.organizationId, input.paymentId);
+  if (existing.provider !== "paytr" || existing.status !== PaymentStatus.PENDING) {
+    throw new WexPayValidationError("Yalnızca bekleyen PayTR ödemeleri için checkout yenilenebilir.");
+  }
+  if (!existing.providerRef) {
+    throw new WexPayValidationError("PayTR referansı bulunamadı.");
+  }
+
+  const { adapter } = await resolveWexPayPaymentProvider("paytr");
+  const intent = await adapter.createPaymentIntent({
+    organizationId: context.organizationId,
+    branchId: existing.branchId,
+    tableId: existing.tableId,
+    orderId: existing.orderId,
+    amount: Number(existing.amount),
+    currency: "TRY",
+    clientIp: context.ipAddress,
+    existingProviderRef: existing.providerRef,
+  });
+
+  if (!intent.externalCheckoutUrl) {
+    throw new WexPayValidationError("PayTR ödeme oturumu oluşturulamadı.");
+  }
+
+  await writeAuditLog({
+    action: "wexpay.payment.paytr_checkout_regenerated",
+    organizationId: context.organizationId,
+    entityType: "Payment",
+    entityId: existing.id,
+    ipAddress: context.ipAddress ?? null,
+    source: "wexpay_ui",
+    metadata: {
+      providerRef: existing.providerRef,
+    },
+  });
+
+  return {
+    paymentId: existing.id,
+    externalCheckoutUrl: intent.externalCheckoutUrl,
+    providerRef: existing.providerRef,
+  };
+}
+
 export async function updatePayment(
   context: WexPayMutationContext,
   input: { paymentId: string; status: PaymentStatus },
@@ -1102,6 +1152,17 @@ export async function updatePayment(
 
   return runInTransaction(async (tx) => {
     const existing = await assertPaymentInOrg(tx, context.organizationId, input.paymentId);
+
+    if (
+      existing.provider === "paytr" &&
+      existing.status === PaymentStatus.PENDING &&
+      input.status !== PaymentStatus.FAILED
+    ) {
+      throw new WexPayValidationError(
+        "Bekleyen PayTR ödemesi yalnızca başarısız olarak işaretlenebilir veya webhook ile tamamlanır.",
+      );
+    }
+
     const isPaidLike = input.status === PaymentStatus.PAID || input.status === PaymentStatus.PARTIAL;
     const wasPaidLike = existing.status === PaymentStatus.PAID || existing.status === PaymentStatus.PARTIAL;
 
@@ -1139,7 +1200,10 @@ export async function updatePayment(
     });
 
     await writeWexPayAudit(tx, context, {
-      action: "wexpay.payment.updated",
+      action:
+        existing.provider === "paytr" && input.status === PaymentStatus.FAILED
+          ? "wexpay.payment.operator_failed"
+          : "wexpay.payment.updated",
       entityType: "Payment",
       entityId: payment.id,
       metadata: { before: existing.status, after: input.status, tableId: existing.tableId, remainingAmount: account.remainingAmount },

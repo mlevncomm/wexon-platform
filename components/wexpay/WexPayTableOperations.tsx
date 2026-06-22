@@ -5,6 +5,7 @@ import { closeTableAction, markReceiptPrintedAction, updateOrderStatusAction } f
 import type { OperationsTable } from "@/lib/wexpay-read";
 import { formatWexPayPaymentProvider, isPaytrPendingPayment } from "@/lib/wexpay-payment-display";
 import { WexPayPaytrPendingNotice } from "@/components/wexpay/WexPayPaytrCheckoutNotice";
+import { WexPayPaytrPendingActions } from "@/components/wexpay/WexPayPaytrPendingActions";
 import { WexPayTablePaymentForm } from "@/components/wexpay/WexPayTablePaymentForm";
 import {
   DemoPrimaryButton,
@@ -335,7 +336,14 @@ function TableDetailPanel({
 
       {pendingPaytrPayments.length > 0 ? (
         <div className="border-b border-amber-100 bg-amber-50/80 px-4 py-4 sm:px-6">
-          <WexPayPaytrPendingNotice providerRef={pendingPaytrPayments[0]?.providerRef} />
+          <WexPayPaytrPendingNotice
+            providerRef={pendingPaytrPayments[0]?.providerRef}
+            actions={
+              canManage && pendingPaytrPayments[0] ? (
+                <WexPayPaytrPendingActions paymentId={pendingPaytrPayments[0].id} redirectTo={redirectTo} />
+              ) : null
+            }
+          />
         </div>
       ) : null}
 

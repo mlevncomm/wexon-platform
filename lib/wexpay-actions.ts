@@ -13,6 +13,7 @@ import {
   createRestaurant,
   createTable,
   markReceiptPrinted,
+  regeneratePaytrCheckout,
   updateBranch,
   updateCategory,
   updateOrderStatus,
@@ -389,6 +390,29 @@ export async function createPaymentAction(formData: FormData) {
         `${redirectTo}${separator}paytrCheckout=${encodeURIComponent(result.externalCheckoutUrl)}&paymentId=${encodeURIComponent(result.payment.id)}`,
       );
     }
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function regeneratePaytrCheckoutAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, PAYMENTS_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const paymentId = formData.get("paymentId");
+    if (typeof paymentId !== "string" || !paymentId.trim()) {
+      throw new WexPayValidationError("Ödeme zorunludur.");
+    }
+    context = await getManageContext();
+    const result = await regeneratePaytrCheckout(context, { paymentId: paymentId.trim() });
+    revalidatePath(PAYMENTS_PATH);
+    revalidatePath(TABLES_PATH);
+    const separator = redirectTo.includes("?") ? "&" : "?";
+    redirect(
+      `${redirectTo}${separator}paytrCheckout=${encodeURIComponent(result.externalCheckoutUrl)}&paymentId=${encodeURIComponent(result.paymentId)}`,
+    );
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(redirectTo, error, context);

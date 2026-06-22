@@ -165,6 +165,56 @@ export function mapPaytrCallbackStatus(status: string): PaymentStatus {
   return status.trim().toLowerCase() === "success" ? PaymentStatus.PAID : PaymentStatus.FAILED;
 }
 
+export function resolvePaytrClientIp(rawIp?: string | null): string {
+  const candidate = rawIp?.trim();
+  if (candidate) {
+    const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+    const ipv6 = /^[0-9a-f:]+$/i;
+    if (ipv4.test(candidate) || ipv6.test(candidate)) {
+      return candidate;
+    }
+  }
+  return "1.1.1.1";
+}
+
+export function paytrPaymentAmountKurus(amount: number): number {
+  return Math.round(Number(amount) * 100);
+}
+
+export function verifyPaytrCallbackAmount(paymentAmount: number, totalAmountKurusRaw: string): boolean {
+  const callbackKurus = Number(totalAmountKurusRaw);
+  if (!Number.isFinite(callbackKurus)) return false;
+  return paytrPaymentAmountKurus(paymentAmount) === callbackKurus;
+}
+
+async function requestPaytrCheckoutToken(input: {
+  credentials: PaytrCredentialBundle;
+  context: WexPayPaymentCheckoutContext;
+  merchantOid: string;
+  paymentAmountKurus: number;
+  userIp: string;
+  urls: ReturnType<typeof buildPaytrCheckoutUrls>;
+}) {
+  const tokenPayload = buildPaytrGetTokenPayload({
+    credentials: input.credentials,
+    context: input.context,
+    merchantOid: input.merchantOid,
+    paymentAmountKurus: input.paymentAmountKurus,
+    userIp: input.userIp,
+    urls: input.urls,
+  });
+  const response = await fetch(PAYTR_GET_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(tokenPayload),
+  });
+  const body = (await response.json()) as { status?: string; token?: string; reason?: string };
+  if (body.status !== "success" || !body.token) {
+    throw new WexPayPaymentProviderError(body.reason ?? "PayTR token isteği başarısız.");
+  }
+  return { externalCheckoutUrl: `${PAYTR_IFRAME_BASE}${body.token}`, iframeToken: body.token };
+}
+
 async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): Promise<WexPayPaymentIntentResult> {
   const credentials = await loadPaytrCredentialBundle(context.organizationId);
   if (!credentials) {
@@ -172,7 +222,7 @@ async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): 
   }
 
   const paymentAmountKurus = validatePaytrCheckoutAmount(context.amount, context.currency);
-  const merchantOid = generatePaytrMerchantOid();
+  const merchantOid = context.existingProviderRef?.trim() || generatePaytrMerchantOid();
   const urls = buildPaytrCheckoutUrls();
   const enableApi = process.env.WEXPAY_PAYTR_ENABLE_API === "true";
   if (!enableApi) {
@@ -181,30 +231,15 @@ async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): 
     );
   }
 
-  let externalCheckoutUrl: string | null = null;
-  let iframeToken: string | null = null;
-
-  {
-    const tokenPayload = buildPaytrGetTokenPayload({
-      credentials,
-      context,
-      merchantOid,
-      paymentAmountKurus,
-      userIp: "127.0.0.1",
-      urls,
-    });
-    const response = await fetch(PAYTR_GET_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(tokenPayload),
-    });
-    const body = (await response.json()) as { status?: string; token?: string; reason?: string };
-    if (body.status !== "success" || !body.token) {
-      throw new WexPayPaymentProviderError(body.reason ?? "PayTR token isteği başarısız.");
-    }
-    iframeToken = body.token;
-    externalCheckoutUrl = `${PAYTR_IFRAME_BASE}${body.token}`;
-  }
+  const userIp = resolvePaytrClientIp(context.clientIp);
+  const { externalCheckoutUrl, iframeToken } = await requestPaytrCheckoutToken({
+    credentials,
+    context,
+    merchantOid,
+    paymentAmountKurus,
+    userIp,
+    urls,
+  });
 
   if (!externalCheckoutUrl) {
     throw new WexPayPaymentProviderError("PayTR ödeme oturumu oluşturulamadı. Lütfen tekrar deneyin.");

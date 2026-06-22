@@ -121,10 +121,15 @@ Redirect URL'ler (bilgi amacli):
 2. `receiveWexPayWebhookEvent` — `providerEventId = merchant_oid:status:total_amount`.
 3. Duplicate event → Payment ikinci kez mutate edilmez; PayTR'ye `OK` donulur.
 4. Signature: `base64(hmac_sha256(merchant_oid + merchant_salt + status + total_amount, merchant_key))` — hash eslesmezse `401`, ledger `FAILED`.
-5. Signature sonrasi `markWexPayWebhookEventVerified`.
-6. `Payment` `providerRef=merchant_oid` ile bulunur; tenant organization zinciri dogrulanir.
-7. `success` → `Payment` `PAID`; `failed` → `FAILED`; `paidAt` + `syncTableStatus` + audit `wexpay.payment.provider_settled`.
-8. Zaten terminal Payment → ignore + `OK`.
+5. `total_amount` (kuruş) DB `Payment.amount` ile eslesmezse mutate edilmez; ledger `FAILED`, audit `wexpay.webhook.paytr.amount_mismatch`.
+6. Signature sonrasi `markWexPayWebhookEventVerified`.
+7. `Payment` `providerRef=merchant_oid` ile bulunur; tenant organization zinciri dogrulanir.
+8. `success` → `Payment` `PAID`; `failed` → `FAILED`; `paidAt` + `syncTableStatus` + audit `wexpay.payment.provider_settled`.
+9. Zaten terminal Payment → ignore + `OK`.
+
+**PayTR token (`user_ip`):** Operator action request IP'si adapter'a aktarilir; gecersizse guvenli fallback kullanilir (127.0.0.1 kullanilmaz).
+
+**Bekleyen PayTR UI:** `merchant_oid` gosterimi, checkout yenileme (`regeneratePaytrCheckoutAction`), operator basarisiz isaretleme (yalnizca `FAILED`).
 
 Audit: `wexpay.webhook.paytr.processed`, `wexpay.payment.provider_settled`.
 

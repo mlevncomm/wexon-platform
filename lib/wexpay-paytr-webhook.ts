@@ -15,6 +15,7 @@ import {
   mapPaytrCallbackStatus,
   parsePaytrCallbackFields,
   paytrWebhookEventId,
+  verifyPaytrCallbackAmount,
   verifyPaytrCallbackHash,
 } from "@/lib/wexpay-paytr-adapter";
 import { settlePaymentFromProviderWebhook } from "@/lib/wexpay-service";
@@ -87,6 +88,25 @@ export async function processPaytrWebhookRequest(request: Request): Promise<Payt
   }
 
   await markWexPayWebhookEventVerified(received.event.id, { ipAddress, organizationId });
+
+  if (!verifyPaytrCallbackAmount(Number(payment.amount), fields.totalAmount)) {
+    await markWexPayWebhookEventFailed(received.event.id, "amount_mismatch", { ipAddress, organizationId });
+    await writeAuditLog({
+      action: "wexpay.webhook.paytr.amount_mismatch",
+      organizationId,
+      entityType: "Payment",
+      entityId: payment.id,
+      ipAddress,
+      source: "wexpay_webhook",
+      metadata: {
+        providerEventId,
+        providerRef: fields.merchantOid,
+        expectedKurus: Math.round(Number(payment.amount) * 100),
+        receivedTotalAmount: fields.totalAmount,
+      },
+    });
+    return { ok: false, status: 400, body: "amount_mismatch" };
+  }
 
   const targetStatus = mapPaytrCallbackStatus(fields.status);
   const terminalStatuses: PaymentStatus[] = [PaymentStatus.PAID, PaymentStatus.FAILED, PaymentStatus.REFUNDED];

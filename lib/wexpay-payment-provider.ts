@@ -43,6 +43,10 @@ export type WexPayPaymentCheckoutContext = {
   currency: string;
   /** Reserved for PSP idempotency keys — see docs/wexpay-payment-provider-adapters.md */
   idempotencyKey?: string;
+  /** Payer IP for PSP token requests (PayTR user_ip). */
+  clientIp?: string | null;
+  /** Reuse existing PayTR merchant_oid when regenerating checkout. */
+  existingProviderRef?: string | null;
 };
 
 export type WexPayPaymentIntentResult = {

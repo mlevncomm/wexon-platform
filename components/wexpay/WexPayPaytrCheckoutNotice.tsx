@@ -43,7 +43,13 @@ export function WexPayPaytrCheckoutNotice({
   );
 }
 
-export function WexPayPaytrPendingNotice({ providerRef }: { providerRef?: string | null }) {
+export function WexPayPaytrPendingNotice({
+  providerRef,
+  actions,
+}: {
+  providerRef?: string | null;
+  actions?: React.ReactNode;
+}) {
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 ring-1 ring-amber-100">
       <p className="text-xs font-black text-amber-900">PayTR ödeme bekleniyor</p>
@@ -54,6 +60,7 @@ export function WexPayPaytrPendingNotice({ providerRef }: { providerRef?: string
       {providerRef ? (
         <p className="mt-2 font-mono text-[10px] font-semibold text-amber-900/80">merchant_oid: {providerRef}</p>
       ) : null}
+      {actions}
     </div>
   );
 }
