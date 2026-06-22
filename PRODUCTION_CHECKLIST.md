@@ -69,11 +69,20 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 **Smoke oncesi seed:** `npm.cmd run prisma:seed` (demo) + `npm.cmd run prisma:seed:real` (real tenant + QR `WEXPAY-real-test-MASA-01`). Sonra `npm.cmd run test:smoke:build`.
 
-**Production env script:** `npm.cmd run production:check` (zorunlu degiskenler). Sanal POS icin: `npm.cmd run production:check:psp`.
+**Production env script:** `npm.cmd run production:check` (zorunlu degiskenler; local icin `.env` + `.env.local` okur, host `process.env` oncelikli). Sanal POS **acilacaksa**: `npm.cmd run production:check:psp` (PayTR/PSP acilmayacaksa zorunlu degil).
+
+**Local/staging preflight:** `.env.local` veya shell env gerekir. Production host uzerinde env Vercel dashboard / env provider'dan gelmelidir.
 
 **Migration preflight (seed/smoke calistirmaz):** `npm.cmd run production:preflight` — env check + `db:check:payment-provider-ref` + `prisma:migrate:deploy`.
 
-**Staging validation (migrate sonrasi):** `npm.cmd run staging:validate` — `prisma:seed:real` + `test:unit` + `test:smoke:build`.
+**Staging validation (migrate sonrasi):** `npm.cmd run staging:validate` — `prisma:seed:real` + `test:unit` + `test:smoke:build`. **DB erisimi olmadan full pass sayilmaz.**
+
+**DB troubleshooting (`ENOTFOUND`, connection refused):**
+
+- Supabase project aktif mi?
+- `DIRECT_URL` ve `DATABASE_URL` dogru mu?
+- Pooler (6543) vs direct (5432) host uyumu
+- DNS / network / VPN
 
 **Unit tests:** `npm.cmd run test:unit` (PayTR hash/amount + public checkout amount; webhook integration requires DB).
 
@@ -87,7 +96,8 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 - [ ] `npm run db:check:payment-provider-ref` exit 0 (duplicate providerRef yok).
 - [ ] `npm run production:preflight` exit 0 (env + duplicate check + migrate deploy; seed/smoke icermez).
 - [ ] `npm run prisma:generate` basarili (migrate deploy sonrasi).
-- [ ] `npm run staging:validate` exit 0 (seed:real + unit + smoke:build; staging DB gerekir).
+- [ ] `npm run staging:validate` exit 0 (seed:real + unit + smoke:build; staging DB gerekir — DB yoksa skip, sahte pass yok).
+- [ ] `npm run production:check:psp` exit 0 **yalnizca** PayTR/sanal POS acilacaksa.
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
 
@@ -143,6 +153,11 @@ Kisa yol (adim 2 icin migrate sonrasi): `npm run staging:validate`
 - `npm run db:check:payment-provider-ref` — `prisma:preflight:provider-ref` ile ayni script.
 - `npm run prisma:migrate:deploy` — staging/production icin; asla `migrate dev` kullanmayin.
 - Migration `20260609120000_payment_provider_ref_unique` oncesi duplicate check zorunlu.
+
+**DB troubleshooting (staging validation):**
+
+- `staging:validate` DB erisimi olmadan full pass sayilmaz.
+- `ENOTFOUND` / connection refused: Supabase project aktif mi, `DIRECT_URL`/`DATABASE_URL` dogru mu, pooler vs direct host, DNS/network kontrol edin.
 
 - Production products/plans seed dogrulamasi.
 - WexPay plans ve entitlements dogrulamasi.
