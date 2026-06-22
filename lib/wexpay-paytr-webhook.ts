@@ -1,6 +1,7 @@
 import { PaymentStatus, WexPayProviderCredentialMode } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getRequestIpAddress, writeAuditLog } from "@/lib/wexon-audit";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import {
   attachOrganizationToWexPayWebhookEvent,
   markWexPayWebhookEventFailed,
@@ -45,8 +46,13 @@ async function verifyPaytrSignatureForOrganization(
 }
 
 export async function processPaytrWebhookRequest(request: Request): Promise<PaytrWebhookProcessResult> {
+  const ipAddress = getRequestIpAddress(request) ?? "unknown";
+  const rateLimit = enforceRateLimit("wexpay.webhook.paytr", ipAddress, RATE_LIMITS.paytrWebhook);
+  if (!rateLimit.ok) {
+    return { ok: false, status: 429, body: "rate_limited" };
+  }
+
   const rawBody = await request.text();
-  const ipAddress = getRequestIpAddress(request);
   const fields = parsePaytrCallbackFields(rawBody);
   if (!fields) {
     return { ok: false, status: 400, body: "invalid_payload" };

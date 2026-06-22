@@ -110,12 +110,18 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 ### Security
 
 - HTTPS ve secure cookie zorunlulugu.
-- Admin/customer login rate limiting.
+- Admin/customer login rate limiting (`lib/wexon-rate-limit.ts` — IP + e-posta bucket'lari).
+- PayTR inbound webhook rate limiting (`paytrWebhook` bucket, IP bazli; cok instance icin Redis notu).
+- Public QR order/checkout rate limiting (`publicQrOrder`, `publicQrCheckout`).
+- WexPay API rate limiting (`wexpayApi` bucket).
 - Brute-force protection.
 - Password reset flow.
-- Session hardening.
+- Session hardening (`secure` production cookie, `sameSite`, TTL dokumantasyonu).
+- Webhook amount validation (PayTR `total_amount` vs `Payment.amount`).
+- Error message sanitization (public/API/webhook route'lari; secret/plaintext log yok).
 - Monitoring ve structured logging.
 - Error reporting.
+- **Cok instance deploy:** In-memory rate limit store process-bazlidir; production'da Redis/Upstash ile degistirin.
 
 ### Billing And Webhooks
 

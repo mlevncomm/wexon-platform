@@ -29,6 +29,7 @@ export default async function WexPayOperationsPage({ searchParams }: { searchPar
     <WexPayOperationsBoard
       overview={overview}
       branchId={activeBranch.id}
+      organizationId={access.organization.id}
       packageInfo={{
         planName: access.license.plan.name,
         licenseStatus: formatCoreStatus(access.license.status),

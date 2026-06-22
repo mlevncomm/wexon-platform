@@ -2,6 +2,9 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 import { WexPayProviderCredentialMode } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
+import { assertPaytrCredentialReady } from "@/lib/wexpay-paytr-adapter";
+import { mapIyzicoCredentialConfig } from "@/lib/wexpay-iyzico-adapter";
+import { mapParamCredentialConfig } from "@/lib/wexpay-param-adapter";
 
 export const WEXPAY_PSP_PROVIDER_KEYS = ["paytr", "iyzico", "param"] as const;
 
@@ -355,6 +358,89 @@ export async function upsertWexPayProviderCredential(
   });
 
   return toSummary(record);
+}
+
+export type ProviderCredentialTestResult = {
+  ok: boolean;
+  message: string;
+  details: string[];
+};
+
+export async function testProviderCredential(
+  context: CredentialAuditContext,
+  input: { credentialId: string },
+): Promise<ProviderCredentialTestResult> {
+  if (!isProviderCredentialEncryptionAvailable()) {
+    throw new WexPayProviderCredentialStorageError(
+      "PSP credential testi için WEXPAY_CREDENTIAL_ENCRYPTION_KEY tanımlı olmalıdır.",
+    );
+  }
+
+  const record = await prisma.wexPayProviderCredential.findFirst({
+    where: { id: input.credentialId, organizationId: context.organizationId },
+  });
+  if (!record) {
+    throw new WexPayProviderCredentialStorageError("Provider credential bulunamadı.");
+  }
+  if (!isPspProviderKey(record.provider)) {
+    throw new WexPayProviderCredentialStorageError("Desteklenmeyen sağlayıcı.");
+  }
+
+  const config = decryptProviderConfig(record.configCiphertext);
+  let result: ProviderCredentialTestResult;
+
+  if (record.provider === "paytr") {
+    const readiness = assertPaytrCredentialReady(config, record.mode);
+    result = {
+      ok: readiness.ready,
+      message: readiness.ready
+        ? "PayTR yapılandırması yerel doğrulamadan geçti."
+        : "PayTR yapılandırması eksik veya geçersiz.",
+      details: readiness.messages,
+    };
+  } else if (record.provider === "iyzico") {
+    const mapped = mapIyzicoCredentialConfig(config);
+    result = {
+      ok: Boolean(mapped),
+      message: mapped
+        ? "iyzico yapılandırması yerel doğrulamadan geçti (canlı API henüz yok)."
+        : "iyzico API key ve secret key zorunludur.",
+      details: mapped ? ["Canlı iyzico checkout henüz aktif değil."] : [],
+    };
+  } else if (record.provider === "param") {
+    const mapped = mapParamCredentialConfig(config);
+    result = {
+      ok: Boolean(mapped),
+      message: mapped
+        ? "Param yapılandırması yerel doğrulamadan geçti (canlı API henüz yok)."
+        : "Param client code, kullanıcı adı ve şifre zorunludur.",
+      details: mapped ? ["Canlı Param checkout henüz aktif değil."] : [],
+    };
+  } else {
+    result = {
+      ok: false,
+      message: "Desteklenmeyen sağlayıcı.",
+      details: [],
+    };
+  }
+
+  await writeAuditLog({
+    action: "wexpay.provider_credential.tested",
+    organizationId: context.organizationId,
+    userId: context.userId ?? null,
+    entityType: "WexPayProviderCredential",
+    entityId: record.id,
+    ipAddress: context.ipAddress ?? null,
+    source: "wexpay_app",
+    metadata: sanitizeProviderCredentialAuditMetadata({
+      provider: record.provider,
+      mode: record.mode,
+      ok: result.ok,
+      detailCount: result.details.length,
+    }),
+  });
+
+  return result;
 }
 
 export async function deactivateWexPayProviderCredential(

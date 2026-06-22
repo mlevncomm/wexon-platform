@@ -1,5 +1,6 @@
 import { PaymentStatus } from ".prisma/client";
-import { isProviderCredentialConfigured } from "@/lib/wexpay-provider-credentials";
+import { createIyzicoPaymentProviderAdapter } from "@/lib/wexpay-iyzico-adapter";
+import { createParamPaymentProviderAdapter } from "@/lib/wexpay-param-adapter";
 
 /**
  * Operational WexPay payment provider adapters (NOT Core BillingPayment).
@@ -149,30 +150,10 @@ const manualAdapter: WexPayPaymentProviderAdapter = {
   mapProviderStatus: mapCommonProviderStatus,
 };
 
-function createUnconfiguredAdapter(key: Exclude<WexPayPaymentProviderKey, "manual">): WexPayPaymentProviderAdapter {
-  const guardIntent = async (context: WexPayPaymentCheckoutContext) => {
-    await isProviderCredentialConfigured(context.organizationId, key);
-    throw new WexPayProviderNotConfiguredError(key);
-  };
-  const guardCallback = async (_payload: WexPayProviderCallbackPayload) => {
-    void _payload;
-    throw new WexPayProviderNotConfiguredError(key);
-  };
-  return {
-    key,
-    createPaymentIntent: guardIntent,
-    createCheckoutSession: guardIntent,
-    verifyCallback: guardCallback,
-    mapProviderStatus: () => {
-      throw new WexPayProviderNotConfiguredError(key);
-    },
-  };
-}
-
 const STATIC_ADAPTERS: Record<Exclude<WexPayPaymentProviderKey, "paytr">, WexPayPaymentProviderAdapter> = {
   manual: manualAdapter,
-  iyzico: createUnconfiguredAdapter("iyzico"),
-  param: createUnconfiguredAdapter("param"),
+  iyzico: createIyzicoPaymentProviderAdapter(),
+  param: createParamPaymentProviderAdapter(),
 };
 
 let paytrAdapterCache: Promise<WexPayPaymentProviderAdapter> | null = null;

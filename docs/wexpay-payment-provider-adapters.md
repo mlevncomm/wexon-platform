@@ -233,7 +233,7 @@ Before processing any inbound PSP webhook in production:
 1. [x] **PayTR foundation** — credential mapping, PENDING payment, webhook route, signature + idempotency.
 2. [x] **PayTR operator UX** — masa/odeme formlari, checkout banner, providerRef gorunumu.
 3. [x] **Public QR checkout route** — separate from order creation.
-4. **iyzico / Param adapters** — credential + webhook parity.
+4. **iyzico / Param adapters** — credential schema + stub adapters (`lib/wexpay-iyzico-adapter.ts`, `lib/wexpay-param-adapter.ts`); canlı API yok.
 
 ## Schema reference
 
