@@ -167,9 +167,13 @@ export function buildPaytrGetTokenPayload(input: {
   };
 }
 
-export function verifyPaytrCallbackHash(input: PaytrCallbackFields & { merchantKey: string; merchantSalt: string }) {
+export function buildPaytrCallbackHash(input: PaytrCallbackFields & { merchantKey: string; merchantSalt: string }) {
   const payload = `${input.merchantOid}${input.merchantSalt}${input.status}${input.totalAmount}`;
-  const expected = createHmac("sha256", input.merchantKey).update(payload).digest("base64");
+  return createHmac("sha256", input.merchantKey).update(payload).digest("base64");
+}
+
+export function verifyPaytrCallbackHash(input: PaytrCallbackFields & { merchantKey: string; merchantSalt: string }) {
+  const expected = buildPaytrCallbackHash(input);
   const left = Buffer.from(expected);
   const right = Buffer.from(input.hash);
   if (left.length !== right.length) return false;

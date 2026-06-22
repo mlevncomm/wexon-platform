@@ -23,6 +23,15 @@ const INACTIVE_TENANT = {
   organizationEmail: "inactive@wexon.dev",
 };
 
+const INACTIVE_OPS = {
+  restaurantSlug: "wexpay-inactive-restaurant",
+  restaurantName: "WexPay Inactive Test Restaurant",
+  branchSlug: "inactive-sube",
+  branchName: "Inactive Şube",
+  tableLabel: "Masa 01",
+  qrCode: "WEXPAY-inactive-test-MASA-01",
+};
+
 /** Deterministic smoke / public QR fixture (non-demo org). */
 const REAL_OPS = {
   restaurantSlug: "wexpay-real-restaurant",
@@ -294,7 +303,62 @@ async function seedInactiveWexPayTenant(product) {
     },
   });
 
-  return organization;
+  const restaurant = await prisma.restaurant.upsert({
+    where: { slug: INACTIVE_OPS.restaurantSlug },
+    update: {
+      organizationId: organization.id,
+      name: INACTIVE_OPS.restaurantName,
+      isActive: true,
+    },
+    create: {
+      organizationId: organization.id,
+      name: INACTIVE_OPS.restaurantName,
+      slug: INACTIVE_OPS.restaurantSlug,
+      isActive: true,
+    },
+  });
+
+  const branch = await prisma.branch.upsert({
+    where: {
+      restaurantId_slug: {
+        restaurantId: restaurant.id,
+        slug: INACTIVE_OPS.branchSlug,
+      },
+    },
+    update: {
+      name: INACTIVE_OPS.branchName,
+      isActive: true,
+    },
+    create: {
+      restaurantId: restaurant.id,
+      name: INACTIVE_OPS.branchName,
+      slug: INACTIVE_OPS.branchSlug,
+      isActive: true,
+    },
+  });
+
+  await prisma.restaurantTable.upsert({
+    where: {
+      branchId_label: {
+        branchId: branch.id,
+        label: INACTIVE_OPS.tableLabel,
+      },
+    },
+    update: {
+      qrCode: INACTIVE_OPS.qrCode,
+      isActive: true,
+      seats: 2,
+    },
+    create: {
+      branchId: branch.id,
+      label: INACTIVE_OPS.tableLabel,
+      seats: 2,
+      qrCode: INACTIVE_OPS.qrCode,
+      isActive: true,
+    },
+  });
+
+  return { ...organization, inactiveQrCode: INACTIVE_OPS.qrCode };
 }
 
 async function main() {
@@ -523,6 +587,7 @@ async function main() {
         },
         smoke: {
           qrCode: ops.qrCode,
+          inactiveQrCode: inactiveOrg.inactiveQrCode,
           inactiveWexPayOrgSlug: inactiveOrg.slug,
         },
       },

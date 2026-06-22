@@ -67,23 +67,115 @@ export function resolvePublicCheckoutAmount(input: {
   return Math.min(orderTotal, remaining);
 }
 
-export async function createPublicCheckoutPayment(input: {
+export type PublicCheckoutValidatedContext = {
+  tableId: string;
+  orderId: string | null;
+  amount: number;
+  remainingAmount: number;
+};
+
+/** Validates tenant table, order ownership, and server-side amount before PSP calls. */
+export async function validatePublicCheckoutContext(input: {
+  organizationId: string;
+  branchId: string;
+  tableId: string;
+  orderId?: string | null;
+}): Promise<PublicCheckoutValidatedContext> {
+  const table = await prisma.restaurantTable.findFirst({
+    where: {
+      id: input.tableId,
+      branchId: input.branchId,
+      isActive: true,
+      branch: { restaurant: { organizationId: input.organizationId } },
+    },
+  });
+  if (!table) throw new WexPayValidationError("Masa bulunamadı.");
+
+  const account = await getTableAccountSnapshot(prisma, table.id);
+  if (account.remainingAmount <= 0) {
+    throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
+  }
+
+  const orderId: string | null = input.orderId ?? null;
+  let amount = account.remainingAmount;
+
+  if (orderId) {
+    const order = await prisma.customerOrder.findFirst({
+      where: { id: orderId, branchId: input.branchId, tableId: table.id },
+    });
+    if (!order) throw new WexPayValidationError("Sipariş bulunamadı.");
+    amount = resolvePublicCheckoutAmount({
+      orderSubtotal: Number(order.subtotal),
+      remainingAmount: account.remainingAmount,
+    });
+  }
+
+  if (amount <= 0) {
+    throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
+  }
+
+  return {
+    tableId: table.id,
+    orderId,
+    amount,
+    remainingAmount: account.remainingAmount,
+  };
+}
+
+async function markStalePendingPaymentFailed(input: {
+  paymentId: string;
+  organizationId: string;
+  ipAddress: string | null;
+  reason: string;
+}) {
+  await prisma.payment.updateMany({
+    where: {
+      id: input.paymentId,
+      status: PaymentStatus.PENDING,
+      provider: "paytr",
+      branch: { restaurant: { organizationId: input.organizationId } },
+    },
+    data: { status: PaymentStatus.FAILED },
+  });
+
+  await writeAuditLog({
+    action: "wexpay.public.checkout.stale_pending_failed",
+    organizationId: input.organizationId,
+    entityType: "Payment",
+    entityId: input.paymentId,
+    ipAddress: input.ipAddress,
+    source: "wexpay_public",
+    metadata: { reason: input.reason },
+  });
+}
+
+function amountsMatch(a: number, b: number) {
+  return Math.abs(a - b) < 0.01;
+}
+
+export type PendingCheckoutReuseDecision = "reuse" | "invalidate_stale" | "create_new";
+
+/** Pure decision helper for pending PayTR checkout reuse (unit-tested). */
+export function resolvePendingCheckoutReuseDecision(input: {
+  hasPending: boolean;
+  pendingAmount: number;
+  validatedAmount: number;
+  remainingAmount: number;
+}): PendingCheckoutReuseDecision {
+  if (!input.hasPending) return "create_new";
+  if (input.remainingAmount <= 0 || input.validatedAmount <= 0) return "invalidate_stale";
+  if (!amountsMatch(input.pendingAmount, input.validatedAmount)) return "invalidate_stale";
+  return "reuse";
+}
+
+async function tryReusePendingPaytrCheckout(input: {
   organizationId: string;
   branchId: string;
   tableId: string;
   qrCode: string;
-  orderId?: string | null;
   ipAddress: string | null;
+  validated: PublicCheckoutValidatedContext;
 }) {
-  if (process.env.WEXPAY_PAYTR_ENABLE_API !== "true") {
-    throw new WexPayPublicCheckoutUnavailableError();
-  }
-
-  const credentials = await loadPaytrCredentialBundle(input.organizationId);
-  if (!credentials) {
-    throw new WexPayPublicCheckoutUnavailableError();
-  }
-
   const existingPending = await prisma.payment.findFirst({
     where: {
       tableId: input.tableId,
@@ -95,30 +187,82 @@ export async function createPublicCheckoutPayment(input: {
     orderBy: { createdAt: "desc" },
   });
 
-  if (existingPending?.providerRef) {
-    const { adapter } = await resolveWexPayPaymentProvider("paytr");
-    const intent = await adapter.createPaymentIntent({
-      organizationId: input.organizationId,
-      branchId: input.branchId,
-      tableId: input.tableId,
-      orderId: existingPending.orderId,
-      amount: Number(existingPending.amount),
-      currency: "TRY",
-      clientIp: input.ipAddress,
-      existingProviderRef: existingPending.providerRef,
-      checkoutRedirect: buildPublicCheckoutRedirectUrls(input.qrCode),
-    });
-    if (!intent.externalCheckoutUrl) {
-      throw new WexPayPublicCheckoutUnavailableError();
-    }
-    return {
+  if (!existingPending?.providerRef) return null;
+
+  const reuseDecision = resolvePendingCheckoutReuseDecision({
+    hasPending: true,
+    pendingAmount: Number(existingPending.amount),
+    validatedAmount: input.validated.amount,
+    remainingAmount: input.validated.remainingAmount,
+  });
+
+  if (reuseDecision === "invalidate_stale") {
+    await markStalePendingPaymentFailed({
       paymentId: existingPending.id,
-      amount: Number(existingPending.amount),
-      providerRef: existingPending.providerRef,
-      externalCheckoutUrl: intent.externalCheckoutUrl,
-      reusedPending: true as const,
-    };
+      organizationId: input.organizationId,
+      ipAddress: input.ipAddress,
+      reason:
+        input.validated.remainingAmount <= 0 || input.validated.amount <= 0
+          ? "table_fully_paid"
+          : "amount_mismatch",
+    });
+    return null;
   }
+
+  if (reuseDecision !== "reuse") return null;
+
+  const { adapter } = await resolveWexPayPaymentProvider("paytr");
+  const intent = await adapter.createPaymentIntent({
+    organizationId: input.organizationId,
+    branchId: input.branchId,
+    tableId: input.tableId,
+    orderId: existingPending.orderId,
+    amount: input.validated.amount,
+    currency: "TRY",
+    clientIp: input.ipAddress,
+    existingProviderRef: existingPending.providerRef,
+    checkoutRedirect: buildPublicCheckoutRedirectUrls(input.qrCode),
+  });
+
+  if (!intent.externalCheckoutUrl) {
+    throw new WexPayPublicCheckoutUnavailableError();
+  }
+
+  return {
+    paymentId: existingPending.id,
+    amount: input.validated.amount,
+    providerRef: existingPending.providerRef,
+    externalCheckoutUrl: intent.externalCheckoutUrl,
+    reusedPending: true as const,
+  };
+}
+
+export async function createPublicCheckoutPayment(input: {
+  organizationId: string;
+  branchId: string;
+  tableId: string;
+  qrCode: string;
+  orderId?: string | null;
+  ipAddress: string | null;
+}) {
+  const validated = await validatePublicCheckoutContext({
+    organizationId: input.organizationId,
+    branchId: input.branchId,
+    tableId: input.tableId,
+    orderId: input.orderId,
+  });
+
+  if (process.env.WEXPAY_PAYTR_ENABLE_API !== "true") {
+    throw new WexPayPublicCheckoutUnavailableError();
+  }
+
+  const credentials = await loadPaytrCredentialBundle(input.organizationId);
+  if (!credentials) {
+    throw new WexPayPublicCheckoutUnavailableError();
+  }
+
+  const reused = await tryReusePendingPaytrCheckout({ ...input, validated });
+  if (reused) return reused;
 
   return prisma.$transaction(async (tx) => {
     const table = await tx.restaurantTable.findFirst({
@@ -136,8 +280,8 @@ export async function createPublicCheckoutPayment(input: {
       throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
     }
 
-    const orderId: string | null = input.orderId ?? null;
     let amount = account.remainingAmount;
+    const orderId = validated.orderId;
 
     if (orderId) {
       const order = await tx.customerOrder.findFirst({

@@ -1,23 +1,12 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
 import { describe, it } from "node:test";
 import {
+  buildPaytrCallbackHash,
   parsePaytrCallbackFields,
   paytrPaymentAmountKurus,
   verifyPaytrCallbackAmount,
   verifyPaytrCallbackHash,
 } from "./wexpay-paytr-adapter";
-
-function buildPaytrCallbackHash(fields: {
-  merchantOid: string;
-  status: string;
-  totalAmount: string;
-  merchantKey: string;
-  merchantSalt: string;
-}) {
-  const payload = `${fields.merchantOid}${fields.merchantSalt}${fields.status}${fields.totalAmount}`;
-  return createHmac("sha256", fields.merchantKey).update(payload).digest("base64");
-}
 
 describe("PayTR callback parsing", () => {
   it("parses urlencoded callback body", () => {
@@ -39,6 +28,7 @@ describe("PayTR callback hash", () => {
     merchantOid: "WXPTEST001",
     status: "success",
     totalAmount: "12000",
+    hash: "",
     merchantKey: "test-merchant-key",
     merchantSalt: "test-merchant-salt",
   };

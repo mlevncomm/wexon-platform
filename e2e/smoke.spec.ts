@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 
 type SmokeFixtures = {
   dbAvailable: boolean;
+  fixturesReady: boolean;
   setupError: string | null;
   adminEmail: string | null;
   customerEmail: string;
@@ -15,6 +16,7 @@ type SmokeFixtures = {
   demoOrgId: string | null;
   inactiveWexPayOrgId: string | null;
   qrCode: string | null;
+  inactiveQrCode: string | null;
 };
 
 function loadFixtures(): SmokeFixtures {
@@ -132,6 +134,7 @@ test.describe.serial("production smoke", () => {
 
   test("public QR GET returns menu JSON", async ({ request }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
+    test.skip(!fixtures.fixturesReady, fixtures.setupError ?? "seed fixtures incomplete");
     test.skip(!fixtures.qrCode, "qrCode fixture required");
 
     const response = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
@@ -143,6 +146,7 @@ test.describe.serial("production smoke", () => {
 
   test("public QR POST creates order", async ({ request }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
+    test.skip(!fixtures.fixturesReady, fixtures.setupError ?? "seed fixtures incomplete");
     test.skip(!fixtures.qrCode, "qrCode fixture required");
 
     const menuResponse = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
@@ -164,7 +168,9 @@ test.describe.serial("production smoke", () => {
 
   test("public QR checkout unavailable without PSP credentials", async ({ request }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
+    test.skip(!fixtures.fixturesReady, fixtures.setupError ?? "seed fixtures incomplete");
     test.skip(!fixtures.qrCode, "qrCode fixture required");
+    test.skip(process.env.WEXPAY_PAYTR_ENABLE_API === "true", "PSP enabled — skip no-PSP scenario");
 
     const menuResponse = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
     test.skip(menuResponse.status() !== 200, "public menu unavailable for checkout test");
@@ -183,8 +189,9 @@ test.describe.serial("production smoke", () => {
     const response = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/checkout`, {
       data: { orderId: order.id },
     });
-    expect([400, 503]).toContain(response.status());
+    expect(response.status()).toBe(503);
     const body = await response.json();
     expect(body).toHaveProperty("error");
+    expect(String(body.error)).toMatch(/aktif değil/i);
   });
 });
