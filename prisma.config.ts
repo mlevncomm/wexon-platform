@@ -1,8 +1,8 @@
 import { config as loadEnv } from "dotenv";
 import { defineConfig, env } from "prisma/config";
 
-loadEnv({ path: ".env.local", override: true });
-loadEnv({ path: ".env", override: false });
+loadEnv({ path: ".env", quiet: true });
+loadEnv({ path: ".env.local", override: true, quiet: true });
 
 export default defineConfig({
   schema: "prisma/schema.prisma",

@@ -52,7 +52,16 @@ function getCredentialEncryptionKey(): Buffer {
     );
   }
 
-  const key = Buffer.from(raw, raw.length === 64 && /^[0-9a-f]+$/i.test(raw) ? "hex" : "base64");
+  if (raw.length === 64 && /^[0-9a-f]+$/i.test(raw)) {
+    return Buffer.from(raw, "hex");
+  }
+
+  const rawUtf8Key = Buffer.from(raw, "utf8");
+  if (rawUtf8Key.length === 32) {
+    return rawUtf8Key;
+  }
+
+  const key = Buffer.from(raw, "base64");
   if (key.length !== 32) {
     throw new WexPayProviderCredentialStorageError("WEXPAY_CREDENTIAL_ENCRYPTION_KEY 32 byte olmalıdır.");
   }
