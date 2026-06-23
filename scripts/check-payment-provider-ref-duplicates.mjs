@@ -10,8 +10,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import dotenv from "dotenv";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import pg from "pg";
 
 function loadLocalEnvFile(fileName, { override = false } = {}) {
   const fullPath = resolve(process.cwd(), fileName);
@@ -33,7 +32,8 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
+const { Client } = pg;
+const client = new Client({ connectionString: databaseUrl });
 
 function formatPaymentIds(ids) {
   if (Array.isArray(ids)) return ids.map(String).join(", ");
@@ -42,7 +42,8 @@ function formatPaymentIds(ids) {
 
 async function main() {
   try {
-    const duplicates = await prisma.$queryRaw`
+    await client.connect();
+    const result = await client.query(`
       SELECT
         provider,
         "providerRef",
@@ -53,7 +54,8 @@ async function main() {
       GROUP BY provider, "providerRef"
       HAVING COUNT(*) > 1
       ORDER BY provider ASC, "providerRef" ASC
-    `;
+    `);
+    const duplicates = result.rows;
 
     if (!Array.isArray(duplicates) || duplicates.length === 0) {
       console.log("Payment providerRef preflight passed: no duplicate (provider, providerRef) pairs.");
@@ -90,11 +92,19 @@ async function main() {
       console.error("Payment providerRef preflight: database unreachable.");
       console.error("Set DIRECT_URL (or DATABASE_URL) and retry before staging/production migrate deploy.");
     } else {
-      console.error("Payment providerRef preflight error:", message);
+      console.error("Payment providerRef preflight error:", message || "(empty message)");
+      if (error && typeof error === "object") {
+        const details = {
+          name: "name" in error ? error.name : undefined,
+          code: "code" in error ? error.code : undefined,
+          cause: "cause" in error && error.cause instanceof Error ? error.cause.message : undefined,
+        };
+        console.error("Error details:", JSON.stringify(details));
+      }
     }
     process.exit(1);
   } finally {
-    await prisma.$disconnect();
+    await client.end().catch(() => {});
   }
 }
 

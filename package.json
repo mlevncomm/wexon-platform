@@ -14,7 +14,7 @@
     "test:unit": "tsx --import ./scripts/load-local-env.mjs --test lib/wexpay-public-checkout.test.ts lib/wexpay-paytr-adapter.test.ts lib/wexpay-paytr-webhook-lookup.test.ts lib/wexpay-paytr-webhook.test.ts lib/wexon-rate-limit.test.ts",
     "production:check": "node scripts/check-production-env.mjs",
     "production:check:psp": "node scripts/check-production-env.mjs --strict-psp",
-    "production:preflight": "npm run production:check && npm run db:check:payment-provider-ref && npm run prisma:migrate:deploy",
+    "production:preflight": "node scripts/run-production-preflight.mjs",
     "db:check:payment-provider-ref": "node scripts/check-payment-provider-ref-duplicates.mjs",
     "staging:validate": "npm run prisma:seed:real && npm run test:unit && npm run test:smoke:build",
     "prisma:generate": "prisma generate",
