@@ -55,8 +55,8 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 | Degisken | Zorunlu | Aciklama |
 |----------|---------|----------|
-| `DATABASE_URL` | Evet | Postgres baglanti URL'i (runtime). |
-| `DIRECT_URL` | Evet | Postgres direct URL (migrate/seed; Prisma adapter). |
+| `DATABASE_URL` | Evet | Postgres runtime (Supabase **transaction pooler**, `?pgbouncer=true`, port 6543). `lib/prisma.ts` oncelikli kullanir. |
+| `DIRECT_URL` | Evet | Postgres direct/session (migrate, seed, `production:preflight`; port 5432). Runtime fallback. |
 | `ADMIN_EMAILS` | Evet | Virgulle ayrilmis admin e-posta allowlist. |
 | `ADMIN_LOGIN_PASSWORD` | Evet | MVP admin girisi (gecici; bkz. Security). |
 | `ADMIN_SESSION_SECRET` | Evet | Admin oturum cookie imza secret'i. |
@@ -100,6 +100,7 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 - [ ] `npm run production:check:psp` exit 0 **yalnizca** PayTR/sanal POS acilacaksa.
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
+- [ ] **Supabase DB password** production oncesi rotate edildi; eski credential devre disi (Dashboard → Database → Reset password; sonra `DATABASE_URL` + `DIRECT_URL` guncelle).
 
 **Notlar:**
 
@@ -121,7 +122,27 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 
 ### Database
 
+**Production oncesi DB password rotate (zorunlu guvenlik adimi):**
+
+1. Supabase Dashboard → Project Settings → Database → Reset database password
+2. `DATABASE_URL` (pooler) ve `DIRECT_URL` (direct) Vercel + staging env'de guncelle — secret commit etme
+3. `npm run production:preflight` ile baglanti ve migration dogrula
+
 **Local development:** `npm run prisma:migrate:dev` (`prisma migrate dev`). `prisma:migrate` geriye uyumluluk alias'idir.
+
+#### Vercel production deploy runbook
+
+Migration Vercel build sirasinda **otomatik kosulmaz**. Deploy oncesi local/staging'de preflight zorunludur.
+
+1. GitHub repo → Vercel project bagla
+2. Production env var'lari gir (zorunlu liste: Environment bolumu)
+3. DB password rotate tamam
+4. Local/staging: `npm run production:check` → `npm run production:preflight` → `npm run test:smoke:build`
+5. Vercel deploy (`build` = `prisma generate && next build`; Node >= 20)
+6. Deploy URL → `NEXT_PUBLIC_APP_URL` guncelle (+ PayTR panel bildirim URL) → gerekirse redeploy
+7. Post-deploy smoke + PayTR manual test (asagida)
+
+`vercel.json` gerekmez.
 
 #### Staging deploy runbook (onerilen sira)
 
@@ -204,13 +225,14 @@ Kisa yol (adim 2 icin migrate sonrasi): `npm run staging:validate`
 - [x] Sanal POS baglantisi storage foundation (`WexPayProviderCredential`, sifreli API bilgileri). Bkz. `lib/wexpay-provider-credentials.ts`, `docs/wexpay-payment-provider-adapters.md`.
 - [x] Inbound webhook event / idempotency ledger foundation (`WexPayWebhookEvent`). Bkz. `lib/wexpay-webhook-events.ts`.
 - [ ] Sanal POS baglantisi rotation policy: yeni API bilgisi ile upsert, eski baglanti `isActive=false`, audit (`wexpay.provider_credential.deactivated`) ve fingerprint takibi.
-- [ ] **Phase 7 on kosullari (gercek PSP acilmadan once):**
-  - [ ] Inbound webhook route'lari (or. `/api/wexpay/webhooks/paytr`) — demo route'lara dokunulmadan.
-  - [ ] Raw body okuma (JSON parse oncesi byte dizisi).
-  - [ ] Provider signature verification (`verifyCallback` + tenant credential).
-  - [ ] Duplicate event protection (`provider` + `providerEventId` unique; `receiveWexPayWebhookEvent` duplicate donusu).
-  - [ ] Transaction icinde `Payment` guncelleme + `syncTableStatus` + audit.
-- [ ] PayTR / iyzico / Param adapter implementasyonu (stub yerine gercek API; Phase 7).
+- [x] **Phase 7 on kosullari (PayTR foundation — operator + public QR):**
+  - [x] Inbound webhook route `/api/wexpay/webhooks/paytr` (demo route'lara dokunulmadi).
+  - [x] Raw body okuma (JSON parse oncesi byte dizisi).
+  - [x] Provider signature verification (`verifyCallback` + tenant credential).
+  - [x] Duplicate event protection (`provider` + `providerEventId` unique; `receiveWexPayWebhookEvent` duplicate donusu).
+  - [x] Transaction icinde `Payment` guncelleme + `syncTableStatus` + audit.
+- [x] PayTR adapter foundation (`lib/wexpay-paytr-adapter.ts`); canli API `WEXPAY_PAYTR_ENABLE_API=true` + DB credential ile.
+- [ ] iyzico / Param: stub only — production-live degil.
 
 **Stale pending reconciliation (operasyonel Payment, BillingPayment degil):**
 
@@ -240,3 +262,92 @@ Kisa yol (adim 2 icin migrate sonrasi): `npm run staging:validate`
 - WexPay allowed/denied states.
 - `/api/wexpay/tables` unauthorized, forbidden and allowed states.
 - Random 404 route.
+
+## WexPay MVP Release Readiness
+
+WexPay MVP kod tarafi tamam; asagidaki maddeler production lansman oncesi dogrulanir.
+
+### Core / access
+
+- [ ] `Product` kaydinda WexPay urunu mevcut (seed veya admin).
+- [ ] Gercek musteri organization `isDemo=false`.
+- [ ] Aktif license, app installation, subscription ve Core access (`requireProductAccess`) izin veriyor.
+- [ ] Demo tenant (`isDemo=true`) gercek `/apps/wexpay/*` app'ine giremiyor (yalnizca `/demo/wexpay/*` ve `/api/wexpay/demo/*`).
+- [ ] Entitlement limitleri (branch, table, staff, vb.) server-side enforce ediliyor.
+
+### Restaurant app
+
+- [ ] Restaurant / branch / table / menu CRUD
+- [ ] Orders (mutfak akisi dahil)
+- [ ] Payments (manuel + PayTR foundation)
+- [ ] Receipts
+- [ ] Kitchen ekrani
+- [ ] Reports
+- [ ] Public QR siparis ve odeme
+
+### Payments
+
+- [ ] Manuel tahsilat production-ready (`provider=manual`)
+- [ ] PayTR foundation ready (operator panel + public QR checkout)
+- [ ] PayTR canli/test icin: `WEXPAY_PAYTR_ENABLE_API=true`, sifreli provider credential (WexPay Settings), PayTR panelinde webhook URL
+- [ ] iyzico / Param: stub only — production-live degil
+
+### Security
+
+- [ ] Tenant isolation (organizationId / branchId filtreleri)
+- [ ] Audit logs (kritik mutation + access denial)
+- [ ] API key hashing (`API_KEY_HASH_SECRET`)
+- [ ] Credential encryption (`WEXPAY_CREDENTIAL_ENCRYPTION_KEY` + `WexPayProviderCredential`)
+- [ ] Webhook: raw body, signature, idempotency (`WexPayWebhookEvent`)
+- [ ] Rate limits (login, public QR, PayTR webhook, WexPay API)
+- [ ] Supabase DB password production oncesi rotate edildi
+
+### PayTR deploy notes
+
+**Webhook URL (PayTR panel — Bildirim URL):**
+
+```text
+{NEXT_PUBLIC_APP_URL}/api/wexpay/webhooks/paytr
+```
+
+**Return / redirect:** `NEXT_PUBLIC_APP_URL` tabanli. Operator: `/apps/wexpay/payments?paytr=success|failed`. Public QR: PayTR donusunde polling banner; basari yalnizca `Payment.status=PAID` iken.
+
+**Credential:** PayTR merchant bilgileri env'e yazilmaz; WexPay Settings → Sanal POS baglantisi (DB encrypted).
+
+**Canli odeme manual test (staging/production):**
+
+1. WexPay Settings → Sanal POS baglantisi ekle
+2. TEST mode credential gir (PayTR test merchant)
+3. Vercel/host'ta `WEXPAY_PAYTR_ENABLE_API=true`
+4. Public QR musteri ekranindan PayTR ile odeme baslat
+5. PayTR donusunde "odeme isleniyor" mesaji gorunur (PAID olana kadar)
+6. Webhook sonrasi `Payment` `PAID` veya `FAILED` olur
+7. Masa hesabi ve raporlar guncellenir
+
+Detay: `docs/wexpay-payment-provider-adapters.md`.
+
+### Son kalite kapilari (release oncesi)
+
+```bash
+npm run production:check
+npm run production:preflight
+npm run test:unit
+npm run test:smoke:build
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+`production:preflight` staging/production DB credential gerektirir.
+
+**Son dogrulama (2026-06-08, local + Supabase):**
+
+| Komut | Sonuc |
+|-------|--------|
+| `npm run production:check` | pass (8/8 required) |
+| `npm run production:preflight` | pass (migrate deploy, no pending) |
+| `npm run test:unit` | 34/34 pass |
+| `npm run test:smoke:build` | 16/16 pass |
+| `npm run lint` | pass |
+| `npx tsc --noEmit` | pass |
+| `npm run build` | pass (`prisma generate && next build`) |

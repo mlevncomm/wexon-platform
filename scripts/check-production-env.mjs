@@ -76,6 +76,15 @@ if (strictPsp && pspMissing.length > 0) {
   process.exit(1);
 }
 
+const isProduction =
+  process.env.NODE_ENV === "production" ||
+  process.env.VERCEL_ENV === "production";
+if (isProduction && isSet("CUSTOMER_DEV_LOGIN_PASSWORD")) {
+  console.warn(
+    "Warning: CUSTOMER_DEV_LOGIN_PASSWORD is set in production — dev login fallback should be disabled.",
+  );
+}
+
 console.log("Production environment check passed.");
 console.log(`Required: ${REQUIRED.length}/${REQUIRED.length}`);
 console.log(`PSP optional checked: ${PSP_OPTIONAL.length - pspMissing.length}/${PSP_OPTIONAL.length}`);

@@ -98,7 +98,7 @@ Eksik alan varsa adapter `provider_not_configured` doner. Plaintext yalnizca ser
 - Basarili oturum sonrasi redirect query: `paytrCheckout` + `paymentId`; banner ile PayTR guvenli odeme linki acilir.
 - Odeme listesinde provider etiketi, PayTR `PENDING` icin `merchant_oid` (`providerRef`) gosterilir.
 - Masa detayinda acik PayTR `PENDING` uyarisi.
-- Public QR checkout bu fazda acilmaz.
+- Public QR checkout PayTR destekler: musteri ekraninda odeme baslatma, donuste polling ile `PAID` dogrulama (`WexPayPublicOrderClient` + `GET /api/wexpay/public/[qrCode]/checkout`).
 
 ### Callback / webhook URL
 

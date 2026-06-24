@@ -7,7 +7,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+  const databaseUrl = process.env.DATABASE_URL ?? process.env.DIRECT_URL;
 
   if (!databaseUrl) {
     throw new Error("DATABASE_URL veya DIRECT_URL tanımlı olmalıdır.");
