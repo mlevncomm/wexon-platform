@@ -16,6 +16,7 @@ import {
   subdomainPrefixedCanonicalPath,
   type HostSurface,
 } from "@/lib/wexon-canonical-host";
+import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
 
 const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
@@ -53,8 +54,19 @@ function productionCanonicalRedirect(request: NextRequest, host: string, surface
   }
 
   if (isProductionWexonHost(host) && surface !== "public") {
+    if (surface === "admin" && pathname === "/login") {
+      const targetUrl = request.nextUrl.clone();
+      targetUrl.pathname = "/";
+      targetUrl.search = "";
+      return NextResponse.redirect(targetUrl);
+    }
+
     if (surface === "core" && (pathname === `${CORE_PREFIX}/login` || pathname.startsWith(`${CORE_PREFIX}/login/`))) {
-      return NextResponse.redirect(buildProductionUnifiedLoginUrl(`${pathname}${search}`));
+      return NextResponse.redirect(buildProductionUnifiedLoginUrl());
+    }
+
+    if (pathname !== "/" && isPublicMarketingPath(pathname)) {
+      return NextResponse.redirect(publicUrl(`${pathname}${search}`));
     }
 
     const stripped = subdomainPrefixedCanonicalPath(surface, pathname);
