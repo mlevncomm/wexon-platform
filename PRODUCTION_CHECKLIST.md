@@ -101,6 +101,10 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
 - [ ] **Supabase DB password** production oncesi rotate edildi; eski credential devre disi (Dashboard → Database → Reset password; sonra `DATABASE_URL` + `DIRECT_URL` guncelle).
+- [ ] `npm audit --omit=dev` calistirildi; kalan advisory'ler degerlendirildi ve kabul edilen riskler not edildi.
+- [ ] `npm audit fix --force` kullanilmadi; Next/Prisma major downgrade onerileri manuel review olmadan uygulanmadi.
+- [ ] Multi-instance production icin rate limit storage Redis/Upstash/edge WAF'a tasindi veya tek-instance siniri bilincli kabul edildi.
+- [ ] Admin shared-password auth production genis kullanima acilmadan once per-admin credentials + MFA planlandi.
 
 **Notlar:**
 
@@ -194,6 +198,7 @@ Kisa yol (adim 2 icin migrate sonrasi): `npm run staging:validate`
 - PayTR inbound webhook rate limiting (`paytrWebhook` bucket, IP bazli; cok instance icin Redis notu).
 - Public QR order/checkout rate limiting (`publicQrOrder`, `publicQrCheckout`).
 - WexPay API rate limiting (`wexpayApi` bucket).
+- Security headers (`next.config.ts`): CSP, HSTS, frame denial, nosniff, referrer policy, permissions policy, cross-origin policies.
 - Brute-force protection.
 - Password reset flow.
 - Session hardening (`secure` production cookie, `sameSite`, TTL dokumantasyonu).

@@ -23,6 +23,9 @@ const REQUIRED = [
 ];
 
 const PSP_OPTIONAL = ["WEXPAY_CREDENTIAL_ENCRYPTION_KEY", "WEXPAY_PAYTR_ENABLE_API"];
+const SECRET_MIN_LENGTH = 32;
+const LONG_SECRET_NAMES = ["ADMIN_SESSION_SECRET", "CUSTOMER_SESSION_SECRET", "API_KEY_HASH_SECRET"];
+const PLACEHOLDER_PATTERNS = [/change-me/i, /change-before-production/i, /placeholder/i, /example/i, /secret-here/i, /your-/i];
 
 function loadLocalEnvFiles() {
   const cwd = process.cwd();
@@ -47,11 +50,63 @@ function isSet(name) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function getValue(name) {
+  return process.env[name]?.trim() ?? "";
+}
+
+function isPlaceholder(value) {
+  return PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function validateLongSecret(name) {
+  const value = getValue(name);
+  if (!value) return null;
+  if (value.length < SECRET_MIN_LENGTH) {
+    return `${name} must be at least ${SECRET_MIN_LENGTH} characters.`;
+  }
+  if (isPlaceholder(value)) {
+    return `${name} still looks like a placeholder.`;
+  }
+  return null;
+}
+
+function validatePassword(name) {
+  const value = getValue(name);
+  if (!value) return null;
+  if (value.length < 12) {
+    return `${name} must be at least 12 characters.`;
+  }
+  if (isPlaceholder(value)) {
+    return `${name} still looks like a placeholder.`;
+  }
+  return null;
+}
+
+function validateCredentialEncryptionKey() {
+  const value = getValue("WEXPAY_CREDENTIAL_ENCRYPTION_KEY");
+  if (!value) return null;
+  const isHex32Bytes = value.length === 64 && /^[0-9a-f]+$/i.test(value);
+  const isRaw32Bytes = Buffer.byteLength(value, "utf8") === 32;
+  const isProbablyBase64 = Buffer.from(value, "base64").length === 32;
+  if (!isHex32Bytes && !isRaw32Bytes && !isProbablyBase64) {
+    return "WEXPAY_CREDENTIAL_ENCRYPTION_KEY must decode to 32 bytes (64-char hex, 32-byte raw, or base64).";
+  }
+  if (isPlaceholder(value)) {
+    return "WEXPAY_CREDENTIAL_ENCRYPTION_KEY still looks like a placeholder.";
+  }
+  return null;
+}
+
 loadLocalEnvFiles();
 
 const strictPsp = process.argv.includes("--strict-psp");
 const missing = REQUIRED.filter((name) => !isSet(name));
 const pspMissing = PSP_OPTIONAL.filter((name) => !isSet(name));
+const weak = [
+  ...LONG_SECRET_NAMES.map(validateLongSecret),
+  validatePassword("ADMIN_LOGIN_PASSWORD"),
+  validateCredentialEncryptionKey(),
+].filter(Boolean);
 
 if (missing.length > 0) {
   console.error("Missing required production environment variables:");
@@ -72,6 +127,14 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+if (weak.length > 0) {
+  console.error("Weak or placeholder production environment variables:");
+  for (const item of weak) {
+    console.error(`  - ${item}`);
+  }
+  process.exit(1);
+}
+
 if (strictPsp && pspMissing.length > 0) {
   process.exit(1);
 }
@@ -80,9 +143,8 @@ const isProduction =
   process.env.NODE_ENV === "production" ||
   process.env.VERCEL_ENV === "production";
 if (isProduction && isSet("CUSTOMER_DEV_LOGIN_PASSWORD")) {
-  console.warn(
-    "Warning: CUSTOMER_DEV_LOGIN_PASSWORD is set in production — dev login fallback should be disabled.",
-  );
+  console.error("CUSTOMER_DEV_LOGIN_PASSWORD must be unset in production.");
+  process.exit(1);
 }
 
 console.log("Production environment check passed.");

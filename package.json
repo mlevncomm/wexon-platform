@@ -5,6 +5,9 @@
   "engines": {
     "node": ">=20"
   },
+  "overrides": {
+    "@hono/node-server": "1.19.13"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
