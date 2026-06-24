@@ -7,6 +7,7 @@ const APP_PREFIX = "/apps/wexpay";
 const CORE_PREFIX = "/dashboard";
 const ADMIN_PREFIX = "/admin";
 const INTERNAL_PREFIXES = [APP_PREFIX, CORE_PREFIX, ADMIN_PREFIX, "/demo", "/wexpay", "/checkout", "/signup", "/start", "/contact"];
+const PRODUCTION_ROOT_HOST = "wexon.dev";
 
 type HostSurface = "public" | "core" | "app" | "admin";
 
@@ -25,6 +26,38 @@ function resolveHostSurface(host: string): HostSurface {
   if (host.startsWith("app.")) return "app";
   if (host.startsWith("core.") || host.startsWith("portal.") || host.startsWith("customer.")) return "core";
   return "public";
+}
+
+function isProductionWexonHost(host: string) {
+  return host === PRODUCTION_ROOT_HOST || host.endsWith(`.${PRODUCTION_ROOT_HOST}`);
+}
+
+function stripAdminPrefix(pathname: string) {
+  if (pathname === ADMIN_PREFIX || pathname === `${ADMIN_PREFIX}/`) return "/";
+  if (pathname.startsWith(`${ADMIN_PREFIX}/`)) return pathname.slice(ADMIN_PREFIX.length) || "/";
+  return pathname;
+}
+
+function adminCanonicalRedirect(request: NextRequest, host: string, surface: HostSurface) {
+  const { pathname, search } = request.nextUrl;
+  const isAdminPath = pathname === ADMIN_PREFIX || pathname.startsWith(`${ADMIN_PREFIX}/`);
+  if (!isAdminPath) return null;
+
+  const targetUrl = request.nextUrl.clone();
+  targetUrl.pathname = stripAdminPrefix(pathname);
+
+  if (surface === "admin") {
+    return targetUrl.pathname === pathname ? null : NextResponse.redirect(targetUrl);
+  }
+
+  if (isProductionWexonHost(host)) {
+    targetUrl.hostname = `admin.${PRODUCTION_ROOT_HOST}`;
+    targetUrl.pathname = stripAdminPrefix(pathname);
+    targetUrl.search = search;
+    return NextResponse.redirect(targetUrl);
+  }
+
+  return null;
 }
 
 function prefixedPath(pathname: string, prefix: string) {
@@ -46,6 +79,9 @@ function resolveSurfacePath(pathname: string, surface: HostSurface) {
 export function proxy(request: NextRequest) {
   const host = normalizeHost(request.headers.get("host"));
   const surface = resolveHostSurface(host);
+  const canonicalRedirect = adminCanonicalRedirect(request, host, surface);
+  if (canonicalRedirect) return canonicalRedirect;
+
   const routedUrl = request.nextUrl.clone();
   const originalPathname = routedUrl.pathname;
   routedUrl.pathname = resolveSurfacePath(originalPathname, surface);
@@ -92,9 +128,9 @@ export function proxy(request: NextRequest) {
 
   if (pathname.startsWith("/admin") && !adminSessionCookie) {
     const loginUrl = routedUrl.clone();
-    loginUrl.pathname = "/admin/login";
+    loginUrl.pathname = surface === "admin" ? "/login" : "/admin/login";
     loginUrl.search = "";
-    loginUrl.searchParams.set("next", `${pathname}${search}`);
+    loginUrl.searchParams.set("next", `${surface === "admin" ? stripAdminPrefix(pathname) : pathname}${search}`);
     adminProxyDebug("proxy:redirect_login", { from: pathname, to: `${loginUrl.pathname}${loginUrl.search}` });
     return NextResponse.redirect(loginUrl);
   }
