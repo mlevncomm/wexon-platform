@@ -206,3 +206,39 @@ Vercel build migration **calistirmaz**. `prisma migrate deploy` yalnizca deploy 
 7. Post-deploy: smoke + PayTR manual test (`PRODUCTION_CHECKLIST.md` → PayTR deploy notes)
 
 PayTR webhook: `{NEXT_PUBLIC_APP_URL}/api/wexpay/webhooks/paytr`. Detay: `docs/wexpay-payment-provider-adapters.md`.
+
+## Production domain architecture
+
+Tek Next.js uygulamasi Vercel'de tek proje olarak deploy edilir; subdomain ayrimi `proxy.ts` uzerinden ilgili panele rewrite edilir.
+
+| Host | Rol | Varsayilan route |
+|------|-----|------------------|
+| `wexon.dev` | Public website | `/` |
+| `www.wexon.dev` | Public website alias | `/` |
+| `core.wexon.dev` | Wexon Core / musteri portali | `/dashboard` |
+| `app.wexon.dev` | WexPay restoran operasyon app'i | `/apps/wexpay` |
+| `admin.wexon.dev` | Wexon Admin Portal | `/admin` |
+
+Cloudflare DNS kayitlari Vercel'e yonlenir:
+
+```text
+A      @      76.76.21.21          DNS only
+CNAME  www    cname.vercel-dns.com DNS only
+CNAME  core   cname.vercel-dns.com DNS only
+CNAME  app    cname.vercel-dns.com DNS only
+CNAME  admin  cname.vercel-dns.com DNS only
+```
+
+Vercel Domains bolumune ayni hostlari ekleyin. Ilk dogrulamada Cloudflare proxy gri bulut / DNS only kalsin; SSL ve domain validation oturduktan sonra WAF/proxy ayarlari acilabilir.
+
+Sanal POS ve QR odeme icin canonical app URL:
+
+```env
+NEXT_PUBLIC_APP_URL=https://app.wexon.dev
+```
+
+PayTR webhook:
+
+```text
+https://app.wexon.dev/api/wexpay/webhooks/paytr
+```

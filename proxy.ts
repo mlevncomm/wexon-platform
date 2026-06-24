@@ -3,6 +3,12 @@ import { ACTIVE_ORGANIZATION_COOKIE, ACTIVE_ORGANIZATION_HEADER } from "@/lib/we
 
 const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
+const APP_PREFIX = "/apps/wexpay";
+const CORE_PREFIX = "/dashboard";
+const ADMIN_PREFIX = "/admin";
+const INTERNAL_PREFIXES = [APP_PREFIX, CORE_PREFIX, ADMIN_PREFIX, "/demo", "/wexpay", "/checkout", "/signup", "/start", "/contact"];
+
+type HostSurface = "public" | "core" | "app" | "admin";
 
 function adminProxyDebug(label: string, data?: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "production") {
@@ -10,13 +16,50 @@ function adminProxyDebug(label: string, data?: Record<string, unknown>) {
   }
 }
 
+function normalizeHost(host: string | null) {
+  return (host ?? "").split(":")[0]?.toLowerCase() ?? "";
+}
+
+function resolveHostSurface(host: string): HostSurface {
+  if (host.startsWith("admin.")) return "admin";
+  if (host.startsWith("app.")) return "app";
+  if (host.startsWith("core.") || host.startsWith("portal.") || host.startsWith("customer.")) return "core";
+  return "public";
+}
+
+function prefixedPath(pathname: string, prefix: string) {
+  if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return pathname;
+  if (pathname === "/") return prefix;
+  return `${prefix}${pathname}`;
+}
+
+function resolveSurfacePath(pathname: string, surface: HostSurface) {
+  if (INTERNAL_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return pathname;
+  }
+  if (surface === "admin") return prefixedPath(pathname, ADMIN_PREFIX);
+  if (surface === "app") return prefixedPath(pathname, APP_PREFIX);
+  if (surface === "core") return prefixedPath(pathname, CORE_PREFIX);
+  return pathname;
+}
+
 export function proxy(request: NextRequest) {
-  const { pathname, search } = request.nextUrl;
+  const host = normalizeHost(request.headers.get("host"));
+  const surface = resolveHostSurface(host);
+  const routedUrl = request.nextUrl.clone();
+  const originalPathname = routedUrl.pathname;
+  routedUrl.pathname = resolveSurfacePath(originalPathname, surface);
+  const shouldRewrite = routedUrl.pathname !== originalPathname;
+  const { pathname, search } = routedUrl;
   const adminSessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
   const customerSessionCookie = request.cookies.get(CUSTOMER_SESSION_COOKIE)?.value;
 
   adminProxyDebug("proxy:request", {
     path: pathname,
+    host,
+    surface,
+    originalPathname,
+    shouldRewrite,
     method: request.method,
     isLogin: pathname === "/admin/login",
     hasAdminCookie: Boolean(adminSessionCookie),
@@ -25,11 +68,11 @@ export function proxy(request: NextRequest) {
 
   if (pathname === "/dashboard/login") {
     adminProxyDebug("proxy:next_dashboard_login");
-    return NextResponse.next();
+    return shouldRewrite ? NextResponse.rewrite(routedUrl) : NextResponse.next();
   }
 
   if (pathname === "/dashboard/change-password" && request.method === "GET" && !customerSessionCookie) {
-    const loginUrl = request.nextUrl.clone();
+    const loginUrl = routedUrl.clone();
     loginUrl.pathname = "/dashboard/login";
     loginUrl.search = "";
     loginUrl.searchParams.set("next", `${pathname}${search}`);
@@ -39,16 +82,16 @@ export function proxy(request: NextRequest) {
 
   if (pathname === "/admin/login") {
     adminProxyDebug("proxy:next_login");
-    return NextResponse.next();
+    return shouldRewrite ? NextResponse.rewrite(routedUrl) : NextResponse.next();
   }
 
   if (request.method !== "GET") {
     adminProxyDebug("proxy:next_non_get", { path: pathname, method: request.method });
-    return NextResponse.next();
+    return shouldRewrite ? NextResponse.rewrite(routedUrl) : NextResponse.next();
   }
 
   if (pathname.startsWith("/admin") && !adminSessionCookie) {
-    const loginUrl = request.nextUrl.clone();
+    const loginUrl = routedUrl.clone();
     loginUrl.pathname = "/admin/login";
     loginUrl.search = "";
     loginUrl.searchParams.set("next", `${pathname}${search}`);
@@ -57,7 +100,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/dashboard") && !customerSessionCookie && !adminSessionCookie) {
-    const loginUrl = request.nextUrl.clone();
+    const loginUrl = routedUrl.clone();
     loginUrl.pathname = "/dashboard/login";
     loginUrl.search = "";
     loginUrl.searchParams.set("next", `${pathname}${search}`);
@@ -66,7 +109,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/apps/wexpay") && !customerSessionCookie && !adminSessionCookie) {
-    const loginUrl = request.nextUrl.clone();
+    const loginUrl = routedUrl.clone();
     loginUrl.pathname = "/dashboard/login";
     loginUrl.search = "";
     loginUrl.searchParams.set("next", `${pathname}${search}`);
@@ -74,7 +117,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const organizationIdFromQuery = request.nextUrl.searchParams.get("organizationId")?.trim();
+  const organizationIdFromQuery = routedUrl.searchParams.get("organizationId")?.trim();
   const organizationIdFromAdminPath = pathname.match(/^\/admin\/organizations\/([^/]+)$/)?.[1];
   const organizationId = organizationIdFromQuery ?? organizationIdFromAdminPath;
 
@@ -83,11 +126,17 @@ export function proxy(request: NextRequest) {
     requestHeaders.set(ACTIVE_ORGANIZATION_HEADER, organizationId);
   }
 
-  const response = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
+  const response = shouldRewrite
+    ? NextResponse.rewrite(routedUrl, {
+        request: {
+          headers: requestHeaders,
+        },
+      })
+    : NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
 
   if (
     organizationId &&
@@ -103,10 +152,16 @@ export function proxy(request: NextRequest) {
     });
   }
 
-  adminProxyDebug("proxy:next", { path: pathname, organizationId: organizationId ?? null });
+  adminProxyDebug("proxy:next", {
+    path: pathname,
+    originalPathname,
+    surface,
+    shouldRewrite,
+    organizationId: organizationId ?? null,
+  });
   return response;
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/dashboard/:path*", "/apps/wexpay/:path*"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };

@@ -148,6 +148,36 @@ Migration Vercel build sirasinda **otomatik kosulmaz**. Deploy oncesi local/stag
 
 `vercel.json` gerekmez.
 
+#### Domain / subdomain mimarisi
+
+Tek Vercel projesi asagidaki hostlari kabul eder; `proxy.ts` host'a gore ilgili panel route'una rewrite eder.
+
+| Host | Rol | Route |
+|------|-----|-------|
+| `wexon.dev` | Public website | `/` |
+| `www.wexon.dev` | Public website alias | `/` |
+| `core.wexon.dev` | Wexon Core / musteri portali | `/dashboard` |
+| `app.wexon.dev` | WexPay restoran app'i | `/apps/wexpay` |
+| `admin.wexon.dev` | Wexon Admin Portal | `/admin` |
+
+Cloudflare DNS baslangic kayitlari:
+
+```text
+A      @      76.76.21.21
+CNAME  www    cname.vercel-dns.com
+CNAME  core   cname.vercel-dns.com
+CNAME  app    cname.vercel-dns.com
+CNAME  admin  cname.vercel-dns.com
+```
+
+Ilk dogrulamada proxy status **DNS only** olsun. Vercel domain validation ve SSL tamamlandiktan sonra Cloudflare WAF/proxy ayarlari acilabilir.
+
+`NEXT_PUBLIC_APP_URL=https://app.wexon.dev` onerilir; PayTR webhook URL:
+
+```text
+https://app.wexon.dev/api/wexpay/webhooks/paytr
+```
+
 #### Staging deploy runbook (onerilen sira)
 
 **1. Migration oncesi** (seed/smoke calistirmaz):
