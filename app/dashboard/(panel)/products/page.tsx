@@ -6,6 +6,7 @@ import {
   DashboardSectionTitle,
   DashboardStatusPill,
 } from "@/components/marketing/WexonDashboardCards";
+import { coreAccessDenialMessage } from "@/lib/wexon-core-access";
 import { dashboardHref, formatCoreStatus, getCustomerDashboardData } from "@/lib/wexon-core-dashboard";
 import { wexpayHref } from "@/lib/wexon-organization-context";
 
@@ -25,6 +26,10 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
     );
   }
   const hasActiveWexPay = wexPayAccess?.allowed === true;
+  const wexPayDenialMessage =
+    wexPayAccess && !wexPayAccess.allowed && wexPayAccess.reason
+      ? coreAccessDenialMessage(wexPayAccess.reason)
+      : null;
   const wexpayAppHref = wexpayHref("/apps/wexpay", organizationContext.organizationId);
   const onboarding = wexPayInstallation?.settingsJson as { onboardingStatus?: string; message?: string } | null;
 
@@ -43,7 +48,9 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
             <article
               key={product.id}
               className={`rounded-[32px] border bg-white p-7 shadow-sm shadow-slate-200/60 ${
-                isWexPay ? "border-emerald-200 shadow-xl shadow-emerald-100/50" : "border-slate-200"
+                isWexPay && hasActiveWexPay
+                  ? "border-emerald-200 shadow-xl shadow-emerald-100/50"
+                  : "border-slate-200"
               }`}
             >
               <DashboardStatusPill active={product.status === "ACTIVE"}>
@@ -52,9 +59,28 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
               <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-950">{product.name}</h2>
               <p className="mt-4 text-sm leading-relaxed text-slate-600">
                 {isWexPay
-                  ? "WexPay erişiminiz aktif. Restoran operasyonlarınızı Wexon Core üzerinden yönetilen lisans ile kullanabilirsiniz."
+                  ? hasActiveWexPay
+                    ? "WexPay erişiminiz aktif. Restoran operasyonlarınızı Wexon Core üzerinden yönetilen lisans ile kullanabilirsiniz."
+                    : wexPayDenialMessage ??
+                      "WexPay erişiminiz şu anda aktif değil. Lisans ve kurulum durumunu kontrol edin veya abonelik başlatın."
                   : "Bu ürün yakında Wexon ekosistemine eklenecek."}
               </p>
+              {isWexPay && (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-600">
+                  <p>
+                    Core erişim:{" "}
+                    <span className={hasActiveWexPay ? "text-emerald-700" : "text-amber-700"}>
+                      {hasActiveWexPay ? "Aktif" : "Kapalı"}
+                    </span>
+                  </p>
+                  {!hasActiveWexPay && wexPayAccess?.reason && (
+                    <p className="mt-1 text-slate-500">Neden: {wexPayDenialMessage}</p>
+                  )}
+                  {wexPayAccess?.billingState && wexPayAccess.billingState !== "ok" && (
+                    <p className="mt-1 text-slate-500">Fatura durumu: {wexPayAccess.billingState}</p>
+                  )}
+                </div>
+              )}
               {isWexPay ? (
                 <div className="mt-6 grid gap-3">
                   <DashboardInfoRow label="Paket" value={wexPayLicense?.plan.name ?? "-"} />

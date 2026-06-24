@@ -18,7 +18,7 @@ import {
   parseCustomerWebhookPayload,
 } from "@/lib/wexon-customer-validation";
 import { hashPassword, verifyPassword } from "@/lib/wexon-passwords";
-import { assertEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
+import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
 import { prisma } from "@/lib/prisma";
 
 function readString(formData: FormData, key: string) {
@@ -279,7 +279,7 @@ export async function addCustomerOrganizationUserAction(formData: FormData) {
         const activeStaffCount = await tx.membership.count({
           where: { organizationId: payload.organizationId, status: "ACTIVE" },
         });
-        const limitCheck = assertEntitlementLimit(wexpayAccess.entitlementMap, "staff_limit", activeStaffCount);
+        const limitCheck = assertStaffEntitlementLimit(wexpayAccess, activeStaffCount);
         if (!limitCheck.ok) {
           throw new CustomerValidationError(limitCheck.message);
         }

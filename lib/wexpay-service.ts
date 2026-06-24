@@ -96,6 +96,25 @@ async function writeWexPayAudit(
   );
 }
 
+async function enforceEntitlementLimit(
+  tx: TenantDb,
+  context: WexPayMutationContext,
+  key: string,
+  currentCount: number,
+) {
+  const limit = assertEntitlementLimit(context.entitlementMap, key, currentCount);
+  if (!limit.ok) {
+    await writeWexPayAudit(tx, context, {
+      action: "entitlement.limit_exceeded",
+      entityType: "Entitlement",
+      entityId: key,
+      metadata: { key: limit.key, limit: limit.limit, current: limit.current },
+    });
+    throw new WexPayValidationError(limit.message);
+  }
+  return limit;
+}
+
 function isUniqueConflict(error: unknown): error is { code: "P2002" } {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "P2002";
 }
@@ -264,10 +283,7 @@ export async function createBranch(
       await assertRestaurantInOrg(tx, context.organizationId, input.restaurantId);
 
       const currentBranches = await countOrgBranches(tx, context.organizationId);
-      const limit = assertEntitlementLimit(context.entitlementMap, "branch_limit", currentBranches);
-      if (!limit.ok) {
-        throw new WexPayValidationError(limit.message);
-      }
+      await enforceEntitlementLimit(tx, context, "branch_limit", currentBranches);
 
       const branch = await tx.branch.create({
         data: {
@@ -340,10 +356,7 @@ export async function createTable(
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
       const currentTables = await countOrgTables(tx, context.organizationId);
-      const limit = assertEntitlementLimit(context.entitlementMap, "table_limit", currentTables);
-      if (!limit.ok) {
-        throw new WexPayValidationError(limit.message);
-      }
+      await enforceEntitlementLimit(tx, context, "table_limit", currentTables);
 
       const table = await tx.restaurantTable.create({
         data: {
@@ -631,10 +644,7 @@ export async function createProduct(
     }
 
     const currentProducts = await countOrgProducts(tx, context.organizationId);
-    const limit = assertEntitlementLimit(context.entitlementMap, "product_limit", currentProducts);
-    if (!limit.ok) {
-      throw new WexPayValidationError(limit.message);
-    }
+    await enforceEntitlementLimit(tx, context, "product_limit", currentProducts);
 
     const product = await tx.menuProduct.create({
       data: {

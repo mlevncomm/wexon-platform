@@ -359,6 +359,27 @@ export function assertEntitlementLimit(
   };
 }
 
+/**
+ * Staff limits require an active WexPay license context. Without Core access,
+ * an empty entitlement map must not be treated as unlimited.
+ */
+export function assertStaffEntitlementLimit(
+  access: ProductAccessResult,
+  currentCount: number,
+): EntitlementLimitResult {
+  if (!access.allowed) {
+    return {
+      ok: false,
+      limit: 0,
+      current: currentCount,
+      key: "staff_limit",
+      message: "Personel eklemek için aktif bir WexPay lisansı ve kurulum gereklidir.",
+    };
+  }
+
+  return assertEntitlementLimit(access.entitlementMap, "staff_limit", currentCount);
+}
+
 export function isEntitlementEnabled(entitlements: CoreEntitlementMap, key: string) {
   const value = entitlements[key];
   if (typeof value === "boolean") return value;

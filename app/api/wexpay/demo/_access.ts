@@ -98,6 +98,15 @@ export async function resolveWexPayDemoContext(): Promise<ResolveWexPayDemoResul
     };
   }
 
+  if (!decision.organization.isDemo) {
+    return {
+      ok: false,
+      status: 403,
+      message: "Bu endpoint yalnızca demo tenant için kullanılabilir.",
+      reason: "demo_not_configured",
+    };
+  }
+
   return {
     ok: true,
     organizationId: restaurant.organizationId,

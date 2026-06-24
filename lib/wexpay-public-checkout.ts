@@ -2,7 +2,7 @@ import { PaymentStatus } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { calculateTableAccount, filterTableSessionRecords } from "@/lib/wexpay-account";
-import { loadPaytrCredentialBundle } from "@/lib/wexpay-paytr-adapter";
+import { generatePaytrMerchantOid, loadPaytrCredentialBundle } from "@/lib/wexpay-paytr-adapter";
 import { resolveWexPayPaymentProvider } from "@/lib/wexpay-payment-provider";
 import type { TenantDb } from "@/lib/wexpay-tenant";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
@@ -14,15 +14,16 @@ export class WexPayPublicCheckoutUnavailableError extends Error {
   }
 }
 
-function buildPublicCheckoutRedirectUrls(qrCode: string) {
+function buildPublicCheckoutRedirectUrls(qrCode: string, paymentId: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
   if (!appUrl) {
     throw new WexPayValidationError("Uygulama URL yapılandırması eksik.");
   }
   const encoded = encodeURIComponent(qrCode);
+  const paymentQuery = `&paymentId=${encodeURIComponent(paymentId)}`;
   return {
-    successUrl: `${appUrl}/wexpay/t/${encoded}?paytr=success`,
-    failUrl: `${appUrl}/wexpay/t/${encoded}?paytr=failed`,
+    successUrl: `${appUrl}/wexpay/t/${encoded}?paytr=success${paymentQuery}`,
+    failUrl: `${appUrl}/wexpay/t/${encoded}?paytr=failed${paymentQuery}`,
   };
 }
 
@@ -122,13 +123,51 @@ export async function validatePublicCheckoutContext(input: {
   };
 }
 
-async function markStalePendingPaymentFailed(input: {
+export type PublicCheckoutPaymentStatus = {
   paymentId: string;
+  status: PaymentStatus;
+  amount: number;
+  provider: string;
+};
+
+/** Poll-friendly status for public QR return flow (webhook may lag behind PayTR redirect). */
+export async function getPublicCheckoutPaymentStatus(input: {
   organizationId: string;
-  ipAddress: string | null;
-  reason: string;
-}) {
-  await prisma.payment.updateMany({
+  branchId: string;
+  tableId: string;
+  paymentId: string;
+}): Promise<PublicCheckoutPaymentStatus | null> {
+  const payment = await prisma.payment.findFirst({
+    where: {
+      id: input.paymentId,
+      tableId: input.tableId,
+      branchId: input.branchId,
+      provider: "paytr",
+      branch: { restaurant: { organizationId: input.organizationId } },
+    },
+    select: { id: true, status: true, amount: true, provider: true },
+  });
+
+  if (!payment) return null;
+
+  return {
+    paymentId: payment.id,
+    status: payment.status,
+    amount: Number(payment.amount),
+    provider: payment.provider ?? "paytr",
+  };
+}
+
+async function markStalePendingPaymentFailed(
+  tx: TenantDb,
+  input: {
+    paymentId: string;
+    organizationId: string;
+    ipAddress: string | null;
+    reason: string;
+  },
+) {
+  await tx.payment.updateMany({
     where: {
       id: input.paymentId,
       status: PaymentStatus.PENDING,
@@ -138,15 +177,18 @@ async function markStalePendingPaymentFailed(input: {
     data: { status: PaymentStatus.FAILED },
   });
 
-  await writeAuditLog({
-    action: "wexpay.public.checkout.stale_pending_failed",
-    organizationId: input.organizationId,
-    entityType: "Payment",
-    entityId: input.paymentId,
-    ipAddress: input.ipAddress,
-    source: "wexpay_public",
-    metadata: { reason: input.reason },
-  });
+  await writeAuditLog(
+    {
+      action: "wexpay.public.checkout.stale_pending_failed",
+      organizationId: input.organizationId,
+      entityType: "Payment",
+      entityId: input.paymentId,
+      ipAddress: input.ipAddress,
+      source: "wexpay_public",
+      metadata: { reason: input.reason },
+    },
+    tx,
+  );
 }
 
 function amountsMatch(a: number, b: number) {
@@ -168,73 +210,35 @@ export function resolvePendingCheckoutReuseDecision(input: {
   return "reuse";
 }
 
-async function tryReusePendingPaytrCheckout(input: {
+async function resolvePaytrCheckoutIntent(input: {
   organizationId: string;
   branchId: string;
   tableId: string;
+  orderId: string | null;
+  amount: number;
   qrCode: string;
+  paymentId: string;
+  providerRef: string;
   ipAddress: string | null;
-  validated: PublicCheckoutValidatedContext;
 }) {
-  const existingPending = await prisma.payment.findFirst({
-    where: {
-      tableId: input.tableId,
-      branchId: input.branchId,
-      provider: "paytr",
-      status: PaymentStatus.PENDING,
-      branch: { restaurant: { organizationId: input.organizationId } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (!existingPending?.providerRef) return null;
-
-  const reuseDecision = resolvePendingCheckoutReuseDecision({
-    hasPending: true,
-    pendingAmount: Number(existingPending.amount),
-    validatedAmount: input.validated.amount,
-    remainingAmount: input.validated.remainingAmount,
-  });
-
-  if (reuseDecision === "invalidate_stale") {
-    await markStalePendingPaymentFailed({
-      paymentId: existingPending.id,
-      organizationId: input.organizationId,
-      ipAddress: input.ipAddress,
-      reason:
-        input.validated.remainingAmount <= 0 || input.validated.amount <= 0
-          ? "table_fully_paid"
-          : "amount_mismatch",
-    });
-    return null;
-  }
-
-  if (reuseDecision !== "reuse") return null;
-
   const { adapter } = await resolveWexPayPaymentProvider("paytr");
   const intent = await adapter.createPaymentIntent({
     organizationId: input.organizationId,
     branchId: input.branchId,
     tableId: input.tableId,
-    orderId: existingPending.orderId,
-    amount: input.validated.amount,
+    orderId: input.orderId,
+    amount: input.amount,
     currency: "TRY",
     clientIp: input.ipAddress,
-    existingProviderRef: existingPending.providerRef,
-    checkoutRedirect: buildPublicCheckoutRedirectUrls(input.qrCode),
+    existingProviderRef: input.providerRef,
+    checkoutRedirect: buildPublicCheckoutRedirectUrls(input.qrCode, input.paymentId),
   });
 
   if (!intent.externalCheckoutUrl) {
     throw new WexPayPublicCheckoutUnavailableError();
   }
 
-  return {
-    paymentId: existingPending.id,
-    amount: input.validated.amount,
-    providerRef: existingPending.providerRef,
-    externalCheckoutUrl: intent.externalCheckoutUrl,
-    reusedPending: true as const,
-  };
+  return intent;
 }
 
 export async function createPublicCheckoutPayment(input: {
@@ -261,10 +265,49 @@ export async function createPublicCheckoutPayment(input: {
     throw new WexPayPublicCheckoutUnavailableError();
   }
 
-  const reused = await tryReusePendingPaytrCheckout({ ...input, validated });
-  if (reused) return reused;
+  const locked = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.tableId}))`;
 
-  return prisma.$transaction(async (tx) => {
+    const existingPending = await tx.payment.findFirst({
+      where: {
+        tableId: input.tableId,
+        branchId: input.branchId,
+        provider: "paytr",
+        status: PaymentStatus.PENDING,
+        branch: { restaurant: { organizationId: input.organizationId } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (existingPending?.providerRef) {
+      const reuseDecision = resolvePendingCheckoutReuseDecision({
+        hasPending: true,
+        pendingAmount: Number(existingPending.amount),
+        validatedAmount: validated.amount,
+        remainingAmount: validated.remainingAmount,
+      });
+
+      if (reuseDecision === "invalidate_stale") {
+        await markStalePendingPaymentFailed(tx, {
+          paymentId: existingPending.id,
+          organizationId: input.organizationId,
+          ipAddress: input.ipAddress,
+          reason:
+            validated.remainingAmount <= 0 || validated.amount <= 0
+              ? "table_fully_paid"
+              : "amount_mismatch",
+        });
+      } else if (reuseDecision === "reuse") {
+        return {
+          kind: "reuse" as const,
+          paymentId: existingPending.id,
+          amount: validated.amount,
+          providerRef: existingPending.providerRef,
+          orderId: existingPending.orderId,
+        };
+      }
+    }
+
     const table = await tx.restaurantTable.findFirst({
       where: {
         id: input.tableId,
@@ -298,22 +341,7 @@ export async function createPublicCheckoutPayment(input: {
       throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
     }
 
-    const { adapter } = await resolveWexPayPaymentProvider("paytr");
-    const intent = await adapter.createPaymentIntent({
-      organizationId: input.organizationId,
-      branchId: input.branchId,
-      tableId: table.id,
-      orderId,
-      amount,
-      currency: "TRY",
-      clientIp: input.ipAddress,
-      checkoutRedirect: buildPublicCheckoutRedirectUrls(input.qrCode),
-    });
-
-    if (!intent.externalCheckoutUrl || !intent.providerRef) {
-      throw new WexPayPublicCheckoutUnavailableError();
-    }
-
+    const providerRef = generatePaytrMerchantOid();
     const payment = await tx.payment.create({
       data: {
         branchId: input.branchId,
@@ -323,7 +351,7 @@ export async function createPublicCheckoutPayment(input: {
         currency: "TRY",
         status: PaymentStatus.PENDING,
         provider: "paytr",
-        providerRef: intent.providerRef,
+        providerRef,
         paidAt: null,
       },
     });
@@ -344,18 +372,38 @@ export async function createPublicCheckoutPayment(input: {
           tableId: table.id,
           orderId,
           amount,
-          providerRef: intent.providerRef,
+          providerRef,
         },
       },
       tx,
     );
 
     return {
+      kind: "create" as const,
       paymentId: payment.id,
       amount,
-      providerRef: intent.providerRef,
-      externalCheckoutUrl: intent.externalCheckoutUrl,
-      reusedPending: false as const,
+      providerRef,
+      orderId,
     };
   });
+
+  const intent = await resolvePaytrCheckoutIntent({
+    organizationId: input.organizationId,
+    branchId: input.branchId,
+    tableId: input.tableId,
+    orderId: locked.orderId,
+    amount: locked.amount,
+    qrCode: input.qrCode,
+    paymentId: locked.paymentId,
+    providerRef: locked.providerRef,
+    ipAddress: input.ipAddress,
+  });
+
+  return {
+    paymentId: locked.paymentId,
+    amount: locked.amount,
+    providerRef: locked.providerRef,
+    externalCheckoutUrl: intent.externalCheckoutUrl,
+    reusedPending: locked.kind === "reuse",
+  };
 }

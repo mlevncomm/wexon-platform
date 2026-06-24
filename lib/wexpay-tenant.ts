@@ -92,6 +92,15 @@ export async function resolveWexPaySessionContext(
     if (!decision.ok) {
       return { ok: false, reason: decision.reason, message: decision.message };
     }
+
+    if (decision.organization.isDemo && options.manage) {
+      return {
+        ok: false,
+        reason: "role",
+        message: "Demo tenant üzerinde değişiklik yapılamaz. Önizleme salt okunurdur.",
+      };
+    }
+
     return {
       ok: true,
       organizationId,

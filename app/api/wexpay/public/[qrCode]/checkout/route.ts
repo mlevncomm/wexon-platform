@@ -1,7 +1,11 @@
 import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { readJsonBody, wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
-import { createPublicCheckoutPayment, WexPayPublicCheckoutUnavailableError } from "@/lib/wexpay-public-checkout";
+import {
+  createPublicCheckoutPayment,
+  getPublicCheckoutPaymentStatus,
+  WexPayPublicCheckoutUnavailableError,
+} from "@/lib/wexpay-public-checkout";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 
 /**
@@ -10,7 +14,45 @@ import { resolvePublicTableByQr } from "@/lib/wexpay-read";
  * Unauthenticated diner endpoint. Resolves tenant from qrCode, computes amount
  * server-side (order subtotal or table remaining), then starts a PayTR checkout.
  * Manual provider is not available on this route.
+ *
+ * GET with ?paymentId= polls payment status after PayTR redirect (webhook may lag).
  */
+export async function GET(request: Request, context: { params: Promise<{ qrCode: string }> }) {
+  const { qrCode } = await context.params;
+  const paymentId = new URL(request.url).searchParams.get("paymentId")?.trim();
+
+  if (!paymentId) {
+    return Response.json({ error: "paymentId gerekli." }, { status: 400 });
+  }
+
+  let resolution;
+  try {
+    resolution = await resolvePublicTableByQr(qrCode);
+  } catch {
+    return Response.json(
+      { error: "Servis geçici olarak kullanılamıyor.", reason: "service_unavailable" },
+      { status: 503 },
+    );
+  }
+
+  if (!resolution || !resolution.allowed) {
+    return Response.json({ error: "Masa bulunamadı." }, { status: 404 });
+  }
+
+  const status = await getPublicCheckoutPaymentStatus({
+    organizationId: resolution.organizationId,
+    branchId: resolution.branch.id,
+    tableId: resolution.table.id,
+    paymentId,
+  });
+
+  if (!status) {
+    return Response.json({ error: "Ödeme kaydı bulunamadı." }, { status: 404 });
+  }
+
+  return Response.json(status);
+}
+
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
 

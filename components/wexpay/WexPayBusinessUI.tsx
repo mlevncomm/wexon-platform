@@ -204,21 +204,33 @@ export function WexPayErrorNotice({ message }: { message: string }) {
   );
 }
 
-export function WexPayEmptyAccess({ organizationId }: { organizationId?: string | null }) {
+export function WexPayEmptyAccess({
+  organizationId,
+  reason,
+}: {
+  organizationId?: string | null;
+  reason?: string | null;
+}) {
   const dashboardHref = organizationId ? `/dashboard?organizationId=${encodeURIComponent(organizationId)}` : "/dashboard";
   const supportHref = organizationId
     ? `/dashboard/support?organizationId=${encodeURIComponent(organizationId)}`
     : "/dashboard/support";
   const adminHref = organizationId ? `/admin/organizations/${organizationId}` : "/admin";
 
+  const isDemoTenant = reason === "demo_tenant";
+
   return (
     <div className="mx-auto max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-7 text-center">
       <span className="mb-4 inline-flex rounded-full border border-amber-200 bg-white px-4 py-1.5 text-xs font-semibold text-amber-700">
         Erişim gerekli
       </span>
-      <h1 className="mt-2 text-lg font-black text-slate-950">WexPay erişiminiz aktif değil.</h1>
+      <h1 className="mt-2 text-lg font-black text-slate-950">
+        {isDemoTenant ? "Demo tenant ile gerçek WexPay açılamaz" : "WexPay erişiminiz aktif değil."}
+      </h1>
       <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-        Bu uygulamaya erişmek için WexPay lisansınızın ve kurulumunuzun aktif olması gerekir.
+        {isDemoTenant
+          ? "Gerçek WexPay uygulaması yalnızca isDemo=false müşteri organizasyonları için kullanılabilir. Lütfen gerçek test tenant veya canlı müşteri organizasyonunuzu seçin."
+          : "Bu uygulamaya erişmek için WexPay lisansınızın ve kurulumunuzun aktif olması gerekir."}
       </p>
       <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
         <Link

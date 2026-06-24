@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 type PublicProduct = {
   id: string;
@@ -25,14 +25,114 @@ function formatTry(value: number) {
   return `${value.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₺`;
 }
 
+type PaytrReturnState = "idle" | "processing" | "confirmed" | "failed" | "timeout";
+
+function PaytrReturnBanner({
+  qrCode,
+  paytrStatus,
+  paymentId,
+}: {
+  qrCode: string;
+  paytrStatus?: "success" | "failed" | null;
+  paymentId?: string | null;
+}) {
+  const [polledState, setPolledState] = useState<"idle" | "confirmed" | "failed" | "timeout">("idle");
+
+  const displayState: PaytrReturnState = useMemo(() => {
+    if (paytrStatus === "failed") return "failed";
+    if (polledState === "confirmed" || polledState === "failed" || polledState === "timeout") {
+      return polledState;
+    }
+    if (paytrStatus === "success" && paymentId) return "processing";
+    return "idle";
+  }, [paytrStatus, paymentId, polledState]);
+
+  useEffect(() => {
+    if (paytrStatus !== "success" || !paymentId) {
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 20;
+    const pollPaymentId = paymentId;
+
+    async function poll() {
+      while (!cancelled && attempts < maxAttempts) {
+        attempts += 1;
+        try {
+          const response = await fetch(
+            `/api/wexpay/public/${encodeURIComponent(qrCode)}/checkout?paymentId=${encodeURIComponent(pollPaymentId)}`,
+          );
+          const payload = (await response.json().catch(() => ({}))) as { status?: string };
+          if (payload.status === "PAID") {
+            if (!cancelled) setPolledState("confirmed");
+            return;
+          }
+          if (payload.status === "FAILED") {
+            if (!cancelled) setPolledState("failed");
+            return;
+          }
+        } catch {
+          // retry on transient errors
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      if (!cancelled) setPolledState("timeout");
+    }
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paytrStatus, paymentId, qrCode]);
+
+  if (displayState === "failed") {
+    return (
+      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+        Ödeme tamamlanamadı. Tekrar deneyebilir veya personelden yardım isteyebilirsiniz.
+      </div>
+    );
+  }
+
+  if (displayState === "confirmed") {
+    return (
+      <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">
+        Ödemeniz onaylandı. Teşekkür ederiz.
+      </div>
+    );
+  }
+
+  if (displayState === "processing") {
+    return (
+      <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm font-bold text-sky-800">
+        Ödeme işleniyor; banka onayı bekleniyor...
+      </div>
+    );
+  }
+
+  if (displayState === "timeout") {
+    return (
+      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+        Ödeme onayı gecikiyor. Birkaç dakika sonra tekrar kontrol edin veya personelden yardım isteyin.
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function WexPayPublicOrderClient({
   qrCode,
   categories,
   paytrStatus,
+  paymentId,
 }: {
   qrCode: string;
   categories: PublicCategory[];
   paytrStatus?: "success" | "failed" | null;
+  paymentId?: string | null;
 }) {
   const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [note, setNote] = useState("");
@@ -288,15 +388,13 @@ export default function WexPayPublicOrderClient({
             {error}
           </div>
         )}
-        {paytrStatus === "success" && (
-          <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">
-            Ödemeniz alındı. Teşekkür ederiz.
-          </div>
-        )}
-        {paytrStatus === "failed" && (
-          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
-            Ödeme tamamlanamadı. Tekrar deneyebilir veya personelden yardım isteyebilirsiniz.
-          </div>
+        {paytrStatus && (
+          <PaytrReturnBanner
+            key={`${paytrStatus}-${paymentId ?? "none"}`}
+            qrCode={qrCode}
+            paytrStatus={paytrStatus}
+            paymentId={paymentId}
+          />
         )}
         {success && (
           <div className="mt-3 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
@@ -340,4 +438,3 @@ export default function WexPayPublicOrderClient({
     </div>
   );
 }
-

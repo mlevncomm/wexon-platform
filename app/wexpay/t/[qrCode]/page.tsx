@@ -3,7 +3,7 @@ import WexPayPublicOrderClient from "@/components/wexpay/WexPayPublicOrderClient
 
 type PageProps = {
   params: Promise<{ qrCode: string }>;
-  searchParams: Promise<{ paytr?: string }>;
+  searchParams: Promise<{ paytr?: string; paymentId?: string }>;
 };
 
 /**
@@ -15,7 +15,7 @@ type PageProps = {
  */
 export default async function PublicTablePage({ params, searchParams }: PageProps) {
   const { qrCode } = await params;
-  const { paytr } = await searchParams;
+  const { paytr, paymentId } = await searchParams;
   const paytrStatus = paytr === "success" ? "success" : paytr === "failed" ? "failed" : null;
   const resolution = await resolvePublicTableByQr(qrCode);
 
@@ -58,6 +58,7 @@ export default async function PublicTablePage({ params, searchParams }: PageProp
           <WexPayPublicOrderClient
             qrCode={qrCode}
             paytrStatus={paytrStatus}
+            paymentId={paymentId?.trim() || null}
             categories={categories.map((category) => ({
               id: category.id,
               name: category.name,

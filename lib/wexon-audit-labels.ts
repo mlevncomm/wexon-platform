@@ -45,6 +45,8 @@ const ACTION_LABELS: Record<string, string> = {
   "wexpay.ui.validation": "WexPay panel doğrulama hatası",
   "wexpay.ui.access": "WexPay panel erişim hatası",
   "wexpay.ui.internal": "WexPay panel sistem hatası",
+  "wexpay.access.denied": "WexPay erişimi reddedildi",
+  "entitlement.limit_exceeded": "Plan limiti aşıldı",
 };
 
 const LEVEL_LABELS: Record<string, string> = {

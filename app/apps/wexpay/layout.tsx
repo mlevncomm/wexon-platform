@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { WexPayEmptyAccess } from "@/components/wexpay/WexPayBusinessUI";
 import WexPayBusinessShell from "@/components/wexpay/WexPayBusinessShell";
+import { writeAuditFailure } from "@/lib/wexon-audit";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
@@ -23,9 +24,18 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
   const access = await getWexPayAccess(selector);
 
   if (!access.allowed) {
+    await writeAuditFailure({
+      action: "wexpay.access.denied",
+      message: "WexPay layout erişimi reddedildi.",
+      level: "WARN",
+      organizationId: selector?.organizationId ?? access.organization?.id ?? null,
+      source: "wexpay_app",
+      metadata: { reason: access.reason, mode: access.mode },
+    });
+
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-4 py-10">
-        <WexPayEmptyAccess organizationId={selector?.organizationId ?? null} />
+        <WexPayEmptyAccess organizationId={selector?.organizationId ?? null} reason={access.reason} />
       </main>
     );
   }

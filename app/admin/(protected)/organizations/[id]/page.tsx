@@ -27,6 +27,7 @@ import {
   updateWexPayAccessStatusAction,
 } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOrganizationDetail, getAdminOrganizationMutationOptions } from "@/lib/wexon-admin";
+import { coreAccessDenialMessage, evaluateProductAccess } from "@/lib/wexon-core-access";
 
 function dateInput(value: Date | null | undefined) {
   return value ? value.toISOString().slice(0, 10) : "";
@@ -41,7 +42,11 @@ export default async function AdminOrganizationDetailPage({
 }) {
   const { id } = await params;
   const { adminError } = await searchParams;
-  const [organization, options] = await Promise.all([getAdminOrganizationDetail(id), getAdminOrganizationMutationOptions()]);
+  const [organization, options, wexPayCoreAccess] = await Promise.all([
+    getAdminOrganizationDetail(id),
+    getAdminOrganizationMutationOptions(),
+    evaluateProductAccess({ organizationId: id, productKey: "wexpay" }),
+  ]);
 
   if (!organization) {
     return <AdminEmptyState>Organizasyon bulunamadı.</AdminEmptyState>;
@@ -63,6 +68,11 @@ export default async function AdminOrganizationDetailPage({
   const activeProduct = wexPayInstallation?.status === "ACTIVE" ? "WexPay" : "-";
   const activePlan = wexPayLicense ? displayPlanName(wexPayLicense.plan.name) : "-";
   const licenseStatus = wexPayLicense ? formatAdminStatus(wexPayLicense.status) : "-";
+  const coreAccessLabel = wexPayCoreAccess.allowed ? "Aktif" : "Kapalı";
+  const coreAccessReason =
+    !wexPayCoreAccess.allowed && wexPayCoreAccess.reason
+      ? coreAccessDenialMessage(wexPayCoreAccess.reason)
+      : "-";
   const onboarding = wexPayInstallation?.settingsJson as { onboardingStatus?: string; message?: string; estimatedBusinessDays?: number; source?: string } | null;
   const quickLinks = ["Bilgileri düzenle", "WexPay erişimi", "Lisans/Paket", "İşletme ekle", "Kullanıcı ekle"];
 
@@ -93,6 +103,22 @@ export default async function AdminOrganizationDetailPage({
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Lisans</p>
                 <p className="mt-2 text-sm font-black text-white">{licenseStatus}</p>
               </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:w-[520px] lg:col-start-2 lg:row-start-2">
+              <div className="rounded-2xl bg-white/10 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Core erişim</p>
+                <p className="mt-2 text-sm font-black text-white">{coreAccessLabel}</p>
+              </div>
+              <div className="rounded-2xl bg-white/10 p-4 sm:col-span-2">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Erişim notu</p>
+                <p className="mt-2 text-sm font-semibold text-slate-200">{coreAccessReason}</p>
+              </div>
+              {wexPayCoreAccess.billingState && wexPayCoreAccess.billingState !== "ok" && (
+                <div className="rounded-2xl bg-white/10 p-4 sm:col-span-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Fatura durumu</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-200">{wexPayCoreAccess.billingState}</p>
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-6 flex flex-wrap gap-2">

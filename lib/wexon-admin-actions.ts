@@ -10,7 +10,7 @@ import { hashApiKey } from "@/lib/wexon-api-key-hash";
 import { resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/wexon-passwords";
-import { assertEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
+import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
 import {
   AdminValidationError,
   parseApiKeyCreatePayload,
@@ -1156,7 +1156,7 @@ export async function addAdminMembershipAction(organizationId: string, formData:
         const activeStaffCount = await tx.membership.count({
           where: { organizationId, status: "ACTIVE" },
         });
-        const limitCheck = assertEntitlementLimit(wexpayAccess.entitlementMap, "staff_limit", activeStaffCount);
+        const limitCheck = assertStaffEntitlementLimit(wexpayAccess, activeStaffCount);
         if (!limitCheck.ok) {
           throw new AdminValidationError(limitCheck.message);
         }
