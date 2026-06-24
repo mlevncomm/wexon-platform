@@ -128,10 +128,13 @@ export function proxy(request: NextRequest) {
 
   if (pathname.startsWith("/admin") && !adminSessionCookie) {
     const loginUrl = routedUrl.clone();
-    loginUrl.pathname = surface === "admin" ? "/login" : "/admin/login";
+    loginUrl.pathname = "/admin/login";
     loginUrl.search = "";
     loginUrl.searchParams.set("next", `${surface === "admin" ? stripAdminPrefix(pathname) : pathname}${search}`);
     adminProxyDebug("proxy:redirect_login", { from: pathname, to: `${loginUrl.pathname}${loginUrl.search}` });
+    if (surface === "admin") {
+      return NextResponse.rewrite(loginUrl);
+    }
     return NextResponse.redirect(loginUrl);
   }
 
