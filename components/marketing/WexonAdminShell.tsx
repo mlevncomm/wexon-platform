@@ -35,7 +35,7 @@ export default async function WexonAdminShell({ children }: { children: ReactNod
               <WexonAdminNav />
             </div>
           </aside>
-          <div className="mx-auto w-full max-w-[1120px] min-w-0">{children}</div>
+          <div className="wx-panel-enter mx-auto w-full max-w-[1120px] min-w-0">{children}</div>
         </div>
       </main>
     </div>

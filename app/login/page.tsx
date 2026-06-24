@@ -54,7 +54,7 @@ export default async function LoginPage({
             {next ? <input type="hidden" name="next" value={next} /> : null}
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">E-posta</span>
-              <input name="email" type="email" required className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+              <input name="email" type="email" required className="wx-input-focus mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
             </label>
             <LoginPasswordField />
             <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white hover:bg-emerald-700">Giriş yap</button>

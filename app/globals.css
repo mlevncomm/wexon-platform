@@ -49,6 +49,12 @@
   /* Shadows */
   --wx-shadow-card: 0 4px 32px rgba(0, 0, 0, 0.35);
   --wx-shadow-glow: 0 0 40px rgba(16, 185, 129, 0.12);
+
+  /* Motion */
+  --wx-motion-fast:   180ms;
+  --wx-motion-normal: 220ms;
+  --wx-ease-out:      cubic-bezier(0.22, 1, 0.36, 1);
+  --wx-ease-soft:     cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* ─── Tailwind Theme Bridge ─────────────────────────────────────────────── */
@@ -101,6 +107,127 @@ input[type="password"]::-webkit-password-toggle-button {
   pointer-events: none;
 }
 
+/* ─── Motion & Transitions ──────────────────────────────────────────────── */
+
+@keyframes wx-page-enter-keyframes {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 5px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes wx-fade-in-keyframes {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes wx-card-enter-keyframes {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.wx-page-shell {
+  min-height: 100%;
+}
+
+.wx-page-enter {
+  animation: wx-page-enter-keyframes var(--wx-motion-normal) var(--wx-ease-soft) both;
+}
+
+.wx-panel-enter {
+  animation: wx-fade-in-keyframes var(--wx-motion-normal) var(--wx-ease-out) both;
+}
+
+.wx-fade-in {
+  animation: wx-fade-in-keyframes var(--wx-motion-normal) var(--wx-ease-out) both;
+}
+
+.wx-card-enter {
+  animation: wx-card-enter-keyframes var(--wx-motion-normal) var(--wx-ease-soft) both;
+}
+
+.wx-card-enter:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.wx-card-enter:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.wx-card-enter:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+.wx-interactive {
+  transition:
+    color var(--wx-motion-fast) var(--wx-ease-out),
+    background-color var(--wx-motion-fast) var(--wx-ease-out),
+    border-color var(--wx-motion-fast) var(--wx-ease-out),
+    box-shadow var(--wx-motion-normal) var(--wx-ease-out),
+    transform var(--wx-motion-fast) var(--wx-ease-out);
+}
+
+.wx-soft-hover {
+  transition:
+    color var(--wx-motion-fast) var(--wx-ease-out),
+    background-color var(--wx-motion-fast) var(--wx-ease-out),
+    border-color var(--wx-motion-fast) var(--wx-ease-out),
+    box-shadow var(--wx-motion-normal) var(--wx-ease-out),
+    transform var(--wx-motion-fast) var(--wx-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wx-soft-hover:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.wx-input-focus {
+  transition:
+    border-color var(--wx-motion-fast) var(--wx-ease-out),
+    box-shadow var(--wx-motion-fast) var(--wx-ease-out),
+    background-color var(--wx-motion-fast) var(--wx-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .wx-page-enter,
+  .wx-panel-enter,
+  .wx-card-enter,
+  .wx-fade-in {
+    animation: wx-fade-in-keyframes 1ms ease both !important;
+    animation-delay: 0ms !important;
+  }
+
+  .wx-interactive,
+  .wx-soft-hover,
+  .wx-btn,
+  .wx-input-focus {
+    transition-duration: 1ms !important;
+  }
+
+  .wx-soft-hover:hover {
+    transform: none !important;
+  }
+}
+
 /* ─── Utility Classes ───────────────────────────────────────────────────── */
 
 /* Card surface */
@@ -144,7 +271,12 @@ input[type="password"]::-webkit-password-toggle-button {
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 150ms ease, box-shadow 150ms ease, transform 100ms ease;
+  transition:
+    background var(--wx-motion-fast) var(--wx-ease-out),
+    box-shadow var(--wx-motion-normal) var(--wx-ease-out),
+    transform var(--wx-motion-fast) var(--wx-ease-out),
+    color var(--wx-motion-fast) var(--wx-ease-out),
+    border-color var(--wx-motion-fast) var(--wx-ease-out);
 }
 
 .wx-btn-primary {

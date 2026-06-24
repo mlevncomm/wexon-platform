@@ -27,14 +27,14 @@ export function WexonPageCTA({
       <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
         <Link
           href={primary.href}
-          className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white transition-colors hover:bg-emerald-400"
+          className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white wx-interactive hover:bg-emerald-400"
         >
           {primary.label}
         </Link>
         {secondary && (
           <Link
             href={secondary.href}
-            className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-white transition-colors hover:bg-white/10"
+            className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-white wx-interactive hover:bg-white/10"
           >
             {secondary.label}
           </Link>
@@ -82,7 +82,7 @@ export default function WexonStaticPageShell({
             </div>
           </section>
 
-          <div className="mt-16 space-y-16">{children}</div>
+          <div className="mt-16 space-y-16 wx-fade-in">{children}</div>
         </div>
       </main>
       <WexonFooter />

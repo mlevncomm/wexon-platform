@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import WexonRouteTransition from "@/components/wexon/WexonRouteTransition";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr" className="h-full">
-      <body className="min-h-full flex flex-col antialiased">{children}</body>
+      <body className="min-h-full flex flex-col antialiased">
+        <WexonRouteTransition>{children}</WexonRouteTransition>
+      </body>
     </html>
   );
 }

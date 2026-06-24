@@ -188,7 +188,7 @@ export default function WexPayBusinessShell({
                 <Link
                   key={tab.path}
                   href={buildHref(tab.path, activeBranch?.id ?? branchId, tab.branchScoped, activeOrganizationId)}
-                  className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`wx-interactive shrink-0 rounded-lg px-3 py-2 text-sm font-medium ${
                     active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                 >
@@ -276,7 +276,7 @@ export default function WexPayBusinessShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1920px] px-4 py-6 sm:px-5 lg:px-6 xl:px-8">{children}</main>
+      <main className="wx-panel-enter mx-auto w-full max-w-[1920px] px-4 py-6 sm:px-5 lg:px-6 xl:px-8">{children}</main>
     </div>
   );
 }

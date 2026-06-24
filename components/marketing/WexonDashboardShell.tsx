@@ -47,10 +47,10 @@ export default async function WexonDashboardShell({ children }: { children: Reac
           ) : null}
 
           <div className="flex shrink-0 items-center gap-2">
-            <a href="/contact" className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">
+            <a href="/contact" className="wx-interactive hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">
               Destek
             </a>
-            <a href={wexpayAppHref} className="hidden rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600 lg:inline-flex">
+            <a href={wexpayAppHref} className="wx-interactive hidden rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600 lg:inline-flex">
               WexPay uygulaması
             </a>
             <Suspense
@@ -103,7 +103,7 @@ export default async function WexonDashboardShell({ children }: { children: Reac
               <WexonDashboardNav />
             </div>
           </aside>
-          <div className="mx-auto w-full max-w-[1120px] min-w-0">{children}</div>
+          <div className="wx-panel-enter mx-auto w-full max-w-[1120px] min-w-0">{children}</div>
         </div>
       </main>
     </div>
