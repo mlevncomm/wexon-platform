@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { adminDebug, clearAdminSessionCookie, createAdminSessionCookie, isAdminEmailAllowed } from "@/lib/wexon-admin-auth";
+import { isWexonProductionDeployment, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath } from "@/lib/wexon-canonical-host";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 
 function readString(formData: FormData, key: string) {
@@ -10,25 +11,24 @@ function readString(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function safeNextPath(value: string) {
-  if (!value.startsWith("/")) return "/admin";
-  if (value.startsWith("//")) return "/admin";
-  if (value.startsWith("/admin/login")) return "/admin";
-  return value;
+function safeAdminNextPath(value: string) {
+  const path = canonicalSafeNextPath(value, "/admin");
+  if (path.startsWith("/admin/login")) return "/admin";
+  return path;
 }
 
 function redirectLoginError(message: string, nextPath: string, details?: { email?: string; reason?: string }) {
-  adminDebug("login:error_redirect", { message, next: safeNextPath(nextPath) });
+  adminDebug("login:error_redirect", { message, next: safeAdminNextPath(nextPath) });
   writeAuditFailure({
     action: details?.reason === "rate_limited" ? "admin.auth.rate_limited" : "admin.auth.login_failed",
     message,
     level: "WARN",
     source: "admin_auth",
-    metadata: { email: details?.email, next: safeNextPath(nextPath) },
+    metadata: { email: details?.email, next: safeAdminNextPath(nextPath) },
   });
   const params = new URLSearchParams({ adminError: message });
   if (nextPath) {
-    params.set("next", safeNextPath(nextPath));
+    params.set("next", safeAdminNextPath(nextPath));
   }
   redirect(`/admin/login?${params.toString()}`);
 }
@@ -37,7 +37,8 @@ export async function loginAdminAction(formData: FormData) {
   adminDebug("login:start");
   const email = readString(formData, "email").toLowerCase();
   const password = readString(formData, "password");
-  const nextPath = safeNextPath(readString(formData, "next") || "/admin");
+  const nextPath = safeAdminNextPath(readString(formData, "next") || "/admin");
+  const productionWexon = isWexonProductionDeployment();
   const ipAddress = await getServerActionIpAddress();
 
   const ipLimit = enforceRateLimit("admin.login.ip", ipAddress, RATE_LIMITS.adminLoginIp);
@@ -89,7 +90,7 @@ export async function loginAdminAction(formData: FormData) {
 
   await createAdminSessionCookie(email);
   adminDebug("login:redirect", { next: nextPath });
-  redirect(nextPath);
+  redirect(resolvePostLoginDestination(nextPath, { isAdmin: true, productionWexon }));
 }
 
 export async function logoutAdminAction() {

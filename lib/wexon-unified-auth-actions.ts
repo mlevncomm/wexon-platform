@@ -4,6 +4,12 @@ import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { createAdminSessionCookie, isAdminEmailAllowed } from "@/lib/wexon-admin-auth";
 import { createCustomerSessionCookie } from "@/lib/wexon-customer-auth";
+import {
+  buildProductionSubdomainUrl,
+  isWexonProductionDeployment,
+  resolvePostLoginDestination,
+  safeNextPath,
+} from "@/lib/wexon-canonical-host";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
@@ -31,6 +37,8 @@ function redirectUnifiedError(
 export async function loginUnifiedAction(formData: FormData) {
   const email = readString(formData, "email").toLowerCase();
   const password = readString(formData, "password");
+  const nextPath = safeNextPath(readString(formData, "next"), "");
+  const productionWexon = isWexonProductionDeployment();
   const ipAddress = await getServerActionIpAddress();
 
   const ipLimit = enforceRateLimit("unified.login.ip", ipAddress, RATE_LIMITS.customerLoginIp);
@@ -58,7 +66,9 @@ export async function loginUnifiedAction(formData: FormData) {
   const adminPassword = process.env.ADMIN_LOGIN_PASSWORD;
   if (isAdminEmailAllowed(email) && adminPassword && password === adminPassword) {
     await createAdminSessionCookie(email);
-    redirect("/admin");
+    redirect(
+      resolvePostLoginDestination(nextPath || "/admin", { isAdmin: true, productionWexon }),
+    );
   }
 
   const user = await prisma.user.findUnique({
@@ -90,8 +100,11 @@ export async function loginUnifiedAction(formData: FormData) {
   });
 
   if (user.mustChangePassword) {
-    redirect("/dashboard/change-password?next=%2Fdashboard");
+    const changePasswordPath = productionWexon
+      ? `${buildProductionSubdomainUrl("core", "/change-password")}?next=${encodeURIComponent(nextPath || "/dashboard")}`
+      : `/dashboard/change-password?next=${encodeURIComponent(nextPath || "/dashboard")}`;
+    redirect(changePasswordPath);
   }
 
-  redirect("/dashboard");
+  redirect(resolvePostLoginDestination(nextPath || "/dashboard", { isAdmin: false, productionWexon }));
 }

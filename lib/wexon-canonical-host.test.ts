@@ -1,0 +1,99 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  buildProductionSubdomainUrl,
+  publicPanelCanonicalTarget,
+  resolvePostLoginDestination,
+  subdomainPrefixedCanonicalPath,
+} from "./wexon-canonical-host";
+
+describe("publicPanelCanonicalTarget", () => {
+  it("redirects public /admin to admin host", () => {
+    const target = publicPanelCanonicalTarget("www.wexon.dev", "/admin");
+    assert.deepEqual(target, { kind: "subdomain", subdomain: "admin", pathname: "/" });
+    assert.equal(buildProductionSubdomainUrl("admin", "/"), "https://admin.wexon.dev/");
+  });
+
+  it("redirects public /admin/organizations to admin host path", () => {
+    const target = publicPanelCanonicalTarget("wexon.dev", "/admin/organizations");
+    assert.deepEqual(target, { kind: "subdomain", subdomain: "admin", pathname: "/organizations" });
+  });
+
+  it("redirects public /dashboard to core host", () => {
+    const target = publicPanelCanonicalTarget("www.wexon.dev", "/dashboard");
+    assert.deepEqual(target, { kind: "subdomain", subdomain: "core", pathname: "/" });
+  });
+
+  it("redirects public /apps/wexpay to app host", () => {
+    const target = publicPanelCanonicalTarget("www.wexon.dev", "/apps/wexpay/tables");
+    assert.deepEqual(target, { kind: "subdomain", subdomain: "app", pathname: "/tables" });
+  });
+
+  it("does not redirect public /login", () => {
+    assert.equal(publicPanelCanonicalTarget("www.wexon.dev", "/login"), null);
+  });
+
+  it("redirects public /dashboard/login to unified login", () => {
+    assert.deepEqual(publicPanelCanonicalTarget("www.wexon.dev", "/dashboard/login"), { kind: "unified-login" });
+  });
+});
+
+describe("subdomainPrefixedCanonicalPath", () => {
+  it("redirects admin host /admin to /", () => {
+    assert.equal(subdomainPrefixedCanonicalPath("admin", "/admin"), "/");
+  });
+
+  it("redirects admin host /admin/login to /", () => {
+    assert.equal(subdomainPrefixedCanonicalPath("admin", "/admin/login"), "/");
+  });
+
+  it("redirects core host /dashboard to /", () => {
+    assert.equal(subdomainPrefixedCanonicalPath("core", "/dashboard"), "/");
+  });
+
+  it("redirects app host /apps/wexpay to /", () => {
+    assert.equal(subdomainPrefixedCanonicalPath("app", "/apps/wexpay"), "/");
+  });
+});
+
+describe("resolvePostLoginDestination", () => {
+  it("maps next /apps/wexpay to app host in production", () => {
+    assert.equal(
+      resolvePostLoginDestination("/apps/wexpay/tables", { isAdmin: false, productionWexon: true }),
+      "https://app.wexon.dev/tables",
+    );
+  });
+
+  it("maps next /dashboard to core host in production", () => {
+    assert.equal(
+      resolvePostLoginDestination("/dashboard/billing", { isAdmin: false, productionWexon: true }),
+      "https://core.wexon.dev/billing",
+    );
+  });
+
+  it("maps next /admin to admin host in production", () => {
+    assert.equal(
+      resolvePostLoginDestination("/admin/organizations", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/organizations",
+    );
+  });
+
+  it("defaults admin login to admin host root in production", () => {
+    assert.equal(
+      resolvePostLoginDestination(undefined, { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/",
+    );
+  });
+
+  it("defaults customer login to core host root in production", () => {
+    assert.equal(
+      resolvePostLoginDestination(undefined, { isAdmin: false, productionWexon: true }),
+      "https://core.wexon.dev/",
+    );
+  });
+
+  it("keeps relative paths in local development", () => {
+    assert.equal(resolvePostLoginDestination("/dashboard", { isAdmin: false, productionWexon: false }), "/dashboard");
+    assert.equal(resolvePostLoginDestination("/admin", { isAdmin: true, productionWexon: false }), "/admin");
+  });
+});

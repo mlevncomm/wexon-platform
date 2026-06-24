@@ -1,15 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ACTIVE_ORGANIZATION_COOKIE, ACTIVE_ORGANIZATION_HEADER } from "@/lib/wexon-organization-context";
+import {
+  ADMIN_PREFIX,
+  APP_PREFIX,
+  CORE_PREFIX,
+  buildProductionSubdomainUrl,
+  buildProductionUnifiedLoginUrl,
+  isProductionWexonHost,
+  isPublicRootHost,
+  normalizeHost,
+  publicPanelCanonicalTarget,
+  resolveHostSurface,
+  resolveUnauthenticatedLoginRedirect,
+  stripPathPrefix,
+  subdomainPrefixedCanonicalPath,
+  type HostSurface,
+} from "@/lib/wexon-canonical-host";
 
 const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
-const APP_PREFIX = "/apps/wexpay";
-const CORE_PREFIX = "/dashboard";
-const ADMIN_PREFIX = "/admin";
 const INTERNAL_PREFIXES = [APP_PREFIX, CORE_PREFIX, ADMIN_PREFIX, "/demo", "/wexpay", "/checkout", "/signup", "/start", "/contact"];
-const PRODUCTION_ROOT_HOST = "wexon.dev";
-
-type HostSurface = "public" | "core" | "app" | "admin";
 
 function adminProxyDebug(label: string, data?: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "production") {
@@ -17,44 +27,43 @@ function adminProxyDebug(label: string, data?: Record<string, unknown>) {
   }
 }
 
-function normalizeHost(host: string | null) {
-  return (host ?? "").split(":")[0]?.toLowerCase() ?? "";
-}
-
-function resolveHostSurface(host: string): HostSurface {
-  if (host.startsWith("admin.")) return "admin";
-  if (host.startsWith("app.")) return "app";
-  if (host.startsWith("core.") || host.startsWith("portal.") || host.startsWith("customer.")) return "core";
-  return "public";
-}
-
-function isProductionWexonHost(host: string) {
-  return host === PRODUCTION_ROOT_HOST || host.endsWith(`.${PRODUCTION_ROOT_HOST}`);
-}
-
 function stripAdminPrefix(pathname: string) {
-  if (pathname === ADMIN_PREFIX || pathname === `${ADMIN_PREFIX}/`) return "/";
-  if (pathname.startsWith(`${ADMIN_PREFIX}/`)) return pathname.slice(ADMIN_PREFIX.length) || "/";
-  return pathname;
+  return stripPathPrefix(pathname, ADMIN_PREFIX);
 }
 
-function adminCanonicalRedirect(request: NextRequest, host: string, surface: HostSurface) {
+function productionCanonicalRedirect(request: NextRequest, host: string, surface: HostSurface) {
+  if (request.method !== "GET") return null;
+
   const { pathname, search } = request.nextUrl;
-  const isAdminPath = pathname === ADMIN_PREFIX || pathname.startsWith(`${ADMIN_PREFIX}/`);
-  if (!isAdminPath) return null;
 
-  const targetUrl = request.nextUrl.clone();
-  targetUrl.pathname = stripAdminPrefix(pathname);
-
-  if (surface === "admin") {
-    return targetUrl.pathname === pathname ? null : NextResponse.redirect(targetUrl);
+  if (isPublicRootHost(host)) {
+    const publicTarget = publicPanelCanonicalTarget(host, pathname);
+    if (publicTarget?.kind === "unified-login") {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.search = search;
+      return NextResponse.redirect(loginUrl);
+    }
+    if (publicTarget?.kind === "subdomain") {
+      const target = new URL(
+        buildProductionSubdomainUrl(publicTarget.subdomain, publicTarget.pathname, search),
+      );
+      return NextResponse.redirect(target);
+    }
   }
 
-  if (isProductionWexonHost(host)) {
-    targetUrl.hostname = `admin.${PRODUCTION_ROOT_HOST}`;
-    targetUrl.pathname = stripAdminPrefix(pathname);
-    targetUrl.search = search;
-    return NextResponse.redirect(targetUrl);
+  if (isProductionWexonHost(host) && surface !== "public") {
+    if (surface === "core" && (pathname === `${CORE_PREFIX}/login` || pathname.startsWith(`${CORE_PREFIX}/login/`))) {
+      return NextResponse.redirect(buildProductionUnifiedLoginUrl(`${pathname}${search}`));
+    }
+
+    const stripped = subdomainPrefixedCanonicalPath(surface, pathname);
+    if (stripped) {
+      const targetUrl = request.nextUrl.clone();
+      targetUrl.pathname = stripped;
+      targetUrl.search = search;
+      return NextResponse.redirect(targetUrl);
+    }
   }
 
   return null;
@@ -79,7 +88,7 @@ function resolveSurfacePath(pathname: string, surface: HostSurface) {
 export function proxy(request: NextRequest) {
   const host = normalizeHost(request.headers.get("host"));
   const surface = resolveHostSurface(host);
-  const canonicalRedirect = adminCanonicalRedirect(request, host, surface);
+  const canonicalRedirect = productionCanonicalRedirect(request, host, surface);
   if (canonicalRedirect) return canonicalRedirect;
 
   const routedUrl = request.nextUrl.clone();
@@ -108,12 +117,9 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname === "/dashboard/change-password" && request.method === "GET" && !customerSessionCookie) {
-    const loginUrl = routedUrl.clone();
-    loginUrl.pathname = "/dashboard/login";
-    loginUrl.search = "";
-    loginUrl.searchParams.set("next", `${pathname}${search}`);
-    adminProxyDebug("proxy:redirect_change_password_login", { from: pathname, to: `${loginUrl.pathname}${loginUrl.search}` });
-    return NextResponse.redirect(loginUrl);
+    const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, pathname, search);
+    adminProxyDebug("proxy:redirect_change_password_login", { from: pathname, to: loginTarget });
+    return NextResponse.redirect(loginTarget);
   }
 
   if (pathname === "/admin/login") {
@@ -127,33 +133,42 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/admin") && !adminSessionCookie) {
-    const loginUrl = routedUrl.clone();
-    loginUrl.pathname = "/admin/login";
-    loginUrl.search = "";
-    loginUrl.searchParams.set("next", `${surface === "admin" ? stripAdminPrefix(pathname) : pathname}${search}`);
-    adminProxyDebug("proxy:redirect_login", { from: pathname, to: `${loginUrl.pathname}${loginUrl.search}` });
+    const nextPath = `${surface === "admin" ? stripAdminPrefix(pathname) : pathname}${search}`;
+
     if (surface === "admin") {
-      return NextResponse.rewrite(loginUrl);
+      const isLoginSurface =
+        originalPathname === "/" ||
+        originalPathname === "/login" ||
+        pathname === "/admin/login";
+
+      const loginUrl = routedUrl.clone();
+      loginUrl.pathname = "/admin/login";
+      loginUrl.search = "";
+      if (nextPath && nextPath !== "/" && nextPath !== "/login") {
+        loginUrl.searchParams.set("next", nextPath);
+      }
+
+      if (isLoginSurface || !isProductionWexonHost(host)) {
+        adminProxyDebug("proxy:rewrite_admin_login", { from: pathname, to: loginUrl.pathname });
+        return NextResponse.rewrite(loginUrl);
+      }
     }
-    return NextResponse.redirect(loginUrl);
+
+    const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, nextPath, "");
+    adminProxyDebug("proxy:redirect_login", { from: pathname, to: loginTarget });
+    return NextResponse.redirect(loginTarget);
   }
 
   if (pathname.startsWith("/dashboard") && !customerSessionCookie && !adminSessionCookie) {
-    const loginUrl = routedUrl.clone();
-    loginUrl.pathname = "/dashboard/login";
-    loginUrl.search = "";
-    loginUrl.searchParams.set("next", `${pathname}${search}`);
-    adminProxyDebug("proxy:redirect_dashboard_login", { from: pathname, to: `${loginUrl.pathname}${loginUrl.search}` });
-    return NextResponse.redirect(loginUrl);
+    const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, `${pathname}${search}`, "");
+    adminProxyDebug("proxy:redirect_dashboard_login", { from: pathname, to: loginTarget });
+    return NextResponse.redirect(loginTarget);
   }
 
   if (pathname.startsWith("/apps/wexpay") && !customerSessionCookie && !adminSessionCookie) {
-    const loginUrl = routedUrl.clone();
-    loginUrl.pathname = "/dashboard/login";
-    loginUrl.search = "";
-    loginUrl.searchParams.set("next", `${pathname}${search}`);
-    adminProxyDebug("proxy:redirect_wexpay_login", { from: pathname, to: `${loginUrl.pathname}${loginUrl.search}` });
-    return NextResponse.redirect(loginUrl);
+    const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, `${pathname}${search}`, "");
+    adminProxyDebug("proxy:redirect_wexpay_login", { from: pathname, to: loginTarget });
+    return NextResponse.redirect(loginTarget);
   }
 
   const organizationIdFromQuery = routedUrl.searchParams.get("organizationId")?.trim();
@@ -188,6 +203,10 @@ export function proxy(request: NextRequest) {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 30,
+      ...(process.env.NODE_ENV === "production" &&
+      (process.env.NEXT_PUBLIC_APP_URL ?? "").includes("wexon.dev")
+        ? { domain: ".wexon.dev" }
+        : {}),
     });
   }
 

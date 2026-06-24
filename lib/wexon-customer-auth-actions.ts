@@ -3,6 +3,12 @@
 import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { clearCustomerSessionCookie, createCustomerSessionCookie } from "@/lib/wexon-customer-auth";
+import {
+  buildProductionSubdomainUrl,
+  isWexonProductionDeployment,
+  resolvePostLoginDestination,
+  safeNextPath as canonicalSafeNextPath,
+} from "@/lib/wexon-canonical-host";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
@@ -12,11 +18,10 @@ function readString(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function safeNextPath(value: string) {
-  if (!value.startsWith("/")) return "/dashboard";
-  if (value.startsWith("//")) return "/dashboard";
-  if (value.startsWith("/dashboard/login")) return "/dashboard";
-  return value;
+function safeCustomerNextPath(value: string) {
+  const path = canonicalSafeNextPath(value, "/dashboard");
+  if (path.startsWith("/dashboard/login")) return "/dashboard";
+  return path;
 }
 
 function redirectLoginError(message: string, nextPath: string, details?: { email?: string; userId?: string; reason?: string }): never {
@@ -26,16 +31,17 @@ function redirectLoginError(message: string, nextPath: string, details?: { email
     level: "WARN",
     userId: details?.userId,
     source: "customer_auth",
-    metadata: { email: details?.email, next: safeNextPath(nextPath) },
+    metadata: { email: details?.email, next: safeCustomerNextPath(nextPath) },
   });
-  const params = new URLSearchParams({ customerError: message, next: safeNextPath(nextPath) });
+  const params = new URLSearchParams({ customerError: message, next: safeCustomerNextPath(nextPath) });
   redirect(`/dashboard/login?${params.toString()}`);
 }
 
 export async function loginCustomerAction(formData: FormData) {
   const email = readString(formData, "email").toLowerCase();
   const password = readString(formData, "password");
-  const nextPath = safeNextPath(readString(formData, "next") || "/dashboard");
+  const nextPath = safeCustomerNextPath(readString(formData, "next") || "/dashboard");
+  const productionWexon = isWexonProductionDeployment();
   const ipAddress = await getServerActionIpAddress();
 
   const ipLimit = enforceRateLimit("customer.login.ip", ipAddress, RATE_LIMITS.customerLoginIp);
@@ -97,10 +103,12 @@ export async function loginCustomerAction(formData: FormData) {
     data: { lastLoginAt: new Date() },
   });
   if (user.mustChangePassword) {
-    const params = new URLSearchParams({ next: nextPath });
-    redirect(`/dashboard/change-password?${params.toString()}`);
+    const changePasswordPath = productionWexon
+      ? `${buildProductionSubdomainUrl("core", "/change-password")}?next=${encodeURIComponent(nextPath)}`
+      : `/dashboard/change-password?next=${encodeURIComponent(nextPath)}`;
+    redirect(changePasswordPath);
   }
-  redirect(nextPath);
+  redirect(resolvePostLoginDestination(nextPath, { isAdmin: false, productionWexon }));
 }
 
 export async function logoutCustomerAction() {

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { sessionCookieClearOptions, sessionCookieOptions } from "@/lib/wexon-canonical-host";
 
 /**
  * Admin session auth (MVP).
@@ -139,23 +140,11 @@ export async function createAdminSessionCookie(email: string) {
     maxAgeMs: SESSION_TTL_MS,
   });
 
-  cookieStore.set(ADMIN_SESSION_COOKIE, `${encodedEmail}.${expiresAt}.${signature}`, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: SESSION_COOKIE_PATH,
-    expires: new Date(expiresAt),
-  });
+  cookieStore.set(ADMIN_SESSION_COOKIE, `${encodedEmail}.${expiresAt}.${signature}`, sessionCookieOptions(new Date(expiresAt)));
 }
 
 export async function clearAdminSessionCookie() {
   const cookieStore = await cookies();
   adminDebug("session:cookie_clear", { path: SESSION_COOKIE_PATH });
-  cookieStore.set(ADMIN_SESSION_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: SESSION_COOKIE_PATH,
-    expires: new Date(0),
-  });
+  cookieStore.set(ADMIN_SESSION_COOKIE, "", sessionCookieClearOptions());
 }

@@ -2,8 +2,12 @@ import Link from "next/link";
 import LoginPasswordField from "@/app/login/LoginPasswordField";
 import { loginUnifiedAction } from "@/lib/wexon-unified-auth-actions";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ authError?: string }> }) {
-  const { authError } = await searchParams;
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ authError?: string; next?: string }>;
+}) {
+  const { authError, next } = await searchParams;
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_15%_0%,#0f3024_0%,transparent_48%),linear-gradient(180deg,#050b16_0%,#081424_100%)] p-3 text-white sm:p-4 lg:p-6">
@@ -47,6 +51,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </p>
           {authError && <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{authError}</div>}
           <form action={loginUnifiedAction} className="mt-6 grid gap-4">
+            {next ? <input type="hidden" name="next" value={next} /> : null}
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">E-posta</span>
               <input name="email" type="email" required className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />

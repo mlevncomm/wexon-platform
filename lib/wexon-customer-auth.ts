@@ -1,11 +1,11 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { sessionCookieClearOptions, sessionCookieOptions } from "@/lib/wexon-canonical-host";
 import { prisma } from "@/lib/prisma";
 
 export const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
 const SESSION_TTL_MS = 10 * 60 * 60 * 1000;
-const SESSION_COOKIE_PATH = "/";
 
 export type CustomerSession = {
   userId: string;
@@ -75,24 +75,12 @@ export async function createCustomerSessionCookie(userId: string) {
   const encodedUserId = Buffer.from(userId, "utf8").toString("base64url");
   const cookieStore = await cookies();
 
-  cookieStore.set(CUSTOMER_SESSION_COOKIE, `${encodedUserId}.${expiresAt}.${signature}`, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: SESSION_COOKIE_PATH,
-    expires: new Date(expiresAt),
-  });
+  cookieStore.set(CUSTOMER_SESSION_COOKIE, `${encodedUserId}.${expiresAt}.${signature}`, sessionCookieOptions(new Date(expiresAt)));
 }
 
 export async function clearCustomerSessionCookie() {
   const cookieStore = await cookies();
-  cookieStore.set(CUSTOMER_SESSION_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: SESSION_COOKIE_PATH,
-    expires: new Date(0),
-  });
+  cookieStore.set(CUSTOMER_SESSION_COOKIE, "", sessionCookieClearOptions());
 }
 
 export async function getCurrentCustomerUser() {
