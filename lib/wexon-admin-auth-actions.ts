@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { adminDebug, clearAdminSessionCookie, createAdminSessionCookie, isAdminEmailAllowed } from "@/lib/wexon-admin-auth";
 import { isWexonProductionDeployment, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath } from "@/lib/wexon-canonical-host";
+import { unifiedLoginUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 
 function readString(formData: FormData, key: string) {
@@ -96,6 +97,6 @@ export async function loginAdminAction(formData: FormData) {
 export async function logoutAdminAction() {
   adminDebug("logout:start");
   await clearAdminSessionCookie();
-  adminDebug("logout:redirect", { to: "/admin/login" });
-  redirect("/admin/login");
+  adminDebug("logout:redirect", { to: unifiedLoginUrl() });
+  redirect(unifiedLoginUrl());
 }

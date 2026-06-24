@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl } from "@/lib/wexon/urls";
 
 type BranchOption = { id: string; name: string; restaurantName: string };
 
@@ -31,7 +32,7 @@ function buildHref(path: string, branchId: string | null, branchScoped: boolean 
   if (organizationId) params.set("organizationId", organizationId);
   if (branchScoped && branchId) params.set("branchId", branchId);
   const query = params.toString();
-  return query ? `${path}?${query}` : path;
+  return appNavigationUrl(path, query);
 }
 
 function isActiveTab(pathname: string, tabPath: string) {
@@ -116,8 +117,8 @@ export default function WexPayBusinessShell({
   const branchId = searchParams.get("branchId");
   const activeOrganizationId = searchParams.get("organizationId") ?? organizationId;
   const dashboardHref = activeOrganizationId
-    ? `/dashboard?organizationId=${encodeURIComponent(activeOrganizationId)}`
-    : "/dashboard";
+    ? coreNavigationUrl("/dashboard", `organizationId=${encodeURIComponent(activeOrganizationId)}`)
+    : coreNavigationUrl("/dashboard");
   const activeBranch =
     branches.find((branch) => branch.id === branchId) ?? branches[0] ?? null;
   const headerTitle = activeBranch
@@ -161,7 +162,7 @@ export default function WexPayBusinessShell({
                         Admin önizleme
                       </span>
                       <Link
-                        href={`/admin/organizations/${organizationId}`}
+                        href={adminNavigationUrl(`/admin/organizations/${organizationId}`)}
                         className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] font-bold text-slate-600 hover:text-emerald-700"
                       >
                         Admin detay →

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
 const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
   Ürünler: [
@@ -35,7 +36,7 @@ const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
 
 function WexonLogo() {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
+    <Link href={publicUrl("/")} className="flex items-center gap-2.5">
       <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#10b981] shadow-sm shadow-emerald-500/20">
         <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
           <path d="M9 2L16 6V12L9 16L2 12V6L9 2Z" stroke="white" strokeWidth="1.5" />
@@ -72,7 +73,7 @@ export default function WexonFooter() {
                 {links.map((link) => (
                   <li key={link.label}>
                     <Link
-                      href={link.href}
+                      href={resolveNavigationHref(link.href)}
                       className="text-sm text-slate-500 transition-colors hover:text-slate-950"
                     >
                       {link.label}

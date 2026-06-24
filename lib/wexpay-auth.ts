@@ -6,6 +6,7 @@ import { findSelectedOrganization } from "@/lib/wexon-core-dashboard";
 import { requireProductAccess } from "@/lib/wexon-core-access";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
 import { prisma } from "@/lib/prisma";
+import { customerLoginUrl } from "@/lib/wexon/urls";
 
 export function canAccessWexPay(role: string) {
   return ["OWNER", "ADMIN", "MANAGER", "STAFF", "VIEWER"].includes(role);
@@ -129,7 +130,7 @@ export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSe
   if (customerSession) {
     const access = await assertCustomerDashboardAccess(selector);
     if (!access.organizationId || !access.user) {
-      redirect("/dashboard/login");
+      redirect(customerLoginUrl());
     }
 
     const membership = await prisma.membership.findFirst({
@@ -158,10 +159,11 @@ export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSe
   const adminSession = await getAdminSession();
   if (adminSession) {
     if (!selector?.organizationId?.trim() && !selector?.organizationSlug?.trim()) {
-      const params = new URLSearchParams({
-        customerError: "WexPay önizlemesi için müşteri seçin veya organizationId parametresi kullanın.",
-      });
-      redirect(`/dashboard/login?${params.toString()}`);
+      redirect(
+        customerLoginUrl({
+          customerError: "WexPay önizlemesi için müşteri seçin veya organizationId parametresi kullanın.",
+        }),
+      );
     }
 
     const selected = await findSelectedOrganization(selector);
@@ -181,7 +183,7 @@ export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSe
   if (selector?.organizationId) nextParams.set("organizationId", selector.organizationId);
   if (selector?.organizationSlug) nextParams.set("organizationSlug", selector.organizationSlug);
   const nextPath = nextParams.toString() ? `/apps/wexpay?${nextParams.toString()}` : "/apps/wexpay";
-  redirect(`/dashboard/login?next=${encodeURIComponent(nextPath)}`);
+  redirect(customerLoginUrl({ next: nextPath }));
 }
 
 export async function assertWexPayAccess(explicitSelector?: DashboardOrganizationSelector) {

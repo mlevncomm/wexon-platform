@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { loginCustomerAction } from "@/lib/wexon-customer-auth-actions";
+import { publicUrl } from "@/lib/wexon/urls";
 
 export default async function DashboardLoginPage({
   searchParams,
@@ -13,7 +14,7 @@ export default async function DashboardLoginPage({
     <main className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-5 py-12 text-slate-950">
       <section className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <Link href="/" className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-2.5 text-sm font-black text-white">
+          <Link href={publicUrl("/")} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-2.5 text-sm font-black text-white">
             Wexon
           </Link>
           <p className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Wexon Core</p>
@@ -57,7 +58,7 @@ export default async function DashboardLoginPage({
                 Development ortamında şifresi henüz belirlenmemiş kullanıcılar için geçici ortak şifre fallback olarak kullanılabilir.
               </p>
             )}
-            <Link href="/" className="text-center text-sm font-bold text-slate-500 hover:text-slate-950">
+            <Link href={publicUrl("/")} className="text-center text-sm font-bold text-slate-500 hover:text-slate-950">
               Ana sayfaya dön
             </Link>
           </form>

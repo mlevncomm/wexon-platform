@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { adminNavigation, adminSecondaryNavigation } from "@/lib/wexon-admin-navigation";
+import { adminNavigationUrl } from "@/lib/wexon/urls";
 
 function AdminIcon({ type }: { type: string }) {
   const className = "h-4 w-4";
@@ -102,7 +103,7 @@ export default function WexonAdminNav() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={adminNavigationUrl(item.href)}
               onClick={() => setOpen(false)}
               className={`min-w-0 rounded-2xl px-3 py-2.5 text-center text-xs font-bold transition-colors sm:text-sm ${
                 isActive ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
@@ -123,7 +124,7 @@ export default function WexonAdminNav() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={adminNavigationUrl(item.href)}
               className={`group flex min-w-0 items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all lg:px-4 ${
                 isActive ? "bg-emerald-50 text-emerald-700 shadow-sm" : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
               }`}
@@ -142,7 +143,7 @@ export default function WexonAdminNav() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={adminNavigationUrl(item.href)}
               className={`rounded-2xl px-4 py-2.5 text-sm font-bold transition-colors ${
                 isActive ? "bg-slate-100 text-slate-950" : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
               }`}

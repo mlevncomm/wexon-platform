@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { NAV_LINKS } from "@/lib/wexon-mock-data";
+import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
 function WexonMark() {
   return (
@@ -42,7 +43,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
       }`}
     >
       <div className="mx-auto flex h-16 max-w-[1480px] items-center justify-between px-5 sm:px-8 md:h-20 lg:px-12 xl:px-16 2xl:px-20">
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href={publicUrl("/")} className="flex items-center gap-2.5">
           <WexonMark />
           <span
             className={`text-lg font-bold tracking-tight transition-colors ${
@@ -63,7 +64,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
-              href={link.href}
+              href={resolveNavigationHref(link.href)}
               className={`rounded-xl px-4 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm xl:px-5 ${
                 overDark
                   ? "text-slate-300/75 hover:bg-white/10 hover:text-white"
@@ -77,7 +78,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
 
         <div className="hidden items-center gap-2 md:flex">
           <Link
-            href="/login"
+            href={publicUrl("/login")}
             className={`inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
               overDark
                 ? "border border-white/25 bg-transparent text-white backdrop-blur hover:border-white/40 hover:bg-white/10"
@@ -87,7 +88,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             Giriş Yap
           </Link>
           <Link
-            href="/signup"
+            href={publicUrl("/signup")}
             className="inline-flex items-center justify-center rounded-full bg-[#10b981] px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
           >
             Kayıt Ol
@@ -122,7 +123,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
-                href={link.href}
+                href={resolveNavigationHref(link.href)}
                 onClick={() => setMenuOpen(false)}
                 className="block rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
               >
@@ -132,14 +133,14 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
           </div>
           <div className="flex flex-col gap-2 border-t border-slate-200 pt-3">
             <Link
-              href="/login"
+              href={publicUrl("/login")}
               onClick={() => setMenuOpen(false)}
               className="inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900"
             >
               Giriş Yap
             </Link>
             <Link
-              href="/signup"
+              href={publicUrl("/signup")}
               onClick={() => setMenuOpen(false)}
               className="inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-5 py-3 text-sm font-bold text-white"
             >

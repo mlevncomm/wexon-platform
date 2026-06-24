@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publicUrl } from "@/lib/wexon/urls";
 import {
   DashboardAccountStatusNotice,
   DashboardCompactPanel,
@@ -126,7 +127,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
                     WexPay uygulamasına git
                   </Link>
                   <Link
-                    href="/contact"
+                    href={publicUrl("/contact")}
                     className="inline-flex w-full items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10 sm:w-auto"
                   >
                     Destek talebi oluştur

@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { sessionCookieClearOptions, sessionCookieOptions } from "@/lib/wexon-canonical-host";
+import { customerLoginUrl } from "@/lib/wexon/urls";
 import { prisma } from "@/lib/prisma";
 
 export const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
@@ -13,8 +14,7 @@ export type CustomerSession = {
 };
 
 function customerLoginRedirect(message: string): never {
-  const params = new URLSearchParams({ customerError: message });
-  redirect(`/dashboard/login?${params.toString()}`);
+  redirect(customerLoginUrl({ customerError: message }));
 }
 
 type CustomerResolveResult =
@@ -64,7 +64,7 @@ export async function getCustomerSession() {
 export async function assertCustomerSession() {
   const session = await getCustomerSession();
   if (!session) {
-    redirect("/dashboard/login");
+    redirect(customerLoginUrl());
   }
   return session;
 }
@@ -198,7 +198,7 @@ export async function assertCustomerOrganizationRole(organizationId: string, all
   });
 
   if (!user || !user.isActive) {
-    redirect("/dashboard/login");
+    redirect(customerLoginUrl());
   }
 
   const membership = user.memberships[0];

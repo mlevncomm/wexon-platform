@@ -3,6 +3,7 @@ import ChangePasswordFields from "@/app/dashboard/change-password/ChangePassword
 import { changeCustomerPasswordAction } from "@/lib/wexon-customer-actions";
 import { assertCustomerSession } from "@/lib/wexon-customer-auth";
 import { prisma } from "@/lib/prisma";
+import { customerLoginUrl } from "@/lib/wexon/urls";
 
 export default async function DashboardChangePasswordPage({
   searchParams,
@@ -14,7 +15,7 @@ export default async function DashboardChangePasswordPage({
   const user = await prisma.user.findUnique({ where: { id: session.userId } });
 
   if (!user || !user.isActive) {
-    redirect("/dashboard/login");
+    redirect(customerLoginUrl());
   }
 
   if (!user.mustChangePassword) {

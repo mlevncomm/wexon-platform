@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
 import { assertCustomerDashboardAccess, getCustomerSession } from "@/lib/wexon-customer-auth";
 import { evaluateProductAccess } from "@/lib/wexon-core-access";
+import { customerLoginUrl } from "@/lib/wexon/urls";
 
 export type EntitlementValue = boolean | number | string | null;
 export type EntitlementMap = Record<string, EntitlementValue>;
@@ -258,14 +259,13 @@ export async function getCustomerDashboardData(selector?: DashboardOrganizationS
   if (customerSession) {
     const access = await assertCustomerDashboardAccess(selector);
     if (!access.user) {
-      redirect("/dashboard/login");
+      redirect(customerLoginUrl());
     }
     if (access.user.mustChangePassword) {
       redirect("/dashboard/change-password");
     }
     if (!access.organizationId) {
-      const params = new URLSearchParams({ customerError: "Aktif üyelik bulunamadı." });
-      redirect(`/dashboard/login?${params.toString()}`);
+      redirect(customerLoginUrl({ customerError: "Aktif üyelik bulunamadı." }));
     }
     return getOrganizationDashboardData({ organizationId: access.organizationId }, "customer");
   }
@@ -273,8 +273,11 @@ export async function getCustomerDashboardData(selector?: DashboardOrganizationS
   const adminSession = await getAdminSession();
   if (adminSession) {
     if (!selector?.organizationId?.trim() && !selector?.organizationSlug?.trim()) {
-      const params = new URLSearchParams({ customerError: "Müşteri panelini görüntülemek için müşteri girişi yapın." });
-      redirect(`/dashboard/login?${params.toString()}`);
+      redirect(
+        customerLoginUrl({
+          customerError: "Müşteri panelini görüntülemek için müşteri girişi yapın.",
+        }),
+      );
     }
     return getOrganizationDashboardData(selector, "admin_preview");
   }
@@ -285,7 +288,7 @@ export async function getCustomerDashboardData(selector?: DashboardOrganizationS
   if (organizationId) params.set("organizationId", organizationId);
   if (organizationSlug) params.set("organizationSlug", organizationSlug);
   const next = params.toString() ? `/dashboard?${params.toString()}` : "/dashboard";
-  redirect(`/dashboard/login?next=${encodeURIComponent(next)}`);
+  redirect(customerLoginUrl({ next }));
 }
 
 export function dashboardHref(path: string, context: DashboardOrganizationContext) {

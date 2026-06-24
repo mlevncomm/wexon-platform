@@ -6,6 +6,7 @@ import { getAdminSession } from "@/lib/wexon-admin-auth";
 import { canManageOrganizationUsers, getCurrentCustomerUser } from "@/lib/wexon-customer-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
 import { readActiveOrganizationId, wexpayHref } from "@/lib/wexon-organization-context";
+import { publicUrl } from "@/lib/wexon/urls";
 
 export default async function WexonDashboardShell({ children }: { children: ReactNode }) {
   const [customerUser, adminSession, activeOrganizationId] = await Promise.all([
@@ -47,7 +48,7 @@ export default async function WexonDashboardShell({ children }: { children: Reac
           ) : null}
 
           <div className="flex shrink-0 items-center gap-2">
-            <a href="/contact" className="wx-interactive hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">
+            <a href={publicUrl("/contact")} className="wx-interactive hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">
               Destek
             </a>
             <a href={wexpayAppHref} className="wx-interactive hidden rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600 lg:inline-flex">

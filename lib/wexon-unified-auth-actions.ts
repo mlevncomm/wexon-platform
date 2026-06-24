@@ -10,6 +10,7 @@ import {
   resolvePostLoginDestination,
   safeNextPath,
 } from "@/lib/wexon-canonical-host";
+import { publicUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
@@ -31,7 +32,7 @@ function redirectUnifiedError(
     metadata: { email: details?.email },
   });
   const params = new URLSearchParams({ authError: message });
-  redirect(`/login?${params.toString()}`);
+  redirect(`${publicUrl("/login")}?${params.toString()}`);
 }
 
 export async function loginUnifiedAction(formData: FormData) {

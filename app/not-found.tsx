@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
 export default function NotFoundPage() {
   return (
@@ -15,7 +16,7 @@ export default function NotFoundPage() {
 
       <section className="relative mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,1fr)_460px]">
             <div className="min-w-0">
-          <Link href="/" className="mb-8 inline-flex rounded-full border border-white/10 bg-white px-5 py-2.5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-950/20">
+          <Link href={publicUrl("/")} className="mb-8 inline-flex rounded-full border border-white/10 bg-white px-5 py-2.5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-950/20">
                 Wexon
               </Link>
           <span className="mb-5 flex w-fit rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
@@ -31,10 +32,10 @@ export default function NotFoundPage() {
             Wexon Core, WexPay, WexHotel ve WexB2B ürünlerine ait erişimler hesabınıza ve lisans durumunuza göre değişebilir.
               </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Link href="/" className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400">
+            <Link href={publicUrl("/")} className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400">
                   Ana sayfaya dön
                 </Link>
-            <Link href="/contact" className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-black text-white transition hover:bg-white/10">
+            <Link href={resolveNavigationHref("/contact")} className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-black text-white transition hover:bg-white/10">
               Destek talebi oluştur
                 </Link>
               </div>

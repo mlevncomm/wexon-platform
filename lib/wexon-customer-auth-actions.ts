@@ -3,12 +3,8 @@
 import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { clearCustomerSessionCookie, createCustomerSessionCookie } from "@/lib/wexon-customer-auth";
-import {
-  buildProductionSubdomainUrl,
-  isWexonProductionDeployment,
-  resolvePostLoginDestination,
-  safeNextPath as canonicalSafeNextPath,
-} from "@/lib/wexon-canonical-host";
+import { buildProductionSubdomainUrl, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath, isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
+import { customerLoginUrl, unifiedLoginUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
@@ -33,8 +29,7 @@ function redirectLoginError(message: string, nextPath: string, details?: { email
     source: "customer_auth",
     metadata: { email: details?.email, next: safeCustomerNextPath(nextPath) },
   });
-  const params = new URLSearchParams({ customerError: message, next: safeCustomerNextPath(nextPath) });
-  redirect(`/dashboard/login?${params.toString()}`);
+  redirect(customerLoginUrl({ next: safeCustomerNextPath(nextPath), customerError: message }));
 }
 
 export async function loginCustomerAction(formData: FormData) {
@@ -113,5 +108,5 @@ export async function loginCustomerAction(formData: FormData) {
 
 export async function logoutCustomerAction() {
   await clearCustomerSessionCookie();
-  redirect("/dashboard/login");
+  redirect(unifiedLoginUrl());
 }

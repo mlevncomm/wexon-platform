@@ -1,4 +1,8 @@
+import { buildProductionUnifiedLoginUrl } from "@/lib/wexon/urls";
+
 export const PRODUCTION_ROOT_HOST = "wexon.dev";
+
+export { buildProductionUnifiedLoginUrl };
 
 export const ADMIN_PREFIX = "/admin";
 export const CORE_PREFIX = "/dashboard";
@@ -103,13 +107,6 @@ export function buildProductionSubdomainUrl(subdomain: ProductionSubdomain, path
   if (pathname === "/" || pathname === "") return `${base}/${search}`;
   const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
   return `${base}${path}${search}`;
-}
-
-export function buildProductionUnifiedLoginUrl(nextPath?: string) {
-  const base = `https://www.${PRODUCTION_ROOT_HOST}/login`;
-  if (!nextPath?.trim()) return base;
-  const params = new URLSearchParams({ next: nextPath });
-  return `${base}?${params.toString()}`;
 }
 
 export function safeNextPath(value: string | undefined, fallback: string) {

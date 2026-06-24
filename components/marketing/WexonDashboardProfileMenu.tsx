@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { logoutCustomerAction } from "@/lib/wexon-customer-auth-actions";
+import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl, publicUrl, resolveNavigationHref, unifiedLoginUrl } from "@/lib/wexon/urls";
 
 type OrganizationOption = {
   id: string;
@@ -28,9 +29,9 @@ function buildOrganizationHref(pathname: string, searchParams: URLSearchParams, 
   params.set("organizationId", organizationId);
   params.delete("organizationSlug");
   if (pathname.startsWith("/dashboard")) {
-    return `${pathname}?${params.toString()}`;
+    return coreNavigationUrl(pathname, params.toString());
   }
-  return `/dashboard?organizationId=${encodeURIComponent(organizationId)}`;
+  return coreNavigationUrl("/dashboard", `organizationId=${encodeURIComponent(organizationId)}`);
 }
 
 export default function WexonDashboardProfileMenu({
@@ -68,14 +69,16 @@ export default function WexonDashboardProfileMenu({
   const displayOrganizationName =
     organizations.find((organization) => organization.id === activeOrganizationId)?.name ?? organizationName;
 
-  const withOrganizationContext = useMemo(() => {
+  const withCanonicalContext = useMemo(() => {
     return (path: string) => {
-      if (activeOrganizationId) {
-        return `${path}?organizationId=${encodeURIComponent(activeOrganizationId)}`;
-      }
-      if (organizationSlug) {
-        return `${path}?organizationSlug=${encodeURIComponent(organizationSlug)}`;
-      }
+      const search = activeOrganizationId
+        ? `organizationId=${encodeURIComponent(activeOrganizationId)}`
+        : organizationSlug
+          ? `organizationSlug=${encodeURIComponent(organizationSlug)}`
+          : "";
+      if (path.startsWith("/apps/wexpay")) return appNavigationUrl(path, search);
+      if (path.startsWith("/admin")) return adminNavigationUrl(path, search);
+      if (path.startsWith("/dashboard")) return coreNavigationUrl(path, search);
       return path;
     };
   }, [activeOrganizationId, organizationSlug]);
@@ -107,11 +110,11 @@ export default function WexonDashboardProfileMenu({
     sections.push({
       title: "Hesap",
       items: [
-        { label: "Genel bakış", href: withOrganizationContext("/dashboard") },
-        { label: "Aktiviteler", href: withOrganizationContext("/dashboard/activity") },
+        { label: "Genel bakış", href: withCanonicalContext("/dashboard") },
+        { label: "Aktiviteler", href: withCanonicalContext("/dashboard/activity") },
         {
           label: "Şifre değiştir",
-          href: "/dashboard/change-password",
+          href: coreNavigationUrl("/dashboard/change-password"),
           highlight: mustChangePassword,
         },
       ],
@@ -120,35 +123,35 @@ export default function WexonDashboardProfileMenu({
     sections.push({
       title: "Organizasyon",
       items: [
-        { label: "Organizasyon ayarları", href: withOrganizationContext("/dashboard/organization") },
+        { label: "Organizasyon ayarları", href: withCanonicalContext("/dashboard/organization") },
         ...(canManageUsers
-          ? [{ label: "Kullanıcı yönetimi", href: withOrganizationContext("/dashboard/users") }]
+          ? [{ label: "Kullanıcı yönetimi", href: withCanonicalContext("/dashboard/users") }]
           : []),
-        { label: "Faturalar", href: withOrganizationContext("/dashboard/billing") },
-        { label: "Lisans & abonelik", href: withOrganizationContext("/dashboard/subscription") },
+        { label: "Faturalar", href: withCanonicalContext("/dashboard/billing") },
+        { label: "Lisans & abonelik", href: withCanonicalContext("/dashboard/subscription") },
       ],
     });
 
     sections.push({
       title: "Ürünler",
       items: [
-        { label: "Ürünlerim", href: withOrganizationContext("/dashboard/products") },
-        { label: "WexPay uygulaması", href: withOrganizationContext("/apps/wexpay"), accent: true },
-        { label: "Entegrasyonlar", href: withOrganizationContext("/dashboard/integrations") },
+        { label: "Ürünlerim", href: withCanonicalContext("/dashboard/products") },
+        { label: "WexPay uygulaması", href: withCanonicalContext("/apps/wexpay"), accent: true },
+        { label: "Entegrasyonlar", href: withCanonicalContext("/dashboard/integrations") },
       ],
     });
   } else {
     sections.push({
       title: "Oturum",
-      items: [{ label: "Giriş yap", href: "/dashboard/login", highlight: true }],
+      items: [{ label: "Giriş yap", href: unifiedLoginUrl(), highlight: true }],
     });
   }
 
   sections.push({
     title: "Yardım",
     items: [
-      { label: "Destek talepleri", href: withOrganizationContext("/dashboard/support") },
-      { label: "İletişim", href: "/contact" },
+      { label: "Destek talepleri", href: withCanonicalContext("/dashboard/support") },
+      { label: "İletişim", href: resolveNavigationHref("/contact") },
     ],
   });
 
@@ -156,12 +159,12 @@ export default function WexonDashboardProfileMenu({
     sections.push({
       title: "Yönetim",
       items: [
-        { label: "Admin paneli", href: "/admin" },
+        { label: "Admin paneli", href: adminNavigationUrl("/admin") },
         ...(activeOrganizationId
-          ? [{ label: "Müşteri admin detayı", href: `/admin/organizations/${activeOrganizationId}` }]
+          ? [{ label: "Müşteri admin detayı", href: adminNavigationUrl(`/admin/organizations/${activeOrganizationId}`) }]
           : []),
         ...(activeOrganizationId
-          ? [{ label: "WexPay operasyonları", href: withOrganizationContext("/apps/wexpay"), accent: true }]
+          ? [{ label: "WexPay operasyonları", href: withCanonicalContext("/apps/wexpay"), accent: true }]
           : []),
       ],
     });
@@ -169,7 +172,7 @@ export default function WexonDashboardProfileMenu({
 
   sections.push({
     title: "Platform",
-    items: [{ label: "Wexon ana site", href: "/" }],
+    items: [{ label: "Wexon ana site", href: publicUrl("/") }],
   });
 
   const showOrganizationSwitcher = showLogout && organizations.length > 1;
@@ -290,3 +293,4 @@ export default function WexonDashboardProfileMenu({
     </div>
   );
 }
+

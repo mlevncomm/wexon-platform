@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { AdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { logoutAdminAction } from "@/lib/wexon-admin-auth-actions";
+import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl, publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
 type MenuSection = {
   title: string;
@@ -48,32 +49,32 @@ export default function WexonAdminProfileMenu({
     {
       title: "Operasyon",
       items: [
-        { label: "Genel bakış", href: "/admin" },
-        { label: "Organizasyonlar", href: "/admin/organizations", badge: snapshot ? String(snapshot.stats.organizations) : undefined },
-        { label: "Destek talepleri", href: "/admin/support", badge: snapshot?.stats.openSupportTickets ? String(snapshot.stats.openSupportTickets) : undefined },
-        { label: "Lisanslar", href: "/admin/licenses", badge: snapshot?.stats.attentionLicenses ? String(snapshot.stats.attentionLicenses) : undefined },
-        { label: "Faturalar", href: "/admin/billing", badge: snapshot?.stats.pendingInvoices ? String(snapshot.stats.pendingInvoices) : undefined },
-        { label: "İşlem geçmişi", href: "/admin/audit-logs" },
+        { label: "Genel bakış", href: adminNavigationUrl("/admin") },
+        { label: "Organizasyonlar", href: adminNavigationUrl("/admin/organizations"), badge: snapshot ? String(snapshot.stats.organizations) : undefined },
+        { label: "Destek talepleri", href: adminNavigationUrl("/admin/support"), badge: snapshot?.stats.openSupportTickets ? String(snapshot.stats.openSupportTickets) : undefined },
+        { label: "Lisanslar", href: adminNavigationUrl("/admin/licenses"), badge: snapshot?.stats.attentionLicenses ? String(snapshot.stats.attentionLicenses) : undefined },
+        { label: "Faturalar", href: adminNavigationUrl("/admin/billing"), badge: snapshot?.stats.pendingInvoices ? String(snapshot.stats.pendingInvoices) : undefined },
+        { label: "İşlem geçmişi", href: adminNavigationUrl("/admin/audit-logs") },
       ],
     },
     {
       title: "Katalog",
       items: [
-        { label: "Ürün kataloğu", href: "/admin/products" },
-        { label: "Paketler", href: "/admin/plans" },
-        { label: "Abonelikler", href: "/admin/subscriptions" },
-        { label: "Entegrasyonlar", href: "/admin/integrations" },
-        { label: "Müşteri özeti", href: "/admin/customers" },
+        { label: "Ürün kataloğu", href: adminNavigationUrl("/admin/products") },
+        { label: "Paketler", href: adminNavigationUrl("/admin/plans") },
+        { label: "Abonelikler", href: adminNavigationUrl("/admin/subscriptions") },
+        { label: "Entegrasyonlar", href: adminNavigationUrl("/admin/integrations") },
+        { label: "Müşteri özeti", href: adminNavigationUrl("/admin/customers") },
       ],
     },
     {
       title: "Hızlı geçiş",
       items: [
-        { label: "WexPay demo (sandbox)", href: "/demo/wexpay/business" },
-        { label: "Müşteri paneli", href: "/dashboard" },
-        { label: "WexPay operasyon", href: "/apps/wexpay" },
-        { label: "Admin ayarları", href: "/admin/settings" },
-        { label: "Ana site", href: "/" },
+        { label: "WexPay demo (sandbox)", href: resolveNavigationHref("/demo/wexpay/business") },
+        { label: "Müşteri paneli", href: coreNavigationUrl("/dashboard") },
+        { label: "WexPay operasyon", href: appNavigationUrl("/apps/wexpay") },
+        { label: "Admin ayarları", href: adminNavigationUrl("/admin/settings") },
+        { label: "Ana site", href: publicUrl("/") },
       ],
     },
   ];
@@ -162,3 +163,4 @@ export default function WexonAdminProfileMenu({
     </div>
   );
 }
+

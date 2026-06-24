@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import type { AdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { adminCommandRoutes } from "@/lib/wexon-admin-navigation";
 import WexonAdminProfileMenu from "@/components/marketing/WexonAdminProfileMenu";
+import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
 type CommandItem = {
   id: string;
@@ -35,7 +36,7 @@ function useIsClient() {
 function AdminBrandLink({ compact = false, inline = false }: { compact?: boolean; inline?: boolean }) {
   return (
     <Link
-      href="/admin"
+      href={adminNavigationUrl("/admin")}
       className={`group flex shrink-0 items-center gap-2 ${inline ? "max-w-[5.5rem]" : "min-w-0 gap-2.5"}`}
     >
       <span
@@ -90,7 +91,7 @@ function AlertsPanelContent({
           alertItems.map((item) => (
             <Link
               key={item.label}
-              href={item.href}
+              href={adminNavigationUrl(item.href)}
               onClick={onClose}
               className="flex items-center justify-between rounded-xl px-3 py-2.5 transition-colors hover:bg-slate-50"
             >
@@ -125,7 +126,7 @@ function AlertsPanelContent({
           ))
         )}
         <Link
-          href="/admin/audit-logs"
+          href={adminNavigationUrl("/admin/audit-logs")}
           onClick={onClose}
           className="mt-1 block rounded-xl px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
         >
@@ -160,14 +161,20 @@ export default function WexonAdminHeaderToolbar({
     const routes = adminCommandRoutes.map((route) => ({
       id: `route:${route.href}:${route.label}`,
       label: route.label,
-      href: route.href,
+      href: route.href.startsWith("/admin")
+        ? adminNavigationUrl(route.href)
+        : route.href.startsWith("/dashboard")
+          ? coreNavigationUrl(route.href)
+          : route.href.startsWith("/apps/wexpay")
+            ? appNavigationUrl(route.href)
+            : resolveNavigationHref(route.href),
       group: route.group,
       keywords: route.keywords,
     }));
     const orgs = snapshot.organizations.map((organization) => ({
       id: `org:${organization.id}`,
       label: organization.name,
-      href: `/admin/organizations/${organization.id}`,
+      href: adminNavigationUrl(`/admin/organizations/${organization.id}`),
       group: "Müşteriler",
       keywords: `${organization.slug} organizasyon müşteri`,
     }));
@@ -209,19 +216,19 @@ export default function WexonAdminHeaderToolbar({
       {
         label: "Bekleyen fatura",
         value: snapshot.stats.pendingInvoices,
-        href: "/admin/billing",
+        href: adminNavigationUrl("/admin/billing"),
         tone: "amber" as const,
       },
       {
         label: "Dikkat gerektiren lisans",
         value: snapshot.stats.attentionLicenses,
-        href: "/admin/licenses",
+        href: adminNavigationUrl("/admin/licenses"),
         tone: "rose" as const,
       },
       {
         label: "Açık destek talebi",
         value: snapshot.stats.openSupportTickets,
-        href: "/admin/support",
+        href: adminNavigationUrl("/admin/support"),
         tone: "emerald" as const,
       },
     ];
@@ -245,6 +252,10 @@ export default function WexonAdminHeaderToolbar({
     (href: string) => {
       closeCommand();
       setAlertsOpen(false);
+      if (href.startsWith("http://") || href.startsWith("https://")) {
+        window.location.assign(href);
+        return;
+      }
       router.push(href);
     },
     [closeCommand, router],
@@ -342,7 +353,7 @@ export default function WexonAdminHeaderToolbar({
         </button>
         <div className="flex shrink-0 items-center gap-0.5">
           <Link
-            href="/admin/organizations"
+            href={adminNavigationUrl("/admin/organizations")}
             aria-label="Yeni müşteri"
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
           >
@@ -449,7 +460,7 @@ export default function WexonAdminHeaderToolbar({
           </div>
 
           <Link
-            href="/admin/organizations"
+            href={adminNavigationUrl("/admin/organizations")}
             className="hidden rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-sm shadow-slate-900/20 transition-colors hover:bg-emerald-700 sm:inline-flex"
           >
             + Yeni müşteri

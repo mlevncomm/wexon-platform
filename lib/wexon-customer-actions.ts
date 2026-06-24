@@ -20,6 +20,7 @@ import {
 import { hashPassword, verifyPassword } from "@/lib/wexon-passwords";
 import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
 import { prisma } from "@/lib/prisma";
+import { customerLoginUrl } from "@/lib/wexon/urls";
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -114,7 +115,7 @@ export async function changeCustomerPasswordAction(formData: FormData) {
   });
 
   if (!user || !user.isActive) {
-    redirect("/dashboard/login");
+    redirect(customerLoginUrl());
   }
 
   if (!user.passwordHash) {

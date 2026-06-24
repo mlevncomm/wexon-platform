@@ -1,6 +1,7 @@
 import Link from "next/link";
 import LoginPasswordField from "@/app/login/LoginPasswordField";
 import { loginUnifiedAction } from "@/lib/wexon-unified-auth-actions";
+import { publicUrl } from "@/lib/wexon/urls";
 
 export default async function LoginPage({
   searchParams,
@@ -23,8 +24,8 @@ export default async function LoginPage({
       <section className="relative mx-auto grid min-h-[calc(100vh-2rem)] max-w-6xl gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-10">
         <div className="min-w-0 px-2 py-4 sm:px-4 lg:py-8">
           <div className="mb-6 flex flex-wrap items-center gap-3">
-            <Link href="/" className="inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-950/20">Wexon</Link>
-            <Link href="/" className="inline-flex rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/10">Ana sayfaya dön</Link>
+            <Link href={publicUrl("/")} className="inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-950/20">Wexon</Link>
+            <Link href={publicUrl("/")} className="inline-flex rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/10">Ana sayfaya dön</Link>
           </div>
           <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
             Güvenli erişim
@@ -60,7 +61,7 @@ export default async function LoginPage({
             <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white hover:bg-emerald-700">Giriş yap</button>
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-semibold text-slate-500">
               <span>Şifremi unuttum: Yakında</span>
-              <Link href="/signup" className="font-black text-emerald-700">Hesabınız yok mu? Kayıt olun</Link>
+              <Link href={publicUrl("/signup")} className="font-black text-emerald-700">Hesabınız yok mu? Kayıt olun</Link>
             </div>
           </form>
         </div>
