@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ProviderPaymentBreakdownRow } from "@/lib/wexpay-read";
+import { appNavigationUrl } from "@/lib/wexon/urls";
 import {
   formatLira,
   WexPayEmptyNotice,
@@ -79,7 +80,7 @@ export default function WexPayReportsBoard({
               CSV indir
             </a>
             <Link
-              href={`/apps/wexpay/reports?branchId=${branchId}`}
+              href={appNavigationUrl("/apps/wexpay/reports", `branchId=${encodeURIComponent(branchId)}`)}
               className="inline-flex rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:-translate-y-0.5 hover:bg-emerald-700"
             >
               Yenile

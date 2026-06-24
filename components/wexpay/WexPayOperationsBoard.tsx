@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { OperationsNotification, OperationsOverview, OperationsSnapshot, OperationsTopProduct } from "@/lib/wexpay-read";
+import { appNavigationUrl } from "@/lib/wexon/urls";
 import {
   formatLira,
   WexPayEmptyNotice,
@@ -81,8 +82,9 @@ export default function WexPayOperationsBoard({
 
   const { notifications, topProducts, tables } = overview;
   const receiptTables = tables.filter((table) => table.receiptRequested);
-  const kitchenHref = `/apps/wexpay/kitchen?branchId=${encodeURIComponent(branchId)}`;
-  const tablesHref = `/apps/wexpay/tables?branchId=${encodeURIComponent(branchId)}`;
+  const branchSearch = `branchId=${encodeURIComponent(branchId)}`;
+  const kitchenHref = appNavigationUrl("/apps/wexpay/kitchen", branchSearch);
+  const tablesHref = appNavigationUrl("/apps/wexpay/tables", branchSearch);
 
   const metricCards = [
     {

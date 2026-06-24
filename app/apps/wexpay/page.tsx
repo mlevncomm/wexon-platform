@@ -3,6 +3,7 @@ import WexPayOperationsBoard from "@/components/wexpay/WexPayOperationsBoard";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { getWexPayOperationsOverview } from "@/lib/wexpay-read";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
+import { appNavigationUrl } from "@/lib/wexon/urls";
 
 type SearchParams = Promise<{ branchId?: string }>;
 
@@ -53,13 +54,13 @@ function OperationsEmptyState({ hasRestaurant }: { hasRestaurant: boolean }) {
       </p>
       <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
         <Link
-          href={hasRestaurant ? "/apps/wexpay/branches" : "/apps/wexpay/restaurants"}
+          href={hasRestaurant ? appNavigationUrl("/apps/wexpay/branches") : appNavigationUrl("/apps/wexpay/restaurants")}
           className="rounded-2xl bg-[#10b981] px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-emerald-700"
         >
           {hasRestaurant ? "Şube oluştur" : "Restoran oluştur"}
         </Link>
         <Link
-          href="/apps/wexpay/settings"
+          href={appNavigationUrl("/apps/wexpay/settings")}
           className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
         >
           Ayarlar

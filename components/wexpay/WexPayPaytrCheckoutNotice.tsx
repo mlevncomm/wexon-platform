@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { appNavigationUrl } from "@/lib/wexon/urls";
 
 export function WexPayPaytrCheckoutNotice({
   checkoutUrl,
@@ -33,7 +34,7 @@ export function WexPayPaytrCheckoutNotice({
           PayTR ödeme ekranını aç
         </a>
         <Link
-          href="/apps/wexpay/payments"
+          href={appNavigationUrl("/apps/wexpay/payments")}
           className="inline-flex rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-50"
         >
           Ödeme kayıtlarına git

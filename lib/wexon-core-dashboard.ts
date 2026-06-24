@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
 import { assertCustomerDashboardAccess, getCustomerSession } from "@/lib/wexon-customer-auth";
 import { evaluateProductAccess } from "@/lib/wexon-core-access";
-import { customerLoginUrl } from "@/lib/wexon/urls";
+import { coreNavigationUrl, customerLoginUrl } from "@/lib/wexon/urls";
 
 export type EntitlementValue = boolean | number | string | null;
 export type EntitlementMap = Record<string, EntitlementValue>;
@@ -292,13 +292,14 @@ export async function getCustomerDashboardData(selector?: DashboardOrganizationS
 }
 
 export function dashboardHref(path: string, context: DashboardOrganizationContext) {
+  const params = new URLSearchParams();
   if (context.organizationId) {
-    return `${path}?organizationId=${encodeURIComponent(context.organizationId)}`;
+    params.set("organizationId", context.organizationId);
   }
   if (context.organizationSlug) {
-    return `${path}?organizationSlug=${encodeURIComponent(context.organizationSlug)}`;
+    params.set("organizationSlug", context.organizationSlug);
   }
-  return path;
+  return coreNavigationUrl(path, params.toString());
 }
 
 export function formatCoreStatus(status: string) {
