@@ -83,13 +83,17 @@ export default async function WexonDashboardShell({ children }: { children: Reac
         <div className="mx-auto grid w-full max-w-[1360px] min-w-0 items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
           <aside className="min-w-0 lg:self-start">
             <div className="w-full min-w-0 rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/70 lg:sticky lg:top-24 lg:rounded-[28px] lg:p-3.5">
-              <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 lg:mb-4">
-                <div>
+              <div className="mb-3 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 lg:mb-4">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
                     Wexon Core
                   </p>
                   <p className="mt-1 text-sm font-black text-slate-950">Müşteri Paneli</p>
-                  {customerUser?.email && <p className="mt-1 max-w-[180px] truncate text-xs font-semibold text-slate-500">{customerUser.email}</p>}
+                  {customerUser?.email && (
+                    <p className="mt-1 truncate text-xs font-semibold text-slate-500" title={customerUser.email}>
+                      {customerUser.email}
+                    </p>
+                  )}
                   {customerUser?.mustChangePassword && (
                     <p className="mt-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Şifre değişimi gerekli</p>
                   )}
@@ -97,7 +101,7 @@ export default async function WexonDashboardShell({ children }: { children: Reac
                     <p className="mt-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Admin önizleme</p>
                   )}
                 </div>
-                <span className="hidden h-9 w-9 items-center justify-center rounded-2xl bg-emerald-500 text-xs font-black text-white lg:flex">
+                <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-xs font-black text-white lg:flex">
                   W
                 </span>
               </div>
