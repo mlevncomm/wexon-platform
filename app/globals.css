@@ -2,9 +2,7 @@
 
 @font-face {
   font-family: "Urbanist";
-  src:
-    url("/fonts/Urbanist-VariableFont_wght.woff2") format("woff2"),
-    url("/fonts/Urbanist-VariableFont_wght.ttf") format("truetype");
+  src: url("/fonts/Urbanist-VariableFont_wght.ttf") format("truetype");
   font-style: normal;
   font-weight: 300 800;
   font-display: swap;

@@ -17,9 +17,9 @@ export default function RootLayout({
       <head>
         <link
           rel="preload"
-          href="/fonts/Urbanist-VariableFont_wght.woff2"
+          href="/fonts/Urbanist-VariableFont_wght.ttf"
           as="font"
-          type="font/woff2"
+          type="font/ttf"
           crossOrigin="anonymous"
         />
       </head>
