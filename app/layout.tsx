@@ -14,6 +14,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr" className="h-full">
+      <head>
+        <link
+          rel="preload"
+          href="/fonts/Urbanist-VariableFont_wght.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="min-h-full flex flex-col antialiased">
         <WexonRouteTransition>{children}</WexonRouteTransition>
       </body>

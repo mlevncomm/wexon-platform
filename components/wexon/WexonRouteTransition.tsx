@@ -26,7 +26,7 @@ export default function WexonRouteTransition({ children }: { children: ReactNode
   }, [pathname]);
 
   return (
-    <div ref={shellRef} className="wx-page-shell wx-page-enter min-h-full flex flex-1 flex-col">
+    <div ref={shellRef} className="wx-page-shell min-h-full flex flex-1 flex-col">
       {children}
     </div>
   );

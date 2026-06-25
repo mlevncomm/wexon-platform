@@ -144,6 +144,11 @@ input[type="password"]::-webkit-password-toggle-button {
   min-height: 100%;
 }
 
+.wx-defer-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 760px;
+}
+
 .wx-page-enter {
   animation: wx-page-enter-keyframes var(--wx-motion-normal) var(--wx-ease-soft) both;
 }

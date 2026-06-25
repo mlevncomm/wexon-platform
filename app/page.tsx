@@ -16,14 +16,30 @@ export default function HomePage() {
       <WexonNavbar transparent />
       <main className="flex-1 bg-[#f6f8f7] text-slate-950">
         <WexonHero />
-        <WexonTrustStrip />
-        <WexonProductEcosystem />
-        <WexonFeatureGrid />
-        <WexonCore />
-        <WexonLiveDemo />
-        <WexonStatsStrip />
-        <WexonPricingPreview />
-        <WexonCTA />
+        <div className="wx-defer-section">
+          <WexonTrustStrip />
+        </div>
+        <div className="wx-defer-section">
+          <WexonProductEcosystem />
+        </div>
+        <div className="wx-defer-section">
+          <WexonFeatureGrid />
+        </div>
+        <div className="wx-defer-section">
+          <WexonCore />
+        </div>
+        <div className="wx-defer-section">
+          <WexonLiveDemo />
+        </div>
+        <div className="wx-defer-section">
+          <WexonStatsStrip />
+        </div>
+        <div className="wx-defer-section">
+          <WexonPricingPreview />
+        </div>
+        <div className="wx-defer-section">
+          <WexonCTA />
+        </div>
       </main>
       <WexonFooter />
     </>

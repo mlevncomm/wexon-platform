@@ -75,7 +75,7 @@ function FloatingCard({
 export default function WexonHero() {
   return (
     <section className="relative">
-      <div className="relative min-h-[920px] overflow-hidden border-b border-white/5 bg-[radial-gradient(circle_at_20%_-10%,#0f3024_0%,transparent_50%),radial-gradient(circle_at_85%_-20%,#0a3a2a_0%,transparent_55%),radial-gradient(circle_at_50%_110%,#0b4a35_0%,transparent_55%),linear-gradient(180deg,#050b16_0%,#081424_60%,#0a1828_100%)] pt-28 shadow-[0_40px_80px_-30px_rgba(2,6,15,0.7)] sm:rounded-b-[40px] sm:pt-32 lg:min-h-[960px] lg:rounded-b-[48px] lg:pt-36">
+      <div className="relative min-h-[740px] overflow-hidden border-b border-white/5 bg-[radial-gradient(circle_at_20%_-10%,#0f3024_0%,transparent_50%),radial-gradient(circle_at_85%_-20%,#0a3a2a_0%,transparent_55%),radial-gradient(circle_at_50%_110%,#0b4a35_0%,transparent_55%),linear-gradient(180deg,#050b16_0%,#081424_60%,#0a1828_100%)] pt-28 shadow-[0_40px_80px_-30px_rgba(2,6,15,0.7)] sm:min-h-[780px] sm:rounded-b-[40px] sm:pt-32 md:min-h-[920px] lg:min-h-[960px] lg:rounded-b-[48px] lg:pt-36">
         {/* Grid overlay */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.16]"
@@ -90,9 +90,9 @@ export default function WexonHero() {
           }}
         />
         {/* Ambient glows */}
-        <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/[0.18] blur-[160px]" />
-        <div className="pointer-events-none absolute -left-32 top-1/2 h-80 w-80 rounded-full bg-emerald-400/10 blur-[140px]" />
-        <div className="pointer-events-none absolute -right-32 top-1/3 h-80 w-80 rounded-full bg-teal-400/10 blur-[140px]" />
+        <div className="pointer-events-none absolute left-1/2 top-0 hidden h-[420px] w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/[0.18] blur-[160px] sm:block" />
+        <div className="pointer-events-none absolute -left-32 top-1/2 hidden h-80 w-80 rounded-full bg-emerald-400/10 blur-[140px] sm:block" />
+        <div className="pointer-events-none absolute -right-32 top-1/3 hidden h-80 w-80 rounded-full bg-teal-400/10 blur-[140px] sm:block" />
 
         <div className="relative mx-auto max-w-[1560px] px-5 sm:px-10 lg:px-12 xl:px-16 2xl:px-20">
           {/* Wide hero intro */}
@@ -209,7 +209,7 @@ export default function WexonHero() {
           </div>
 
           {/* Mockup region — relative for floating cards */}
-          <div className="relative mx-auto mt-9 max-w-[1080px] sm:mt-12">
+          <div className="relative mx-auto mt-9 hidden max-w-[1080px] md:block lg:mt-12">
             <div className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/15 blur-[120px]" />
             {/* Floating cards (desktop) */}
             <FloatingCard
@@ -406,4 +406,3 @@ export default function WexonHero() {
     </section>
   );
 }
-
