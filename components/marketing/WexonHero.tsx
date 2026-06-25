@@ -136,7 +136,7 @@ export default function WexonHero() {
                 <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
                   <Link
                     href="/demo-request"
-                    className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white shadow-[0_18px_40px_-12px_rgba(16,185,129,0.6)] transition-all hover:bg-emerald-400 hover:shadow-[0_22px_50px_-12px_rgba(52,211,153,0.7)] sm:w-auto"
+                    className="wx-tactile group inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white shadow-[0_18px_40px_-12px_rgba(16,185,129,0.6)] hover:bg-emerald-400 hover:shadow-[0_22px_50px_-12px_rgba(52,211,153,0.7)] sm:w-auto"
                   >
                     Demo Talep Et
                     <svg
@@ -154,7 +154,7 @@ export default function WexonHero() {
 
                   <Link
                     href="/products/wexpay"
-                    className="group inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-white py-2 pl-2 pr-6 text-sm font-bold text-slate-950 shadow-[0_18px_40px_-15px_rgba(0,0,0,0.5)] transition-all hover:bg-slate-100 sm:w-auto"
+                    className="wx-tactile group inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-white py-2 pl-2 pr-6 text-sm font-bold text-slate-950 shadow-[0_18px_40px_-15px_rgba(0,0,0,0.5)] hover:bg-slate-100 sm:w-auto"
                   >
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
                       <svg width="11" height="11" viewBox="0 0 10 10" fill="currentColor">
@@ -167,7 +167,7 @@ export default function WexonHero() {
 
                 <Link
                   href="/demo/wexpay/business"
-                  className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300/95 transition-colors hover:bg-emerald-500/15 hover:text-emerald-200"
+                  className="wx-tactile mt-5 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300/95 hover:bg-emerald-500/15 hover:text-emerald-200"
                 >
                   Canlı WexPay Demosu
                   <span aria-hidden>→</span>

@@ -82,7 +82,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             <Link
               key={link.href}
               href={resolveNavigationHref(link.href)}
-              className={`rounded-xl px-4 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm xl:px-5 ${
+              className={`wx-tactile rounded-xl px-4 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm xl:px-5 ${
                 overDark
                   ? "text-slate-300/75 hover:bg-white/10 hover:text-white"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
@@ -96,7 +96,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         <div className="hidden items-center gap-2 md:flex">
           <Link
             href={publicUrl("/login")}
-            className={`inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
+            className={`wx-tactile inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
               overDark
                 ? "border border-white/25 bg-transparent text-white backdrop-blur hover:border-white/40 hover:bg-white/10"
                 : "bg-white/70 text-slate-700 shadow-sm shadow-slate-200/30 hover:bg-white hover:text-slate-950"
@@ -106,7 +106,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
           </Link>
           <Link
             href={publicUrl("/signup")}
-            className="inline-flex items-center justify-center rounded-full bg-[#10b981] px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
+            className="wx-tactile inline-flex items-center justify-center rounded-full bg-[#10b981] px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
           >
             Kayıt Ol
           </Link>
@@ -142,7 +142,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
                 key={link.href}
                 href={resolveNavigationHref(link.href)}
                 onClick={() => setMenuOpen(false)}
-                className="block rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
+                className="wx-tactile block rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950"
               >
                 {link.label}
               </Link>
@@ -152,14 +152,14 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             <Link
               href={publicUrl("/login")}
               onClick={() => setMenuOpen(false)}
-              className="inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900"
+              className="wx-tactile inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900"
             >
               Giriş Yap
             </Link>
             <Link
               href={publicUrl("/signup")}
               onClick={() => setMenuOpen(false)}
-              className="inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-5 py-3 text-sm font-bold text-white"
+              className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-5 py-3 text-sm font-bold text-white"
             >
               Kayıt Ol
             </Link>

@@ -193,10 +193,30 @@ input[type="password"]::-webkit-password-toggle-button {
     transform var(--wx-motion-fast) var(--wx-ease-out);
 }
 
+.wx-tactile {
+  transform: translate3d(0, 0, 0);
+  transition:
+    color var(--wx-motion-fast) var(--wx-ease-out),
+    background-color var(--wx-motion-fast) var(--wx-ease-out),
+    border-color var(--wx-motion-fast) var(--wx-ease-out),
+    box-shadow var(--wx-motion-normal) var(--wx-ease-out),
+    transform var(--wx-motion-fast) var(--wx-ease-out),
+    opacity var(--wx-motion-fast) var(--wx-ease-out);
+  will-change: transform;
+}
+
 @media (hover: hover) and (pointer: fine) {
+  .wx-tactile:hover {
+    transform: translate3d(0, -2px, 0);
+  }
+
   .wx-soft-hover:hover {
     transform: translateY(-1px);
   }
+}
+
+.wx-tactile:active {
+  transform: translate3d(0, 0, 0) scale(0.985);
 }
 
 .wx-input-focus {
@@ -221,11 +241,15 @@ input[type="password"]::-webkit-password-toggle-button {
 
   .wx-interactive,
   .wx-soft-hover,
+  .wx-tactile,
   .wx-btn,
   .wx-input-focus {
     transition-duration: 1ms !important;
   }
 
+  .wx-tactile,
+  .wx-tactile:hover,
+  .wx-tactile:active,
   .wx-soft-hover:hover {
     transform: none !important;
   }
