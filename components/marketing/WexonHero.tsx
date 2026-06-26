@@ -1,5 +1,6 @@
 import Link from "next/link";
 import WexonHeroRotatingWord from "@/components/marketing/WexonHeroRotatingWord";
+import { resolveNavigationHref } from "@/lib/wexon/urls";
 
 const WORDS = ["Core", "WexPay", "lisans", "ödeme"];
 
@@ -36,14 +37,104 @@ const FLOATING_PROOFS: Array<{
 ];
 
 const SERVICE_CARDS = [
-  ["WexPay", "QR menü, masa, sipariş ve ödeme"],
-  ["Wexon Core", "Lisans, abonelik, kota ve entitlement"],
-  ["Customer Portal", "Müşteri ürün, fatura ve destek paneli"],
-  ["Admin Portal", "Organizasyon, lisans ve audit yönetimi"],
-  ["PayTR", "Sanal POS bağlantı altyapısı"],
-  ["WexHotel", "Otel yönetimi roadmap"],
-  ["WexB2B", "Bayi ve toptan satış roadmap"],
-];
+  {
+    title: "WexPay",
+    body: "QR menü, masa, sipariş ve ödeme",
+    href: "/products/wexpay",
+    initials: "WP",
+    badge: "Canlı",
+    tone: "emerald",
+  },
+  {
+    title: "Wexon Core",
+    body: "Lisans, abonelik, kota ve entitlement",
+    href: "/docs",
+    initials: "CO",
+    badge: "Core",
+    tone: "sky",
+  },
+  {
+    title: "Customer Portal",
+    body: "Müşteri ürün, fatura ve destek paneli",
+    href: "/dashboard",
+    initials: "CP",
+    badge: "Panel",
+    tone: "violet",
+  },
+  {
+    title: "Admin Portal",
+    body: "Organizasyon, lisans ve audit yönetimi",
+    href: "/admin",
+    initials: "AP",
+    badge: "İç",
+    tone: "amber",
+  },
+  {
+    title: "PayTR",
+    body: "Sanal POS bağlantı altyapısı",
+    href: "/demo-request",
+    initials: "PT",
+    badge: "POS",
+    tone: "cyan",
+  },
+  {
+    title: "WexHotel",
+    body: "Otel yönetimi roadmap",
+    href: "/products/wexhotel",
+    initials: "WH",
+    badge: "Roadmap",
+    tone: "indigo",
+  },
+  {
+    title: "WexB2B",
+    body: "Bayi ve toptan satış roadmap",
+    href: "/products/wexb2b",
+    initials: "B2",
+    badge: "Roadmap",
+    tone: "rose",
+  },
+] as const;
+
+const MARQUEE_TONE_STYLES: Record<
+  (typeof SERVICE_CARDS)[number]["tone"],
+  { icon: string; badge: string; glow: string }
+> = {
+  emerald: {
+    icon: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+    badge: "border-emerald-400/20 bg-emerald-500/10 text-emerald-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(16,185,129,0.55)]",
+  },
+  sky: {
+    icon: "bg-sky-500/15 text-sky-200 ring-sky-400/25",
+    badge: "border-sky-400/20 bg-sky-500/10 text-sky-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(56,189,248,0.45)]",
+  },
+  violet: {
+    icon: "bg-violet-500/15 text-violet-200 ring-violet-400/25",
+    badge: "border-violet-400/20 bg-violet-500/10 text-violet-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(167,139,250,0.4)]",
+  },
+  amber: {
+    icon: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
+    badge: "border-amber-400/20 bg-amber-500/10 text-amber-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(251,191,36,0.35)]",
+  },
+  cyan: {
+    icon: "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25",
+    badge: "border-cyan-400/20 bg-cyan-500/10 text-cyan-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(34,211,238,0.35)]",
+  },
+  indigo: {
+    icon: "bg-indigo-500/15 text-indigo-200 ring-indigo-400/25",
+    badge: "border-indigo-400/20 bg-indigo-500/10 text-indigo-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(129,140,248,0.35)]",
+  },
+  rose: {
+    icon: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
+    badge: "border-rose-400/20 bg-rose-500/10 text-rose-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(251,113,133,0.35)]",
+  },
+};
 
 const TRUST_BADGES = ["3 ürün", "Tek Core", "Canlı demo", "Türkçe arayüz", "Tenant isolation"];
 
@@ -94,23 +185,50 @@ function ServiceMarquee() {
   const rows = [...SERVICE_CARDS, ...SERVICE_CARDS];
 
   return (
-    <div className="mx-auto mt-12 max-w-[1120px] overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_12%,black_88%,transparent)]">
-      <div className="wx-hero-marquee flex w-max gap-4">
-        {rows.map(([title, body], index) => (
-          <Link
-            key={`${title}-${index}`}
-            href={title === "WexPay" ? "/products/wexpay" : title === "Wexon Core" ? "/docs" : "/demo-request"}
-            className="wx-tactile flex h-[132px] w-[265px] shrink-0 flex-col justify-between rounded-2xl border border-white/10 bg-white/[0.08] p-5 text-left shadow-[0_24px_80px_-44px_rgba(0,0,0,0.8)] backdrop-blur-xl hover:border-emerald-400/40 hover:bg-white/[0.12]"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/20">
-              <span className="h-3 w-3 rounded bg-blue-400" />
-            </span>
-            <div>
-              <p className="text-base font-black text-white">{title}</p>
-              <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-400">{body}</p>
-            </div>
-          </Link>
-        ))}
+    <div className="relative mt-14 w-full sm:mt-16">
+      <div className="mb-5 flex items-center justify-center gap-3">
+        <span className="h-px w-10 bg-gradient-to-r from-transparent to-emerald-400/40" aria-hidden />
+        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-200/80">Platform katmanları</span>
+        <span className="h-px w-10 bg-gradient-to-l from-transparent to-emerald-400/40" aria-hidden />
+      </div>
+
+      <div className="relative left-1/2 w-screen max-w-none -translate-x-1/2 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
+        <div className="wx-hero-marquee-track flex w-max gap-3 px-3 py-1 sm:gap-4 sm:px-4">
+          {rows.map((card, index) => {
+            const tone = MARQUEE_TONE_STYLES[card.tone];
+
+            return (
+              <Link
+                key={`${card.title}-${index}`}
+                href={resolveNavigationHref(card.href)}
+                className={`wx-hero-marquee-card group flex w-[min(19rem,calc(100vw-2.5rem))] shrink-0 items-center gap-3.5 rounded-[22px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.11)_0%,rgba(255,255,255,0.04)_100%)] p-3.5 text-left backdrop-blur-xl sm:w-[20.5rem] sm:gap-4 sm:p-4 ${tone.glow}`}
+              >
+                <span
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-[11px] font-black ring-1 ${tone.icon}`}
+                >
+                  {card.initials}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-black text-white sm:text-[15px]">{card.title}</p>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${tone.badge}`}>
+                      {card.badge}
+                    </span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs font-medium leading-relaxed text-slate-400">{card.body}</p>
+                </div>
+
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-sm text-emerald-200 opacity-0 transition-all duration-300 group-hover:translate-x-0.5 group-hover:border-emerald-400/30 group-hover:bg-emerald-500/10 group-hover:opacity-100"
+                  aria-hidden
+                >
+                  →
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

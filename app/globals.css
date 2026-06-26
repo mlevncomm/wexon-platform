@@ -245,8 +245,28 @@ input[type="password"]::-webkit-password-toggle-button {
   animation: wx-hero-float 7.5s var(--wx-ease-soft) infinite;
 }
 
-.wx-hero-marquee {
-  animation: wx-hero-marquee 24s linear infinite;
+.wx-hero-marquee-track {
+  animation: wx-hero-marquee 36s linear infinite;
+}
+
+.wx-hero-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+.wx-hero-marquee-card {
+  transition:
+    border-color var(--wx-motion-normal) var(--wx-ease-out),
+    background-color var(--wx-motion-normal) var(--wx-ease-out),
+    box-shadow var(--wx-motion-normal) var(--wx-ease-out),
+    transform var(--wx-motion-normal) var(--wx-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wx-hero-marquee-card:hover {
+    transform: translate3d(0, -2px, 0);
+    border-color: rgba(52, 211, 153, 0.28);
+    background-color: rgba(255, 255, 255, 0.1);
+  }
 }
 
 .wx-card-enter:nth-child(2) {
@@ -357,7 +377,7 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-page-enter,
   .wx-hero-float,
   .wx-hero-float-slow,
-  .wx-hero-marquee,
+  .wx-hero-marquee-track,
   .wx-panel-enter,
   .wx-card-enter,
   .wx-fade-in {
