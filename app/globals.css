@@ -148,6 +148,61 @@ input[type="password"]::-webkit-password-toggle-button {
   }
 }
 
+@keyframes wx-hero-proof-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes wx-hero-proof-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  35% {
+    transform: translate3d(var(--wx-proof-drift-x, 0), -14px, 0);
+  }
+  70% {
+    transform: translate3d(0, -7px, 0);
+  }
+}
+
+@keyframes wx-hero-proof-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes wx-hero-proof-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes wx-hero-proof-icon {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -2px, 0) rotate(-2deg);
+  }
+}
+
 @keyframes wx-hero-marquee {
   from {
     transform: translate3d(0, 0, 0);
@@ -243,6 +298,42 @@ input[type="password"]::-webkit-password-toggle-button {
 
 .wx-hero-float-slow {
   animation: wx-hero-float 7.5s var(--wx-ease-soft) infinite;
+}
+
+.wx-hero-proof {
+  animation:
+    wx-hero-proof-enter 900ms var(--wx-ease-soft) both,
+    wx-hero-proof-drift 8.5s var(--wx-ease-soft) infinite;
+}
+
+.wx-hero-proof-pulse {
+  animation: wx-hero-proof-pulse 2.4s var(--wx-ease-soft) infinite;
+}
+
+.wx-hero-proof-icon {
+  animation: wx-hero-proof-icon 6s var(--wx-ease-soft) infinite;
+}
+
+.wx-hero-proof-shimmer {
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0.06) 55%,
+    transparent 100%
+  );
+  animation: wx-hero-proof-shimmer 5.5s linear infinite;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wx-hero-proof:hover {
+    animation-play-state: paused, paused;
+  }
+
+  .wx-hero-proof:hover .wx-hero-proof-shimmer {
+    animation-play-state: running;
+  }
 }
 
 .wx-hero-marquee-track {
@@ -377,6 +468,10 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-page-enter,
   .wx-hero-float,
   .wx-hero-float-slow,
+  .wx-hero-proof,
+  .wx-hero-proof-pulse,
+  .wx-hero-proof-icon,
+  .wx-hero-proof-shimmer,
   .wx-hero-marquee-track,
   .wx-panel-enter,
   .wx-card-enter,
