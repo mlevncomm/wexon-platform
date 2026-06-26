@@ -80,13 +80,13 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         </Link>
 
         <nav
-          className={`group/nav hidden h-11 items-stretch gap-1 self-center rounded-full border p-1 transition-all duration-300 md:col-start-2 md:row-start-1 md:flex md:justify-self-center ${navShellClass}`}
+          className={`wx-nav-pill group/nav hidden self-center transition-all duration-300 md:col-start-2 md:row-start-1 md:inline-flex md:justify-self-center ${navShellClass}`}
         >
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={resolveNavigationHref(link.href)}
-              className={`wx-nav-pill-link inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm ${navLinkClass}`}
+              className={`wx-nav-pill-link text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm ${navLinkClass}`}
             >
               {link.label}
             </Link>
