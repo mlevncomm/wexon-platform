@@ -72,17 +72,17 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         </Link>
 
         <nav
-          className={`group/nav hidden h-11 items-center gap-0.5 self-center p-1 transition-all duration-300 md:col-start-2 md:row-start-1 md:flex ${
+          className={`group/nav hidden h-11 items-stretch gap-1 self-center rounded-full p-1 transition-all duration-300 md:col-start-2 md:row-start-1 md:flex ${
             overDark
-              ? "rounded-full border border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
-              : "rounded-full bg-white/80 shadow-sm shadow-slate-200/30 hover:bg-white/90"
+              ? "border border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
+              : "bg-white/80 shadow-sm shadow-slate-200/30 hover:bg-white/90"
           }`}
         >
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={resolveNavigationHref(link.href)}
-              className={`wx-tactile inline-flex h-9 items-center rounded-full px-4 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm xl:px-5 ${
+              className={`wx-nav-pill-link inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:px-4 md:text-sm ${
                 overDark
                   ? "text-white/90 hover:bg-white/12 hover:text-white"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"

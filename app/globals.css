@@ -279,6 +279,23 @@ input[type="password"]::-webkit-password-toggle-button {
     transform var(--wx-motion-fast) var(--wx-ease-out);
 }
 
+.wx-nav-pill-link {
+  transform: translate3d(0, 0, 0);
+  transition:
+    color var(--wx-motion-fast) var(--wx-ease-out),
+    background-color var(--wx-motion-fast) var(--wx-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wx-nav-pill-link:hover {
+    transform: none;
+  }
+}
+
+.wx-nav-pill-link:active {
+  transform: scale(0.98);
+}
+
 .wx-tactile {
   transform: translate3d(0, 0, 0);
   transition:
@@ -331,6 +348,7 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-interactive,
   .wx-soft-hover,
   .wx-tactile,
+  .wx-nav-pill-link,
   .wx-btn,
   .wx-input-focus,
   .wx-hero-word-active,
@@ -341,6 +359,9 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-tactile,
   .wx-tactile:hover,
   .wx-tactile:active,
+  .wx-nav-pill-link,
+  .wx-nav-pill-link:hover,
+  .wx-nav-pill-link:active,
   .wx-soft-hover:hover {
     transform: none !important;
   }
