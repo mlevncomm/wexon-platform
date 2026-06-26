@@ -13,7 +13,7 @@ import WexonFooter from "@/components/marketing/WexonFooter";
 export default function HomePage() {
   return (
     <>
-      <WexonNavbar />
+      <WexonNavbar transparent />
       <main className="flex-1 bg-[#f6f8f7] text-slate-950">
         <WexonHero />
         <div className="wx-defer-section">

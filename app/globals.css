@@ -166,8 +166,23 @@ input[type="password"]::-webkit-password-toggle-button {
   24%,
   100% {
     opacity: 0;
-    transform: translate3d(0, -16px, 0);
+    transform: translate3d(0, -0.55em, 0);
   }
+}
+
+.wx-hero-headline {
+  font-family: var(--font-sans);
+  font-variation-settings: "wght" 800;
+}
+
+.wx-hero-word-slot {
+  display: inline-grid;
+  vertical-align: baseline;
+  justify-items: center;
+}
+
+.wx-hero-word-slot > .wx-hero-word {
+  grid-area: 1 / 1;
 }
 
 .wx-page-shell {

@@ -117,42 +117,40 @@ function ServiceMarquee() {
 
 export default function WexonHero() {
   return (
-    <section className="relative overflow-hidden border-b border-white/10 bg-[#03091f] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.18),transparent_36%),linear-gradient(180deg,#060b2b_0%,#07144a_48%,#03091f_100%)]" />
+    <section className="relative overflow-hidden border-b border-emerald-950/30 bg-[#03150f] font-sans text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(16,185,129,0.42),transparent_40%),linear-gradient(180deg,#063322_0%,#042418_52%,#02150f_100%)]" />
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.28]"
+        className="pointer-events-none absolute inset-0 opacity-[0.22]"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(0,145,255,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(0,145,255,0.25) 1px, transparent 1px)",
+            "linear-gradient(rgba(16,185,129,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.22) 1px, transparent 1px)",
           backgroundSize: "72px 72px",
         }}
       />
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/10 blur-[120px]" />
-      <div className="pointer-events-none absolute bottom-0 left-1/2 h-44 w-[760px] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-[90px]" />
+      <div className="pointer-events-none absolute left-1/2 top-[18%] h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-400/20 blur-[110px]" />
+      <div className="pointer-events-none absolute bottom-0 left-1/2 h-48 w-[760px] -translate-x-1/2 rounded-full bg-emerald-500/15 blur-[90px]" />
 
       {FLOATING_PROOFS.map((proof, index) => (
         <FloatingProof key={proof.title} {...proof} index={index} />
       ))}
 
-      <div className="relative mx-auto flex min-h-[900px] max-w-[1500px] flex-col px-5 pb-16 pt-28 sm:px-8 sm:pt-32 lg:px-12 xl:px-16 2xl:px-20">
+      <div className="relative mx-auto flex min-h-[min(100svh,820px)] max-w-[1500px] flex-col px-5 pb-14 pt-24 sm:min-h-[860px] sm:px-8 sm:pb-16 sm:pt-32 lg:min-h-[900px] lg:px-12 xl:px-16 2xl:px-20">
         <div className="mx-auto max-w-4xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-xs font-black text-slate-200 shadow-[0_18px_60px_-30px_rgba(16,185,129,0.45)] backdrop-blur-xl">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />
+          <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-[11px] font-black text-slate-200 shadow-[0_18px_60px_-30px_rgba(16,185,129,0.45)] backdrop-blur-xl sm:text-xs">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />
             WexPay aktif · WexHotel ve WexB2B roadmap
           </span>
 
-          <h1 className="mx-auto mt-8 max-w-[980px] text-[2.7rem] font-black leading-[1.02] tracking-[-0.02em] text-white sm:text-[4rem] lg:text-[5.1rem]">
-            Sistemlerinizi tek{" "}
-            <span className="relative inline-flex min-w-[220px] justify-center text-emerald-400 sm:min-w-[300px]">
+          <h1 className="wx-hero-headline mx-auto mt-6 max-w-[980px] text-[clamp(2rem,6.4vw,5.1rem)] font-black leading-[1.04] tracking-[-0.02em] text-white sm:mt-8 sm:leading-[1.02]">
+            <span className="block sm:inline">Sistemlerinizi tek </span>
+            <span className="wx-hero-word-slot text-emerald-300">
               {WORDS.map((word) => (
-                <span key={word} className="wx-hero-word absolute inset-x-0 top-0 text-center">
+                <span key={word} className="wx-hero-word whitespace-nowrap text-center">
                   {word}
                 </span>
               ))}
-              <span className="invisible">entitlement</span>
             </span>
-            <br />
-            altyapısında büyütün
+            <span className="block sm:inline"> altyapısında büyütün</span>
           </h1>
 
           <p className="mx-auto mt-7 max-w-3xl text-base font-semibold leading-8 text-slate-300 sm:text-lg">
