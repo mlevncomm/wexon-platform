@@ -49,6 +49,14 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
 
   const overDark = transparent && !scrolled;
 
+  const navShellClass = overDark
+    ? "border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
+    : "border-slate-200/80 bg-white/80 shadow-sm shadow-slate-200/30 hover:border-slate-200 hover:bg-white/90";
+
+  const navLinkClass = overDark
+    ? "text-white/90 hover:bg-white/12 hover:text-white"
+    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950";
+
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
@@ -59,8 +67,8 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             : "bg-white/60 backdrop-blur"
       }`}
     >
-      <div className="relative mx-auto flex h-16 max-w-[1500px] items-center justify-between px-5 sm:px-8 md:h-20 lg:px-12 xl:px-16 2xl:px-20">
-        <Link href={publicUrl("/")} className="relative z-10 flex h-11 items-center gap-2.5">
+      <div className="mx-auto grid h-16 max-w-[1500px] grid-cols-[minmax(0,1fr)_auto] items-center px-5 sm:px-8 md:h-20 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:px-12 xl:px-16 2xl:px-20">
+        <Link href={publicUrl("/")} className="flex h-11 min-w-0 items-center gap-2.5 justify-self-start">
           <WexonMark />
           <span
             className={`text-lg font-bold tracking-tight transition-colors ${
@@ -72,28 +80,20 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         </Link>
 
         <nav
-          className={`group/nav absolute left-1/2 top-1/2 hidden h-11 -translate-x-1/2 -translate-y-1/2 items-stretch gap-1 rounded-full p-1 transition-all duration-300 md:flex ${
-            overDark
-              ? "border border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
-              : "bg-white/80 shadow-sm shadow-slate-200/30 hover:bg-white/90"
-          }`}
+          className={`group/nav hidden h-11 items-stretch gap-1 self-center rounded-full border p-1 transition-all duration-300 md:col-start-2 md:row-start-1 md:flex md:justify-self-center ${navShellClass}`}
         >
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={resolveNavigationHref(link.href)}
-              className={`wx-nav-pill-link inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm ${
-                overDark
-                  ? "text-white/90 hover:bg-white/12 hover:text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-              }`}
+              className={`wx-nav-pill-link inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm ${navLinkClass}`}
             >
               {link.label}
             </Link>
           ))}
         </nav>
 
-        <div className="relative z-10 hidden h-11 items-center gap-2 md:flex">
+        <div className="hidden h-11 items-center gap-2 justify-self-end md:col-start-3 md:row-start-1 md:flex">
           <Link
             href={publicUrl("/login")}
             className={`wx-tactile inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
@@ -115,7 +115,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         <button
           type="button"
           aria-label="Menüyü Aç/Kapat"
-          className={`relative z-10 flex h-11 w-11 items-center justify-center rounded-xl transition-colors md:hidden ${
+          className={`col-start-2 flex h-11 w-11 items-center justify-center justify-self-end rounded-xl transition-colors md:hidden ${
             overDark
               ? "text-white hover:bg-white/10"
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
