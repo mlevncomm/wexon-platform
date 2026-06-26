@@ -59,8 +59,8 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             : "bg-white/60 backdrop-blur"
       }`}
     >
-      <div className="mx-auto grid h-16 max-w-[1480px] grid-cols-[1fr_auto] items-center px-5 sm:px-8 md:h-20 md:grid-cols-[1fr_auto_1fr] lg:px-12 xl:px-16 2xl:px-20">
-        <Link href={publicUrl("/")} className="flex items-center gap-2.5 justify-self-start">
+      <div className="relative mx-auto flex h-16 max-w-[1500px] items-center justify-between px-5 sm:px-8 md:h-20 lg:px-12 xl:px-16 2xl:px-20">
+        <Link href={publicUrl("/")} className="relative z-10 flex h-11 items-center gap-2.5">
           <WexonMark />
           <span
             className={`text-lg font-bold tracking-tight transition-colors ${
@@ -72,7 +72,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         </Link>
 
         <nav
-          className={`group/nav hidden h-11 items-stretch gap-1 self-center rounded-full p-1 transition-all duration-300 md:col-start-2 md:row-start-1 md:flex ${
+          className={`group/nav absolute left-1/2 top-1/2 hidden h-11 -translate-x-1/2 -translate-y-1/2 items-stretch gap-1 rounded-full p-1 transition-all duration-300 md:flex ${
             overDark
               ? "border border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
               : "bg-white/80 shadow-sm shadow-slate-200/30 hover:bg-white/90"
@@ -82,7 +82,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             <Link
               key={link.href}
               href={resolveNavigationHref(link.href)}
-              className={`wx-nav-pill-link inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:px-4 md:text-sm ${
+              className={`wx-nav-pill-link inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm ${
                 overDark
                   ? "text-white/90 hover:bg-white/12 hover:text-white"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
@@ -93,10 +93,10 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 justify-self-end md:col-start-3 md:row-start-1 md:flex">
+        <div className="relative z-10 hidden h-11 items-center gap-2 md:flex">
           <Link
             href={publicUrl("/login")}
-            className={`wx-tactile inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
+            className={`wx-tactile inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
               overDark
                 ? "border border-white/25 bg-transparent text-white backdrop-blur hover:border-white/40 hover:bg-white/10"
                 : "bg-white/70 text-slate-700 shadow-sm shadow-slate-200/30 hover:bg-white hover:text-slate-950"
@@ -106,7 +106,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
           </Link>
           <Link
             href={publicUrl("/signup")}
-            className="wx-tactile inline-flex items-center justify-center rounded-full bg-[#10b981] px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
+            className="wx-tactile inline-flex h-11 items-center justify-center rounded-full bg-[#10b981] px-5 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
           >
             Kayıt Ol
           </Link>
@@ -115,7 +115,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         <button
           type="button"
           aria-label="Menüyü Aç/Kapat"
-          className={`col-start-2 justify-self-end rounded-xl p-2 transition-colors md:hidden ${
+          className={`relative z-10 flex h-11 w-11 items-center justify-center rounded-xl transition-colors md:hidden ${
             overDark
               ? "text-white hover:bg-white/10"
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
