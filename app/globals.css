@@ -392,13 +392,18 @@ input[type="password"]::-webkit-password-toggle-button {
 
 .wx-nav-pill {
   box-sizing: border-box;
-  display: inline-flex;
   align-items: center;
   gap: 0.25rem;
   padding: 0.25rem;
   border-radius: 9999px;
   border-width: 1px;
   border-style: solid;
+}
+
+@media (min-width: 768px) {
+  .wx-nav-pill {
+    display: inline-flex;
+  }
 }
 
 .wx-nav-pill-link {

@@ -25,6 +25,17 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
+    if (!menuOpen) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
+
+  useEffect(() => {
     let frame = 0;
     let lastScrolled = window.scrollY > 16;
 
@@ -67,8 +78,8 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             : "bg-white/60 backdrop-blur"
       }`}
     >
-      <div className="mx-auto grid h-16 max-w-[1500px] grid-cols-[minmax(0,1fr)_auto] items-center px-5 sm:px-8 md:h-20 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:px-12 xl:px-16 2xl:px-20">
-        <Link href={publicUrl("/")} className="flex h-11 min-w-0 items-center gap-2.5 justify-self-start">
+      <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between gap-3 px-5 sm:px-8 md:grid md:h-20 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center lg:px-12 xl:px-16 2xl:px-20">
+        <Link href={publicUrl("/")} className="flex h-11 min-w-0 shrink-0 items-center gap-2.5 md:justify-self-start">
           <WexonMark />
           <span
             className={`text-lg font-bold tracking-tight transition-colors ${
@@ -115,7 +126,8 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         <button
           type="button"
           aria-label="Menüyü Aç/Kapat"
-          className={`col-start-2 flex h-11 w-11 items-center justify-center justify-self-end rounded-xl transition-colors md:hidden ${
+          aria-expanded={menuOpen}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors md:hidden ${
             overDark
               ? "text-white hover:bg-white/10"
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
@@ -135,24 +147,38 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
       </div>
 
       {menuOpen && (
-        <div className="border-t border-slate-200 bg-white px-4 pb-5 shadow-sm md:hidden">
+        <div
+          className={`border-t px-4 pb-5 shadow-lg backdrop-blur-xl md:hidden ${
+            overDark
+              ? "border-white/10 bg-[#03150f]/95"
+              : "border-slate-200 bg-white/95"
+          }`}
+        >
           <div className="space-y-1 pb-3 pt-3">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={resolveNavigationHref(link.href)}
                 onClick={() => setMenuOpen(false)}
-                className="wx-tactile block rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                className={`wx-tactile block rounded-full px-4 py-3 text-sm font-semibold ${
+                  overDark
+                    ? "text-white/90 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                }`}
               >
                 {link.label}
               </Link>
             ))}
           </div>
-          <div className="flex flex-col gap-2 border-t border-slate-200 pt-3">
+          <div className={`flex flex-col gap-2 border-t pt-3 ${overDark ? "border-white/10" : "border-slate-200"}`}>
             <Link
               href={publicUrl("/login")}
               onClick={() => setMenuOpen(false)}
-              className="wx-tactile inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900"
+              className={`wx-tactile inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-sm font-semibold ${
+                overDark
+                  ? "border border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  : "border border-slate-300 bg-white text-slate-900"
+              }`}
             >
               Giriş Yap
             </Link>
