@@ -59,6 +59,22 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
   }, []);
 
   const overDark = transparent && !scrolled;
+  const lightMobileChrome = menuOpen;
+
+  const headerSurfaceClass =
+    scrolled || lightMobileChrome
+      ? "bg-white/95 shadow-sm shadow-slate-200/40 backdrop-blur-xl"
+      : transparent
+        ? "bg-transparent"
+        : "bg-white/60 backdrop-blur";
+
+  const brandTextClass =
+    overDark && !scrolled && !lightMobileChrome ? "text-white" : "text-slate-950";
+
+  const mobileToggleClass =
+    overDark && !lightMobileChrome
+      ? "text-white hover:bg-white/10"
+      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950";
 
   const navShellClass = overDark
     ? "border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
@@ -69,23 +85,11 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
     : "text-slate-600 hover:bg-slate-100 hover:text-slate-950";
 
   return (
-    <header
-      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "bg-white/90 shadow-sm shadow-slate-200/40 backdrop-blur-xl"
-          : transparent
-            ? "bg-transparent"
-            : "bg-white/60 backdrop-blur"
-      }`}
-    >
+    <header className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${headerSurfaceClass}`}>
       <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between gap-3 px-5 sm:px-8 md:grid md:h-20 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center lg:px-12 xl:px-16 2xl:px-20">
         <Link href={publicUrl("/")} className="flex h-11 min-w-0 shrink-0 items-center gap-2.5 md:justify-self-start">
           <WexonMark />
-          <span
-            className={`text-lg font-bold tracking-tight transition-colors ${
-              overDark ? "text-white" : "text-slate-950"
-            }`}
-          >
+          <span className={`text-lg font-bold tracking-tight transition-colors ${brandTextClass}`}>
             Wexon
           </span>
         </Link>
@@ -127,11 +131,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
           type="button"
           aria-label="Menüyü Aç/Kapat"
           aria-expanded={menuOpen}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors md:hidden ${
-            overDark
-              ? "text-white hover:bg-white/10"
-              : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-          }`}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors md:hidden ${mobileToggleClass}`}
           onClick={() => setMenuOpen((v) => !v)}
         >
           {menuOpen ? (
@@ -147,45 +147,31 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
       </div>
 
       {menuOpen && (
-        <div
-          className={`border-t px-4 pb-5 shadow-lg backdrop-blur-xl md:hidden ${
-            overDark
-              ? "border-white/10 bg-[#03150f]/95"
-              : "border-slate-200 bg-white/95"
-          }`}
-        >
+        <div className="border-t border-slate-200 bg-white px-4 pb-5 shadow-lg shadow-slate-200/30 md:hidden">
           <div className="space-y-1 pb-3 pt-3">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={resolveNavigationHref(link.href)}
                 onClick={() => setMenuOpen(false)}
-                className={`wx-tactile block rounded-full px-4 py-3 text-sm font-semibold ${
-                  overDark
-                    ? "text-white/90 hover:bg-white/10 hover:text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                }`}
+                className="wx-tactile block rounded-full px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950"
               >
                 {link.label}
               </Link>
             ))}
           </div>
-          <div className={`flex flex-col gap-2 border-t pt-3 ${overDark ? "border-white/10" : "border-slate-200"}`}>
+          <div className="flex flex-col gap-2 border-t border-slate-200 pt-3">
             <Link
               href={publicUrl("/login")}
               onClick={() => setMenuOpen(false)}
-              className={`wx-tactile inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-sm font-semibold ${
-                overDark
-                  ? "border border-white/20 bg-white/5 text-white hover:bg-white/10"
-                  : "border border-slate-300 bg-white text-slate-900"
-              }`}
+              className="wx-tactile inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50"
             >
               Giriş Yap
             </Link>
             <Link
               href={publicUrl("/signup")}
               onClick={() => setMenuOpen(false)}
-              className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-5 py-3 text-sm font-bold text-white"
+              className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-5 py-3 text-sm font-bold text-white hover:bg-emerald-500"
             >
               Kayıt Ol
             </Link>
