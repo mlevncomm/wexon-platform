@@ -157,22 +157,32 @@ input[type="password"]::-webkit-password-toggle-button {
   }
 }
 
-@keyframes wx-hero-word {
-  0%,
-  18% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-  24%,
-  100% {
+@keyframes wx-hero-word-leave {
+  to {
     opacity: 0;
-    transform: translate3d(0, -0.55em, 0);
+    transform: translate3d(0, -0.35em, 0);
   }
+}
+
+.wx-hero-primary-cta:active {
+  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  backdrop-filter: blur(24px);
 }
 
 .wx-hero-headline {
   font-family: var(--font-sans);
   font-variation-settings: "wght" 800;
+}
+
+.wx-hero-headline-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 0.28em;
+  row-gap: 0.12em;
 }
 
 .wx-hero-word-slot {
@@ -181,8 +191,25 @@ input[type="password"]::-webkit-password-toggle-button {
   justify-items: center;
 }
 
-.wx-hero-word-slot > .wx-hero-word {
+.wx-hero-word-slot > .wx-hero-word-active,
+.wx-hero-word-slot > .wx-hero-word-leaving {
   grid-area: 1 / 1;
+}
+
+.wx-hero-word-active {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity var(--wx-motion-normal) var(--wx-ease-soft),
+    transform var(--wx-motion-normal) var(--wx-ease-soft);
+}
+
+.wx-hero-word-leaving {
+  opacity: 0;
+  transform: translate3d(0, -0.35em, 0);
+  transition:
+    opacity var(--wx-motion-normal) var(--wx-ease-soft),
+    transform var(--wx-motion-normal) var(--wx-ease-soft);
 }
 
 .wx-page-shell {
@@ -220,22 +247,6 @@ input[type="password"]::-webkit-password-toggle-button {
 
 .wx-hero-marquee {
   animation: wx-hero-marquee 24s linear infinite;
-}
-
-.wx-hero-word {
-  animation: wx-hero-word 8s var(--wx-ease-soft) infinite;
-}
-
-.wx-hero-word:nth-child(2) {
-  animation-delay: 2s;
-}
-
-.wx-hero-word:nth-child(3) {
-  animation-delay: 4s;
-}
-
-.wx-hero-word:nth-child(4) {
-  animation-delay: 6s;
 }
 
 .wx-card-enter:nth-child(2) {
@@ -310,7 +321,6 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-hero-float,
   .wx-hero-float-slow,
   .wx-hero-marquee,
-  .wx-hero-word,
   .wx-panel-enter,
   .wx-card-enter,
   .wx-fade-in {
@@ -322,7 +332,9 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-soft-hover,
   .wx-tactile,
   .wx-btn,
-  .wx-input-focus {
+  .wx-input-focus,
+  .wx-hero-word-active,
+  .wx-hero-word-leaving {
     transition-duration: 1ms !important;
   }
 

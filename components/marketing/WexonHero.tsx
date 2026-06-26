@@ -1,4 +1,5 @@
 import Link from "next/link";
+import WexonHeroRotatingWord from "@/components/marketing/WexonHeroRotatingWord";
 
 const WORDS = ["Core", "WexPay", "lisans", "ödeme"];
 
@@ -142,15 +143,11 @@ export default function WexonHero() {
           </span>
 
           <h1 className="wx-hero-headline mx-auto mt-6 max-w-[980px] text-[clamp(2rem,6.4vw,5.1rem)] font-black leading-[1.04] tracking-[-0.02em] text-white sm:mt-8 sm:leading-[1.02]">
-            <span className="block sm:inline">Sistemlerinizi tek </span>
-            <span className="wx-hero-word-slot text-emerald-300">
-              {WORDS.map((word) => (
-                <span key={word} className="wx-hero-word whitespace-nowrap text-center">
-                  {word}
-                </span>
-              ))}
+            <span className="wx-hero-headline-line">
+              <span>Sistemlerinizi tek</span>
+              <WexonHeroRotatingWord words={WORDS} />
+              <span>altyapısında büyütün</span>
             </span>
-            <span className="block sm:inline"> altyapısında büyütün</span>
           </h1>
 
           <p className="mx-auto mt-7 max-w-3xl text-base font-semibold leading-8 text-slate-300 sm:text-lg">
@@ -161,7 +158,7 @@ export default function WexonHero() {
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               href="/demo/wexpay/business"
-              className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#1296ff] px-7 py-4 text-sm font-black text-white shadow-[0_22px_54px_-18px_rgba(18,150,255,0.7)] hover:bg-emerald-500 sm:w-auto"
+              className="wx-tactile wx-hero-primary-cta inline-flex w-full items-center justify-center rounded-full border border-emerald-400/35 bg-emerald-500 px-7 py-4 text-sm font-black text-white shadow-[0_22px_54px_-18px_rgba(16,185,129,0.55)] hover:bg-emerald-400 sm:w-auto"
             >
               WexPay demosunu aç
               <span className="ml-2" aria-hidden>

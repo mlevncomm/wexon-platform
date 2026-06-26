@@ -74,7 +74,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
         <nav
           className={`hidden items-center gap-1 px-1.5 py-1.5 transition-all duration-300 md:flex ${
             overDark
-              ? "rounded-full"
+              ? "rounded-full border border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl"
               : "rounded-full bg-white/80 shadow-sm shadow-slate-200/30"
           }`}
         >
@@ -84,7 +84,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
               href={resolveNavigationHref(link.href)}
               className={`wx-tactile rounded-xl px-4 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 md:text-sm xl:px-5 ${
                 overDark
-                  ? "text-slate-300/75 hover:bg-white/10 hover:text-white"
+                  ? "text-white/90 hover:bg-emerald-400/15 hover:text-white"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
               }`}
             >
