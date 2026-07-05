@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import DemoRequestForm from "@/components/marketing/DemoRequestForm";
 import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
-import { publicUrl } from "@/lib/wexon/urls";
 
 export const metadata: Metadata = {
   title: "Ön Başvuru",
@@ -17,21 +15,24 @@ const products = [
     status: "Öncelikli erişim",
     description: "QR menü, masa yönetimi, sipariş, ödeme, fiş talebi ve restoran operasyon paneli.",
     accent: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    stripe: "from-emerald-400 via-emerald-500 to-teal-500",
+    marker: "bg-emerald-500",
+    metric: "Restoran",
   },
   {
     name: "WexHotel",
     status: "Planlama",
     description: "Oda, rezervasyon, misafir, ödeme, fatura ve personel süreçleri için otel yönetimi.",
-    accent: "border-indigo-200 bg-indigo-50 text-indigo-700",
-    stripe: "from-indigo-400 via-indigo-500 to-violet-500",
+    accent: "border-sky-200 bg-sky-50 text-sky-700",
+    marker: "bg-sky-500",
+    metric: "Konaklama",
   },
   {
     name: "WexB2B",
     status: "Planlama",
     description: "Bayi, toptan satış, teklif, sipariş, cari ve ödeme takibi için B2B yönetim altyapısı.",
-    accent: "border-amber-200 bg-amber-50 text-amber-700",
-    stripe: "from-amber-400 via-orange-500 to-amber-500",
+    accent: "border-violet-200 bg-violet-50 text-violet-700",
+    marker: "bg-violet-500",
+    metric: "Ticaret",
   },
 ] as const;
 
@@ -39,127 +40,143 @@ const productOptions = products.map((product) => product.name);
 
 const steps = [
   {
-    title: "Başvurunuz alınır",
-    description: "İletişim ve işletme bilgileriniz Wexon ekibine iletilir.",
+    title: "Başvuru",
+    description: "İletişim ve işletme bilgileriniz güvenli şekilde alınır.",
   },
   {
-    title: "Kapsam netleştirilir",
-    description: "İhtiyaç, ürün ve operasyon modeli birlikte değerlendirilir.",
+    title: "Değerlendirme",
+    description: "Ürün, lisans ve operasyon kapsamı Wexon ekibi tarafından netleştirilir.",
   },
   {
-    title: "Erişim planı hazırlanır",
-    description: "Uygun lisans ve onboarding yol haritası paylaşılır.",
+    title: "Erişim planı",
+    description: "Uygun kurulum ve onboarding yolu sizinle paylaşılır.",
   },
 ];
 
-const trustPoints = ["Gerçek hesap oluşturulmaz", "24 saat içinde dönüş hedefi", "Merkezi lisans modeli"];
+const highlights = [
+  { label: "Durum", value: "Hazırlık modu" },
+  { label: "Odak", value: "Ön başvuru" },
+  { label: "Kapsam", value: "3 ürün" },
+];
 
 export default function PreApplicationPage() {
   return (
-    <main className="min-h-screen scroll-smooth bg-[#f6f8f7] text-slate-950">
-      <section className="relative overflow-hidden border-b border-emerald-950/30 bg-[#03150f] font-sans text-white">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(16,185,129,0.38),transparent_36%),linear-gradient(180deg,#063322_0%,#042418_58%,#02150f_100%)]" />
+    <main className="min-h-screen bg-[#f5f7f6] text-slate-950">
+      <section className="relative overflow-hidden bg-[#03150f] text-white">
         <div
-          className="pointer-events-none absolute inset-0 opacity-[0.14]"
+          className="pointer-events-none absolute inset-0 opacity-[0.18]"
           style={{
             backgroundImage:
-              "linear-gradient(rgba(16,185,129,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.22) 1px, transparent 1px)",
-            backgroundSize: "72px 72px",
+              "linear-gradient(rgba(52,211,153,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(52,211,153,0.18) 1px, transparent 1px)",
+            backgroundSize: "76px 76px",
           }}
         />
-        <div className="pointer-events-none absolute left-1/4 top-[8%] h-[320px] w-[320px] -translate-x-1/2 rounded-full bg-emerald-400/12 blur-[100px]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(140deg,rgba(16,185,129,0.24)_0%,rgba(3,21,15,0)_34%),linear-gradient(180deg,#05291d_0%,#03150f_62%,#f5f7f6_62%,#f5f7f6_100%)]" />
 
-        <div className="relative mx-auto max-w-[1360px] px-5 py-8 sm:px-8 lg:px-12 lg:pb-20 xl:px-16 2xl:px-20">
-          <Link href={publicUrl("/")} className="inline-flex items-center">
-            <WexonBrandLogo variant="hero" priority />
-          </Link>
-
-          <div className="grid gap-8 pb-14 pt-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-start lg:gap-10 lg:pb-16 lg:pt-14">
-            <aside className="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.06] p-6 sm:p-8 lg:sticky lg:top-8 lg:transition-transform lg:duration-300 lg:ease-out">
-                  <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-[11px] font-black text-slate-200 sm:text-xs">
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-                    Wexon sistemleri hazırlık aşamasında
-                  </span>
-
-                  <h1 className="mt-6 max-w-xl text-[clamp(2rem,4.2vw,3.75rem)] font-black leading-[1.06] tracking-[-0.02em] text-white">
-                    Ön başvuru alıyoruz; paneller geçici olarak kapalı.
-                  </h1>
-
-                  <p className="mt-5 max-w-xl text-base font-semibold leading-8 text-slate-300 sm:text-lg">
-                    WexPay, WexHotel ve WexB2B yeni erişim düzenine hazırlanıyor. Bu süreçte yalnızca ön başvuru formu
-                    açıktır.
-                  </p>
-
-                  <div className="mt-8 space-y-3">
-                    {steps.map((step, index) => (
-                      <div
-                        key={step.title}
-                        className="flex gap-4 rounded-2xl border border-white/10 bg-white/[0.05] p-4 transition-colors duration-200 ease-out hover:border-emerald-400/20 hover:bg-white/[0.08]"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-sm font-black text-emerald-200 ring-1 ring-emerald-400/20">
-                          0{index + 1}
-                        </span>
-                        <div className="min-w-0 pt-0.5">
-                          <p className="text-sm font-black text-white">{step.title}</p>
-                          <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-400">{step.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 flex flex-wrap gap-2">
-                    {trustPoints.map((point) => (
-                      <span
-                        key={point}
-                        className="rounded-full border border-white/10 bg-white/[0.06] px-3.5 py-2 text-[11px] font-black text-slate-300 backdrop-blur"
-                      >
-                        {point}
-                      </span>
-                    ))}
-                  </div>
-            </aside>
-
-              <DemoRequestForm
-                mode="application"
-                defaultSource="on-basvuru"
-                productOptions={[...productOptions]}
-                appearance="minimal"
-              />
+        <div className="relative mx-auto max-w-[1440px] px-5 pb-12 pt-7 sm:px-8 lg:px-12 lg:pb-16 xl:px-16 2xl:px-20">
+          <header className="flex items-center justify-between gap-4">
+            <WexonBrandLogo variant="hero" priority className="h-9 md:h-10" />
+            <div className="hidden items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] px-4 py-2 text-xs font-black text-emerald-100 backdrop-blur sm:inline-flex">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              Sistemler geçici erişim modunda
             </div>
-          </div>
-        </section>
+          </header>
 
-        <section id="urunler" className="scroll-mt-8 px-5 py-16 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
-          <div className="mx-auto max-w-[1360px]">
-            <div className="mx-auto mb-10 max-w-2xl text-center">
-              <span className="mb-5 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
-                Ürünler
-              </span>
-              <h2 className="text-3xl font-black tracking-[-0.02em] text-slate-950 sm:text-4xl">Wexon ürün kapsamı</h2>
-              <p className="mt-4 text-sm font-semibold leading-relaxed text-slate-600 sm:text-base">
-                WexPay, WexHotel ve WexB2B için erişim ve lisans modeli yeniden yapılandırılıyor.
+          <div className="grid gap-8 pt-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,0.72fr)] lg:items-start lg:gap-10 lg:pt-16">
+            <div className="min-w-0">
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-100 backdrop-blur">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" />
+                Wexon ön başvuru
+              </div>
+
+              <h1 className="mt-6 max-w-5xl text-[clamp(2.4rem,7vw,6.1rem)] font-black leading-[0.98] tracking-[-0.02em] text-white">
+                Wexon sistemleri yeni erişim dönemine hazırlanıyor.
+              </h1>
+
+              <p className="mt-6 max-w-3xl text-base font-semibold leading-8 text-slate-300 sm:text-lg">
+                WexPay, WexHotel ve WexB2B için başvuru sürecini tek ekranda topladık. Paneller geçici olarak kapalı;
+                başvurunuzu buradan iletip ürün erişim planlamasına dahil olabilirsiniz.
               </p>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {highlights.map((item) => (
+                  <div key={item.label} className="border-l border-white/14 bg-white/[0.06] px-4 py-3 backdrop-blur">
+                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-200">{item.label}</p>
+                    <p className="mt-1 text-sm font-black text-white">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 grid gap-3 md:grid-cols-3">
+                {steps.map((step, index) => (
+                  <article key={step.title} className="rounded-[24px] border border-white/10 bg-white/[0.07] p-4 backdrop-blur">
+                    <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-400/12 text-sm font-black text-emerald-100 ring-1 ring-emerald-300/20">
+                      0{index + 1}
+                    </div>
+                    <h2 className="text-base font-black text-white">{step.title}</h2>
+                    <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-400">{step.description}</p>
+                  </article>
+                ))}
+              </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {products.map((product) => (
-                <article
-                  key={product.name}
-                  className="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/80"
-                >
-                  <div className={`mb-5 h-1.5 w-12 rounded-full bg-gradient-to-r ${product.stripe}`} />
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-lg font-black text-slate-950">{product.name}</h3>
-                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${product.accent}`}>
-                      {product.status}
-                    </span>
-                  </div>
-                  <p className="mt-4 text-sm font-semibold leading-relaxed text-slate-600">{product.description}</p>
-                </article>
-              ))}
+            <div className="lg:sticky lg:top-8">
+              <div className="rounded-[34px] border border-white/16 bg-white/[0.12] p-2 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl">
+                <DemoRequestForm
+                  mode="application"
+                  defaultSource="on-basvuru"
+                  productOptions={[...productOptions]}
+                  appearance="minimal"
+                />
+              </div>
             </div>
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
+
+      <section className="px-5 py-14 sm:px-8 lg:px-12 lg:py-18 xl:px-16 2xl:px-20">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+            <div>
+              <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">
+                Ürün kapsamı
+              </span>
+              <h2 className="mt-4 max-w-2xl text-3xl font-black tracking-[-0.02em] text-slate-950 sm:text-4xl">
+                Başvuru aldığımız Wexon sistemleri
+              </h2>
+            </div>
+            <p className="max-w-xl text-sm font-semibold leading-relaxed text-slate-600">
+              Her ürün Wexon Core lisans ve erişim katmanı altında planlanır. Başvuru sonrası ekip, doğru ürün
+              kapsamını sizinle birlikte netleştirir.
+            </p>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            {products.map((product) => (
+              <article
+                key={product.name}
+                className="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/70 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-200/80"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{product.metric}</p>
+                    <h3 className="mt-2 text-2xl font-black tracking-[-0.02em] text-slate-950">{product.name}</h3>
+                  </div>
+                  <span className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${product.accent}`}>
+                    {product.status}
+                  </span>
+                </div>
+                <p className="mt-5 text-sm font-semibold leading-relaxed text-slate-600">{product.description}</p>
+                <div className="mt-6 flex items-center gap-3">
+                  <span className={`h-2.5 w-2.5 rounded-full ${product.marker}`} />
+                  <span className="h-px flex-1 bg-slate-200" />
+                  <span className="text-xs font-black text-slate-400">Wexon Core</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
