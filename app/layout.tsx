@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+  },
   openGraph: {
     type: "website",
     locale: "tr_TR",
@@ -35,6 +38,7 @@ export default function RootLayout({
   return (
     <html lang="tr" className="h-full">
       <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link
           rel="preload"
           href="/fonts/Urbanist-VariableFont_wght.ttf"

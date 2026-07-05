@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
 import { NAV_LINKS } from "@/lib/wexon-mock-data";
 import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
-function WexonMark() {
+function WexonBrand({ overDark }: { overDark: boolean }) {
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#10b981] shadow-sm shadow-emerald-500/30">
-      <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-        <path d="M9 2L16 6V12L9 16L2 12V6L9 2Z" stroke="white" strokeWidth="1.5" />
-        <circle cx="9" cy="9" r="2" fill="white" />
-      </svg>
-    </div>
+    <WexonBrandLogo
+      variant={overDark ? "hero" : "dark"}
+      priority
+      className="transition-opacity duration-300"
+    />
   );
 }
 
@@ -70,16 +70,13 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
 
   const headerShapeClass = lightMobileChrome ? "rounded-b-[24px] md:rounded-none" : "";
 
-  const brandTextClass =
-    overDark && !scrolled && !lightMobileChrome ? "text-white" : "text-slate-950";
-
   const mobileToggleClass =
     overDark && !lightMobileChrome
       ? "text-white hover:bg-white/10"
       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950";
 
   const navShellClass = overDark
-    ? "border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
+    ? "border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(93,255,101,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
     : "border-slate-200/80 bg-white/80 shadow-sm shadow-slate-200/30 hover:border-slate-200 hover:bg-white/90";
 
   const navLinkClass = overDark
@@ -92,11 +89,8 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
     >
       <div className="mx-auto max-w-[1500px] px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
         <div className="flex h-16 items-center justify-between gap-3 md:grid md:h-20 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
-          <Link href={publicUrl("/")} className="flex h-11 min-w-0 shrink-0 items-center gap-2.5 md:justify-self-start">
-            <WexonMark />
-            <span className={`text-lg font-bold tracking-tight transition-colors duration-300 ${brandTextClass}`}>
-              Wexon
-            </span>
+          <Link href={publicUrl("/")} className="flex h-11 min-w-0 shrink-0 items-center md:justify-self-start">
+            <WexonBrand overDark={overDark && !lightMobileChrome} />
           </Link>
 
           <nav
@@ -126,7 +120,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             </Link>
             <Link
               href={publicUrl("/signup")}
-              className="wx-tactile inline-flex h-11 items-center justify-center rounded-full bg-[#10b981] px-5 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
+              className="wx-tactile inline-flex h-11 items-center justify-center rounded-full bg-[#5dff65] px-5 text-sm font-bold text-white shadow-sm shadow-[#5dff65]/25 hover:bg-[#48e050] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
             >
               Kayıt Ol
             </Link>
@@ -185,7 +179,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
                   onClick={() => setMenuOpen(false)}
                   tabIndex={menuOpen ? 0 : -1}
                   aria-hidden={!menuOpen}
-                  className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-5 py-3 text-sm font-bold text-white hover:bg-emerald-500"
+                  className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#5dff65] px-5 py-3 text-sm font-bold text-white hover:bg-[#48e050]"
                 >
                   Kayıt Ol
                 </Link>

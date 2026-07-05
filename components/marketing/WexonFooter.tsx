@@ -1,4 +1,5 @@
 import Link from "next/link";
+import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
 import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
 const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
@@ -36,14 +37,8 @@ const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
 
 function WexonLogo() {
   return (
-    <Link href={publicUrl("/")} className="flex items-center gap-2.5">
-      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#10b981] shadow-sm shadow-emerald-500/20">
-        <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-          <path d="M9 2L16 6V12L9 16L2 12V6L9 2Z" stroke="white" strokeWidth="1.5" />
-          <circle cx="9" cy="9" r="2" fill="white" />
-        </svg>
-      </div>
-      <span className="text-base font-bold tracking-tight text-slate-950">Wexon</span>
+    <Link href={publicUrl("/")} className="inline-flex items-center">
+      <WexonBrandLogo variant="dark" />
     </Link>
   );
 }
@@ -59,7 +54,7 @@ export default function WexonFooter() {
               Restoran, otel ve B2B operasyonları için birleşik SaaS ekosistemi.
             </p>
             <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
               WexPay canlı demo hazır
             </div>
           </div>

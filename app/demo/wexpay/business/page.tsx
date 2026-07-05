@@ -1469,7 +1469,7 @@ export default function WexPayBusinessDemoPage() {
                 onClick={() => setActiveTab(tab.value)}
                 className={`shrink-0 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition-colors ${
                   activeTab === tab.value
-                    ? "border-emerald-200 bg-[#10b981] text-white shadow-sm shadow-emerald-500/20"
+                    ? "border-emerald-200 bg-[#5dff65] text-white shadow-sm shadow-[#5dff65]/20"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -1806,7 +1806,7 @@ function TablesTab({
                 onClick={() => onFilterChange(filter)}
                 className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
                   tableFilter === filter
-                    ? "border-emerald-200 bg-[#10b981] text-white"
+                    ? "border-emerald-200 bg-[#5dff65] text-white"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -1913,7 +1913,7 @@ function TableDetailPanel({
     <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-5">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-[#10b981]">Masa detayı</p>
+          <p className="text-xs font-semibold text-[#5dff65]">Masa detayı</p>
           <h2 className="mt-1 text-2xl font-bold text-slate-950">{table.name}</h2>
           <p className="mt-1 text-sm text-slate-500">QR token: {table.qrToken}</p>
         </div>
@@ -1990,7 +1990,7 @@ function TableDetailPanel({
           type="button"
           onClick={onCloseTable}
           disabled={actionLoading !== null}
-          className="rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {actionLoading === "close" ? "Masa kapatılıyor..." : "Masayı Kapat"}
         </button>
@@ -2143,7 +2143,7 @@ function MenuProductsTab({
             <button
               type="button"
               onClick={onToggleAddProduct}
-              className="inline-flex w-fit items-center justify-center rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              className="inline-flex w-fit items-center justify-center rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
             >
               Ürün Ekle
             </button>
@@ -2164,7 +2164,7 @@ function MenuProductsTab({
                   onClick={() => onFilterChange(category)}
                   className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
                     productFilter === category
-                      ? "border-emerald-200 bg-[#10b981] text-white"
+                      ? "border-emerald-200 bg-[#5dff65] text-white"
                       : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
@@ -2241,7 +2241,7 @@ function CategoryPanel({
         <button
           type="button"
           onClick={onToggleAddCategory}
-          className="rounded-2xl bg-[#10b981] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+          className="rounded-2xl bg-[#5dff65] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#48e050]"
         >
           Kategori Ekle
         </button>
@@ -2301,7 +2301,7 @@ function CategoryAddForm({ onAddCategory }: { onAddCategory: (name: string) => P
             const saved = await onAddCategory(name);
             if (saved) setName("");
           }}
-          className="rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+          className="rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
         >
           Kategoriyi Kaydet
         </button>
@@ -2328,7 +2328,7 @@ function CategoryEditForm({
         <button
           type="button"
           onClick={() => onUpdateCategory(category.id, name)}
-          className="rounded-2xl bg-[#10b981] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+          className="rounded-2xl bg-[#5dff65] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
         >
           Kategori Değişikliklerini Kaydet
         </button>
@@ -2399,7 +2399,7 @@ function ProductAddForm({
           const saved = await onAddProduct(form);
           if (saved) setForm(emptyProductForm);
         }}
-        className="mt-4 rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+        className="mt-4 rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
       >
         Ürünü Kaydet
       </button>
@@ -2488,7 +2488,7 @@ function ProductDetailPanel({
   return (
     <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-5">
       <div className="mb-5">
-        <p className="text-xs font-semibold text-[#10b981]">Ürün detayı</p>
+        <p className="text-xs font-semibold text-[#5dff65]">Ürün detayı</p>
         <h2 className="mt-1 text-2xl font-bold text-slate-950">{product.name}</h2>
         <p className="mt-1 text-sm text-slate-500">Fiyat Güncelle · Ürünü Düzenle</p>
       </div>
@@ -2533,7 +2533,7 @@ function ProductDetailPanel({
       <button
         type="button"
         onClick={() => onUpdateProduct(product.id, form)}
-        className="mt-5 w-full rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+        className="mt-5 w-full rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
       >
         Değişiklikleri Kaydet
       </button>
@@ -2596,7 +2596,7 @@ function ProductCheckbox({
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 rounded border-slate-300 text-[#10b981] focus:ring-emerald-300"
+        className="h-4 w-4 rounded border-slate-300 text-[#5dff65] focus:ring-emerald-300"
       />
       {label}
     </label>
@@ -2707,7 +2707,7 @@ function OrdersTab({
                 onClick={() => onFilterChange(filter)}
                 className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
                   orderFilter === filter
-                    ? "border-emerald-200 bg-[#10b981] text-white"
+                    ? "border-emerald-200 bg-[#5dff65] text-white"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -2817,7 +2817,7 @@ function OrderDetailPanel({
     <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-5">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-[#10b981]">Sipariş detayı</p>
+          <p className="text-xs font-semibold text-[#5dff65]">Sipariş detayı</p>
           <h2 className="mt-1 text-2xl font-bold text-slate-950">{order.orderNumber}</h2>
           <p className="mt-1 text-sm text-slate-500">
             {order.table} · {order.time}
@@ -2850,7 +2850,7 @@ function OrderDetailPanel({
           type="button"
           onClick={() => onUpdateStatus(order.id, "Hazırlanıyor")}
           disabled={order.status === "Hazırlanıyor" || order.status === "Servis Edildi" || order.status === "İptal Edildi"}
-          className="rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+          className="rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
         >
           Hazırlamaya Al
         </button>
@@ -3092,7 +3092,7 @@ function ReportsTab({
           <button
             type="button"
             onClick={onRefresh}
-            className="w-fit rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+            className="w-fit rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
           >
             Raporları Yenile
           </button>
@@ -3311,7 +3311,7 @@ function SettingsTab({
           <button
             type="button"
             onClick={onSaveSettings}
-            className="w-fit rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+            className="w-fit rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
           >
             Ayarları Kaydet
           </button>
@@ -3400,7 +3400,7 @@ function SettingsToggle({ label, enabled, onToggle }: { label: string; enabled: 
           {enabled ? "Aktif" : "Pasif"}
         </span>
       </span>
-      <span className={`h-6 w-11 rounded-full p-1 transition-colors ${enabled ? "bg-[#10b981]" : "bg-slate-300"}`}>
+      <span className={`h-6 w-11 rounded-full p-1 transition-colors ${enabled ? "bg-[#5dff65]" : "bg-slate-300"}`}>
         <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${enabled ? "translate-x-5" : ""}`} />
       </span>
     </button>

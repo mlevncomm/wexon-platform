@@ -34,7 +34,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
           <h1 className="text-3xl font-black text-slate-950">Bu ürün için abonelik yakında aktif olacak.</h1>
           <p className="mt-4 text-sm font-semibold text-slate-600">WexHotel ve WexB2B abonelikleri sonraki fazda açılacaktır.</p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link href="/demo-request" className="rounded-full bg-emerald-500 px-5 py-3 text-sm font-black text-white">Demo talebi oluştur</Link>
+            <Link href="/demo-request" className="rounded-full bg-[#5dff65] px-5 py-3 text-sm font-black text-white">Demo talebi oluştur</Link>
             <Link href="/" className="rounded-full border border-slate-200 px-5 py-3 text-sm font-black text-slate-900">Ana sayfaya dön</Link>
           </div>
         </section>
@@ -75,7 +75,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
                   <p className="font-black text-white">WexPay {planLabels[planKey]}</p>
                   <p className="mt-1 text-sm font-semibold text-slate-300">{billingInterval === "yearly" ? "Yıllık olarak faturalandırılır" : "Aylık olarak faturalandırılır"}</p>
                 </div>
-                <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">Aktif ürün</span>
+                <span className="rounded-full bg-[#5dff65]/15 px-3 py-1 text-xs font-bold text-emerald-300">Aktif ürün</span>
               </div>
               <div className="mt-4 space-y-2 text-sm">
                 <PriceRow label="Ara toplam" value={money(price.subtotal)} />
@@ -95,7 +95,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
               </Link>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+            <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-[#5dff65]/10 p-4">
               <p className="font-black text-emerald-200">Kurulum süreci dahildir</p>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-300">
                 Aboneliğiniz başladıktan sonra WexPay kurulum süreciniz başlatılır. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçer.
@@ -150,7 +150,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
               <p className="font-black text-slate-950">Mock ödeme</p>
               <p className="mt-1 text-xs leading-relaxed">Bu geliştirme ortamında ödeme başarılı kabul edilir. Production ödeme akışı ödeme sağlayıcı session ile değiştirilecektir.</p>
             </div>
-            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
+            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-[#48e050]">
               {money(price.total)} öde ve aboneliği başlat
             </button>
           </form>

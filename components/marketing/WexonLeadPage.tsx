@@ -89,7 +89,7 @@ export default function WexonLeadPage({
             )}
             <button
               type="submit"
-              className="sm:col-span-2 inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-6 py-4 text-sm font-bold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-600"
+              className="sm:col-span-2 inline-flex w-full items-center justify-center rounded-full bg-[#5dff65] px-6 py-4 text-sm font-bold text-white shadow-sm shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050]"
             >
               {submitLabel}
             </button>

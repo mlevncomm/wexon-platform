@@ -94,7 +94,7 @@ export default function WexonCore() {
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2.5">
                   <span className="mt-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
                   </span>
                   <span className="font-medium">{item}</span>
                 </li>
@@ -127,7 +127,7 @@ export default function WexonCore() {
                   className="group relative rounded-2xl border border-slate-200 bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-100/60"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-sm shadow-emerald-500/20">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-sm shadow-[#5dff65]/20">
                       {m.icon}
                     </div>
                     <h3 className="text-[15px] font-bold text-slate-950">{m.title}</h3>
@@ -147,10 +147,10 @@ export default function WexonCore() {
                   backgroundSize: "32px 32px",
                 }}
               />
-              <div className="pointer-events-none absolute -left-12 top-1/2 h-32 w-32 -translate-y-1/2 rounded-full bg-emerald-500/30 blur-3xl" />
+              <div className="pointer-events-none absolute -left-12 top-1/2 h-32 w-32 -translate-y-1/2 rounded-full bg-[#5dff65]/30 blur-3xl" />
 
               <div className="relative flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-                <div className="flex flex-1 items-center justify-center rounded-xl bg-emerald-500/15 px-4 py-3 text-center text-sm font-bold text-emerald-300 ring-1 ring-inset ring-emerald-400/30">
+                <div className="flex flex-1 items-center justify-center rounded-xl bg-[#5dff65]/15 px-4 py-3 text-center text-sm font-bold text-emerald-300 ring-1 ring-inset ring-emerald-400/30">
                   WexPay
                 </div>
                 <span className="hidden text-emerald-300/60 sm:inline" aria-hidden>
@@ -174,7 +174,7 @@ export default function WexonCore() {
                   key={item}
                   className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 text-[13px] font-semibold text-emerald-800"
                 >
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#5dff65] text-white">
                     <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
                       <path d="M2 7.5L5.5 11L12 3.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>

@@ -37,7 +37,7 @@ export default async function DemoRequestPage({
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {demoCards.map((card) => (
                 <div key={card} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60">
-                  <div className="mb-4 h-2 w-10 rounded-full bg-emerald-500" />
+                  <div className="mb-4 h-2 w-10 rounded-full bg-[#5dff65]" />
                   <p className="text-base font-bold text-slate-950">{card}</p>
                 </div>
               ))}
@@ -52,7 +52,7 @@ export default async function DemoRequestPage({
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
                 href="/demo/wexpay?source=links"
-                className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white hover:bg-emerald-400"
+                className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-7 py-3.5 text-sm font-bold text-white hover:bg-[#48e050]"
               >
                 WexPay Demo Aç
               </Link>

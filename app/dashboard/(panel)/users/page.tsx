@@ -160,7 +160,7 @@ export default async function DashboardUsersPage({ searchParams }: { searchParam
               </span>
             </label>
             <div className="md:col-span-2">
-              <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
+              <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-[#48e050]">
                 Kullanıcı ekle
               </button>
             </div>

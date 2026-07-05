@@ -27,7 +27,7 @@ export function WexonPageCTA({
       <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
         <Link
           href={primary.href}
-          className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white wx-interactive hover:bg-emerald-400"
+          className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-7 py-3.5 text-sm font-bold text-white wx-interactive hover:bg-[#48e050]"
         >
           {primary.label}
         </Link>
@@ -70,7 +70,7 @@ export default function WexonStaticPageShell({
               }}
             />
             <div className="relative max-w-4xl">
-              <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+              <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
                 {badge}
               </span>
               <h1 className="text-4xl font-black leading-tight tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl">

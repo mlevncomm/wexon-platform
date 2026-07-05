@@ -14,7 +14,7 @@ export const PRODUCTS: WexonProduct[] = [
     tagline: "Restoran ve kafeler için QR menü, sipariş ve ödeme sistemi",
     description:
       "WexPay; QR menü, sipariş, masa yönetimi, ödeme, fiş talebi, raporlama ve operasyon takibini tek panelde birleştirir.",
-    accentColor: "#10b981",
+    accentColor: "#5dff65",
     features: [
       "Canlı demo hazır",
       "QR menü ve sipariş",

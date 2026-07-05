@@ -18,7 +18,7 @@ export default function ChangelogPage() {
         <div className="space-y-4">
           {changes.map((change, index) => (
             <div key={change} className="flex gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-black text-white">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#5dff65] text-sm font-black text-white">
                 {index + 1}
               </span>
               <p className="text-sm font-bold text-slate-950">{change}</p>

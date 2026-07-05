@@ -60,7 +60,7 @@ export default function ContactPage() {
               <span className="text-sm font-bold text-slate-700">Mesaj</span>
               <textarea rows={5} className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-400/40" />
             </label>
-            <button type="submit" className="sm:col-span-2 rounded-full bg-emerald-500 px-6 py-4 text-sm font-bold text-white transition-colors hover:bg-emerald-600">
+            <button type="submit" className="sm:col-span-2 rounded-full bg-[#5dff65] px-6 py-4 text-sm font-bold text-white transition-colors hover:bg-[#48e050]">
               Mesaj Gönder
             </button>
           </div>

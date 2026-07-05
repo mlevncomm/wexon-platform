@@ -15,7 +15,7 @@ export default function UnauthorizedPage() {
           <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-slate-600">
             Wexon Admin Paneli yalnızca yetkilendirilmiş Wexon iç kullanıcıları için kullanılabilir.
           </p>
-          <Link href="/" className="mt-8 inline-flex rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white hover:bg-emerald-700">
+          <Link href="/" className="mt-8 inline-flex rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white hover:bg-[#48e050]">
             Ana sayfaya dön
           </Link>
         </section>

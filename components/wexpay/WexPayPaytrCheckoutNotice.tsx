@@ -29,7 +29,7 @@ export function WexPayPaytrCheckoutNotice({
           href={checkoutUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-600/25 transition-colors hover:bg-emerald-700"
+          className="inline-flex rounded-xl bg-[#48e050] px-4 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-600/25 transition-colors hover:bg-[#48e050]"
         >
           PayTR ödeme ekranını aç
         </a>

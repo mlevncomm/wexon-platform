@@ -54,7 +54,7 @@ export default function WexPayPaymentsBoard({ payments }: { payments: PaymentRow
         title="Ödeme özeti"
         description="Operasyonel WexPay ödeme kayıtları. Core faturalandırmasından ayrıdır."
         headerAction={
-          <span className="rounded-full border border-emerald-300/30 bg-emerald-500/20 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-emerald-100">
+          <span className="rounded-full border border-emerald-300/30 bg-[#5dff65]/20 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-emerald-100">
             Canlı
           </span>
         }

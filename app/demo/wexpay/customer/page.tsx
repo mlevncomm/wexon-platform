@@ -457,7 +457,7 @@ export default function WexPayCustomerDemoPage() {
           <div className="grid gap-4">
             {explanationCards.map((card) => (
               <div key={card.title} className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="mb-4 h-2 w-10 rounded-full bg-[#10b981]" />
+                <div className="mb-4 h-2 w-10 rounded-full bg-[#5dff65]" />
                 <h3 className="mb-2 text-lg font-bold text-slate-950">{card.title}</h3>
                 <p className="text-sm leading-relaxed text-slate-600">{card.description}</p>
               </div>
@@ -474,7 +474,7 @@ function RestaurantHeader({ badge, restaurantName }: { badge: string; restaurant
     <header className="mb-6">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-[#10b981]">{restaurantName}</p>
+          <p className="text-xs font-semibold text-[#5dff65]">{restaurantName}</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-950">Masa 12</h1>
         </div>
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -510,7 +510,7 @@ function WelcomeScreen({
     <section>
       <RestaurantHeader badge="WexPay QR Menü ve Ödeme" restaurantName={restaurantName} />
       <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="mb-3 text-xs font-semibold text-[#10b981]">WexPay</p>
+        <p className="mb-3 text-xs font-semibold text-[#5dff65]">WexPay</p>
         <h2 className="mb-4 text-3xl font-bold tracking-tight text-slate-950">Hoş geldiniz</h2>
         <p className="mb-8 text-sm leading-relaxed text-slate-600">
           Menüyü inceleyebilir, sipariş oluşturabilir veya mevcut masa hesabınızı güvenli şekilde
@@ -520,7 +520,7 @@ function WelcomeScreen({
           <button
             type="button"
             onClick={onOrder}
-            className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700"
+            className="w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050]"
           >
             Sipariş Vermek İstiyorum
           </button>
@@ -689,7 +689,7 @@ function MenuScreen({
           type="button"
           onClick={onSendOrder}
           disabled={orderSubmitting}
-          className="mt-4 w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+          className="mt-4 w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
         >
           {orderSubmitting ? "Sipariş gönderiliyor..." : "Siparişi Gönder"}
         </button>
@@ -726,7 +726,7 @@ function QuantityControl({
         type="button"
         onClick={onPlus}
         disabled={disabled}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#10b981] text-lg font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5dff65] text-lg font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
       >
         +
       </button>
@@ -760,7 +760,7 @@ function OrderSuccessScreen({
 }) {
   return (
     <section className="text-center">
-      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#10b981]">
+      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#5dff65]">
         ✓
       </div>
       <h2 className="mb-2 text-2xl font-bold text-slate-950">Siparişiniz Alındı</h2>
@@ -781,7 +781,7 @@ function OrderSuccessScreen({
         <button
           type="button"
           onClick={onPayment}
-          className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700"
+          className="w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050]"
         >
           Hesabı Öde
         </button>
@@ -874,7 +874,7 @@ function PaymentScreen({
               <div className="flex items-center gap-3">
                 <span
                   className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs ${
-                    selected ? "border-[#10b981] bg-[#10b981] text-white" : "border-slate-300 bg-white"
+                    selected ? "border-[#5dff65] bg-[#5dff65] text-white" : "border-slate-300 bg-white"
                   }`}
                 >
                   {selected ? "✓" : ""}
@@ -921,7 +921,7 @@ function PaymentScreen({
             type="button"
             onClick={onReceiptChange}
             className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${
-              receiptRequested ? "bg-[#10b981]" : "bg-slate-200"
+              receiptRequested ? "bg-[#5dff65]" : "bg-slate-200"
             }`}
           >
             <span
@@ -952,7 +952,7 @@ function PaymentScreen({
       <button
         type="button"
         onClick={onSecurePayment}
-        className="mt-5 w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700"
+        className="mt-5 w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050]"
       >
         Güvenli Ödeme Yap
       </button>
@@ -996,7 +996,7 @@ function PaymentFormScreen({
         type="button"
         onClick={onConfirm}
         disabled={submitting}
-        className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+        className="w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
       >
         {submitting ? "Ödeme tamamlanıyor..." : "Ödemeyi Tamamla"}
       </button>
@@ -1017,7 +1017,7 @@ function PaymentSuccessScreen({
 }) {
   return (
     <section className="text-center">
-      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#10b981]">
+      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#5dff65]">
         ✓
       </div>
       <h2 className="mb-2 text-2xl font-bold text-slate-950">Ödeme Başarılı</h2>

@@ -70,7 +70,7 @@ const WEXON_LINKS = {
 
 function WexPayMark() {
   return (
-    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#10b981] shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/30">
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#5dff65] shadow-lg shadow-[#5dff65]/25 ring-1 ring-emerald-400/30">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
         <rect x="3" y="3" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
         <rect x="3" y="14" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
@@ -203,7 +203,7 @@ function FeaturedLinkCard({ item }: { item: WexonLinkItem }) {
   );
 
   const heroClass =
-    "group relative flex min-h-[4.75rem] w-full items-center gap-3.5 overflow-hidden rounded-[20px] border border-emerald-400/30 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-4 py-4 shadow-[0_16px_40px_-12px_rgba(16,185,129,0.55)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50";
+    "group relative flex min-h-[4.75rem] w-full items-center gap-3.5 overflow-hidden rounded-[20px] border border-emerald-400/30 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-4 py-4 shadow-[0_16px_40px_-12px_rgba(93,255,101,0.55)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50";
 
   const normalClass =
     "group flex min-h-[3.75rem] w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm shadow-slate-900/5 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md hover:shadow-emerald-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40";
@@ -268,7 +268,7 @@ export default function WexonLinksPage() {
               <p className="mt-2 max-w-[320px] text-[13px] leading-relaxed text-slate-400">
                 Restoranlar için tek QR üzerinden menü, sipariş ve ödeme akışı.
               </p>
-              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-200">
+              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-[#5dff65]/10 px-3 py-1 text-[10px] font-bold text-emerald-200">
                 <LinkIconGlyph icon="qr" className="h-3 w-3" />
                 Masa QR · Demo hazır
               </span>

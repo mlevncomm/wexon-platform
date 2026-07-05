@@ -51,7 +51,7 @@ export default async function WexonDashboardShell({ children }: { children: Reac
             <a href={publicUrl("/contact")} className="wx-interactive hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">
               Destek
             </a>
-            <a href={wexpayAppHref} className="wx-interactive hidden rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600 lg:inline-flex">
+            <a href={wexpayAppHref} className="wx-interactive hidden rounded-full bg-[#5dff65] px-4 py-2 text-xs font-black text-white hover:bg-[#48e050] lg:inline-flex">
               WexPay uygulaması
             </a>
             <Suspense
@@ -101,7 +101,7 @@ export default async function WexonDashboardShell({ children }: { children: Reac
                     <p className="mt-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Admin önizleme</p>
                   )}
                 </div>
-                <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-xs font-black text-white lg:flex">
+                <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#5dff65] text-xs font-black text-white lg:flex">
                   W
                 </span>
               </div>

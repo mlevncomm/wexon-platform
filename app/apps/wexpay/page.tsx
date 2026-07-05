@@ -55,7 +55,7 @@ function OperationsEmptyState({ hasRestaurant }: { hasRestaurant: boolean }) {
       <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
         <Link
           href={hasRestaurant ? appNavigationUrl("/apps/wexpay/branches") : appNavigationUrl("/apps/wexpay/restaurants")}
-          className="rounded-2xl bg-[#10b981] px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-emerald-700"
+          className="rounded-2xl bg-[#5dff65] px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-[#48e050]"
         >
           {hasRestaurant ? "Şube oluştur" : "Restoran oluştur"}
         </Link>

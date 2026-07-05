@@ -134,7 +134,7 @@ export default function StartPage() {
             />
             <div className="relative grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
               <div className="text-center lg:text-left">
-                <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+                <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
                   Başlayın
                 </span>
                 <h1 className="mx-auto max-w-4xl text-4xl font-black leading-tight tracking-[-0.02em] text-white sm:text-5xl lg:mx-0">
@@ -145,7 +145,7 @@ export default function StartPage() {
                   Ardından size uygun Wexon ürün, paket ve demo akışını birlikte planlıyoruz.
                 </p>
                 <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
-                  <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white hover:bg-emerald-400">
+                  <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-7 py-3.5 text-sm font-bold text-white hover:bg-[#48e050]">
                     Demo Talep Et
                   </Link>
                   <Link href="/apply" className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-white hover:bg-white/10">
@@ -160,14 +160,14 @@ export default function StartPage() {
                     <p className="text-xs font-semibold text-emerald-300">Wexon</p>
                     <h2 className="text-xl font-black text-white">Wexon başlangıç akışı</h2>
                   </div>
-                  <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">
+                  <span className="rounded-full bg-[#5dff65]/15 px-3 py-1 text-xs font-bold text-emerald-300">
                     5 adım
                   </span>
                 </div>
                 <div className="space-y-3">
                   {startFlow.map((item, index) => (
                     <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-white">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#5dff65] text-xs font-black text-white">
                         {index + 1}
                       </span>
                       <span className="text-sm font-semibold text-slate-200">{item}</span>
@@ -194,7 +194,7 @@ export default function StartPage() {
                 href={card.href}
                 className="group rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60 transition-all hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl hover:shadow-emerald-100/50"
               >
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500 text-sm font-black text-white shadow-sm shadow-emerald-500/25">
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#5dff65] text-sm font-black text-white shadow-sm shadow-[#5dff65]/25">
                   <ActionIcon type={card.icon} />
                 </div>
                 <h2 className="text-xl font-bold text-slate-950">{card.title}</h2>
@@ -298,7 +298,7 @@ export default function StartPage() {
                 birlikte değerlendirelim.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-                <Link href="/book-demo" className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white hover:bg-emerald-400">
+                <Link href="/book-demo" className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-7 py-3.5 text-sm font-bold text-white hover:bg-[#48e050]">
                   Randevu Al
                 </Link>
                 <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-white hover:bg-white/10">

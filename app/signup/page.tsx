@@ -21,7 +21,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
             <Link href="/" className="inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-950/20">Wexon</Link>
             <Link href="/" className="inline-flex rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/10">Ana sayfaya dön</Link>
           </div>
-          <span className="mb-5 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+          <span className="mb-5 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
             Wexon Core hesabı
           </span>
           <h1 className="text-3xl font-black leading-tight tracking-[-0.03em] sm:text-5xl xl:text-6xl">
@@ -50,7 +50,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
             <Input label="Telefon" name="phone" />
             <Input label="Ülke" name="country" defaultValue="TR" />
             <input type="hidden" name="productInterest" value="WexPay" />
-            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white hover:bg-emerald-700 sm:col-span-2">Hesap oluştur</button>
+            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white hover:bg-[#48e050] sm:col-span-2">Hesap oluştur</button>
           </form>
           <p className="mt-5 text-center text-xs font-semibold text-slate-500">
             Zaten hesabınız var mı? <Link href="/login" className="font-black text-emerald-700">Giriş yap</Link>

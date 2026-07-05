@@ -128,7 +128,7 @@ export function WexPayTableOperationsView({
                       onClick={() => setTableFilter(filter)}
                       className={`min-w-0 rounded-full border px-3.5 py-2 text-xs font-black transition-all ${
                         tableFilter === filter
-                          ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                          ? "border-[#5dff65] bg-[#5dff65] text-white shadow-md shadow-[#5dff65]/25"
                           : "border-slate-200/80 bg-white text-slate-700 shadow-sm shadow-slate-900/5 hover:border-emerald-200 hover:text-emerald-800"
                       }`}
                     >
@@ -204,7 +204,7 @@ function TableCard({
     >
       <span
         className={`absolute inset-y-4 left-0 w-1 rounded-r-full transition-colors ${
-          selected ? "bg-emerald-500" : "bg-transparent group-hover:bg-emerald-200"
+          selected ? "bg-[#5dff65]" : "bg-transparent group-hover:bg-emerald-200"
         }`}
         aria-hidden
       />
@@ -291,7 +291,7 @@ function TableDetailPanel({
               href={publicQrPath}
               target="_blank"
               rel="noreferrer"
-              className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white shadow-lg shadow-emerald-500/30 transition-all hover:bg-emerald-400"
+              className="rounded-full bg-[#5dff65] px-4 py-2 text-xs font-black text-white shadow-lg shadow-[#5dff65]/30 transition-all hover:bg-[#48e050]"
             >
               Müşteri ekranı
             </a>
@@ -425,7 +425,7 @@ function TableDetailPanel({
                       </select>
                       <button
                         type="submit"
-                        className="shrink-0 rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition-colors hover:bg-emerald-600"
+                        className="shrink-0 rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#48e050]"
                       >
                         Kaydet
                       </button>
@@ -463,7 +463,7 @@ function TableDetailPanel({
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                    className="h-full rounded-full bg-[#5dff65] transition-all duration-500"
                     style={{ width: `${collectionProgress}%` }}
                   />
                 </div>
@@ -543,7 +543,7 @@ function TableDetailPanel({
                 <form action={closeTableAction}>
                   <input type="hidden" name="tableId" value={table.id} />
                   <input type="hidden" name="redirectTo" value={redirectTo} />
-                  <DemoPrimaryButton className="w-full !py-2.5 text-xs shadow-md shadow-emerald-500/20">
+                  <DemoPrimaryButton className="w-full !py-2.5 text-xs shadow-md shadow-[#5dff65]/20">
                     Masayı Kapat ve Sıfırla
                   </DemoPrimaryButton>
                 </form>
@@ -712,7 +712,7 @@ function BranchOrderHistoryPanel({ tables }: { tables: OperationsTable[] }) {
               onClick={() => setHistoryTableFilter("ALL")}
               className={`rounded-full border px-4 py-2 text-xs font-black transition-all ${
                 historyTableFilter === "ALL"
-                  ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                  ? "border-[#5dff65] bg-[#5dff65] text-white shadow-md shadow-[#5dff65]/25"
                   : "border-slate-200/80 bg-white text-slate-700 shadow-sm shadow-slate-900/5 hover:border-emerald-200 hover:text-emerald-800"
               }`}
             >
@@ -725,7 +725,7 @@ function BranchOrderHistoryPanel({ tables }: { tables: OperationsTable[] }) {
                 onClick={() => setHistoryTableFilter(table.id)}
                 className={`rounded-full border px-4 py-2 text-xs font-black transition-all ${
                   historyTableFilter === table.id
-                    ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                    ? "border-[#5dff65] bg-[#5dff65] text-white shadow-md shadow-[#5dff65]/25"
                     : "border-slate-200/80 bg-white text-slate-700 shadow-sm shadow-slate-900/5 hover:border-emerald-200 hover:text-emerald-800"
                 }`}
               >
@@ -759,7 +759,7 @@ function BranchOrderHistoryPanel({ tables }: { tables: OperationsTable[] }) {
 
                 <div className="relative hidden w-4 shrink-0 sm:block">
                   <div className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-gradient-to-b from-emerald-300 via-slate-200 to-transparent" />
-                  <span className="absolute left-1/2 top-5 h-3 w-3 -translate-x-1/2 rounded-full bg-emerald-500 ring-4 ring-emerald-100 transition-transform group-hover:scale-110" />
+                  <span className="absolute left-1/2 top-5 h-3 w-3 -translate-x-1/2 rounded-full bg-[#5dff65] ring-4 ring-emerald-100 transition-transform group-hover:scale-110" />
                 </div>
 
                 <article className="relative min-w-0 flex-1 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-emerald-200/80 group-hover:shadow-md group-hover:shadow-emerald-900/5">

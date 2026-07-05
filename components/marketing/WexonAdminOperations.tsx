@@ -60,7 +60,7 @@ export function AdminInlineSelectForm({
       </select>
       <button
         type="submit"
-        className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
+        className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#48e050]"
       >
         {submitLabel}
       </button>

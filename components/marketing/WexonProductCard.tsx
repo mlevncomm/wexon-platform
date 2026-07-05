@@ -22,7 +22,7 @@ const ACCENT: Record<
     stripe: "from-emerald-400 via-emerald-500 to-teal-500",
     badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
     badgeText: "text-emerald-700",
-    iconBg: "bg-emerald-500",
+    iconBg: "bg-[#5dff65]",
     iconText: "text-white",
     ring: "ring-emerald-100",
     glow: "shadow-emerald-200/60",
@@ -107,7 +107,7 @@ export default function WexonProductCard({ product, highlighted = false }: Props
               <span
                 className={`mt-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${accent.badge}`}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
                 {product.statusLabel}
               </span>
             )}
@@ -130,7 +130,7 @@ export default function WexonProductCard({ product, highlighted = false }: Props
         <div className="relative mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
           {["Canlı demo", "QR müşteri", "İşletme paneli", "Demo reset"].map((item) => (
             <span key={item} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
               {item}
             </span>
           ))}
@@ -163,7 +163,7 @@ export default function WexonProductCard({ product, highlighted = false }: Props
             <div className="grid gap-2 sm:grid-cols-2">
               <Link
                 href="/demo/wexpay/business"
-                className="inline-flex min-h-11 items-center justify-center rounded-full bg-emerald-500 px-4 py-2.5 text-center text-[13px] font-bold leading-tight text-white shadow-sm shadow-emerald-500/30 transition-colors hover:bg-emerald-600"
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#5dff65] px-4 py-2.5 text-center text-[13px] font-bold leading-tight text-white shadow-sm shadow-[#5dff65]/30 transition-colors hover:bg-[#48e050]"
               >
                 İşletme Demosu
               </Link>

@@ -290,7 +290,7 @@ export default function WexPayPublicOrderClient({
                           <button
                             type="button"
                             onClick={() => changeQuantity(product, 1)}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#10b981] text-lg font-black text-white shadow-sm shadow-emerald-500/25"
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#5dff65] text-lg font-black text-white shadow-sm shadow-[#5dff65]/25"
                             aria-label={`${product.name} arttır`}
                           >
                             +
@@ -366,7 +366,7 @@ export default function WexPayPublicOrderClient({
             <span
               aria-hidden="true"
               className={`relative flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-                receiptRequested ? "bg-[#10b981]" : "bg-slate-200"
+                receiptRequested ? "bg-[#5dff65]" : "bg-slate-200"
               }`}
             >
               <span
@@ -430,7 +430,7 @@ export default function WexPayPublicOrderClient({
           type="button"
           onClick={submitOrder}
           disabled={isPending || lines.length === 0}
-          className="mt-4 w-full rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="mt-4 w-full rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-black text-white shadow-sm shadow-[#5dff65]/25 transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {isPending ? "Gönderiliyor..." : "Siparişi Gönder"}
         </button>

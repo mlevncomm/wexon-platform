@@ -35,7 +35,7 @@ export default async function DashboardChangePasswordPage({
       <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl" />
       <div className="relative mx-auto grid min-h-[calc(100vh-2rem)] max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-center">
         <section className="min-w-0 px-2 py-4 sm:px-4 lg:py-8">
-          <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+          <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
             İlk giriş güvenliği
           </span>
           <p className="text-sm font-black uppercase tracking-[0.16em] text-emerald-300">Wexon Core güvenlik adımı</p>
@@ -81,7 +81,7 @@ export default async function DashboardChangePasswordPage({
             <p className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-relaxed text-slate-600">
               Şifreniz düz metin olarak saklanmaz. Yeni şifreniz en az 8 karakter olmalıdır.
             </p>
-            <button type="submit" className="w-full rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white transition hover:bg-emerald-700">
+            <button type="submit" className="w-full rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white transition hover:bg-[#48e050]">
               Şifreyi güncelle
             </button>
           </form>

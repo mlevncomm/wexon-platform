@@ -52,10 +52,10 @@ const PROOF_TONE_STYLES: Record<
   { icon: string; badge: string; glow: string; ring: string }
 > = {
   emerald: {
-    icon: "bg-emerald-500/20 text-emerald-100 ring-emerald-400/30",
-    badge: "border-emerald-400/25 bg-emerald-500/12 text-emerald-200",
+    icon: "bg-[#5dff65]/20 text-emerald-100 ring-emerald-400/30",
+    badge: "border-emerald-400/25 bg-[#5dff65]/12 text-emerald-200",
     glow: "from-emerald-400/20 via-emerald-500/5 to-transparent",
-    ring: "shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_24px_60px_-28px_rgba(16,185,129,0.45)]",
+    ring: "shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_24px_60px_-28px_rgba(93,255,101,0.45)]",
   },
   sky: {
     icon: "bg-sky-500/20 text-sky-100 ring-sky-400/30",
@@ -141,9 +141,9 @@ const MARQUEE_TONE_STYLES: Record<
   { icon: string; badge: string; glow: string }
 > = {
   emerald: {
-    icon: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
-    badge: "border-emerald-400/20 bg-emerald-500/10 text-emerald-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(16,185,129,0.55)]",
+    icon: "bg-[#5dff65]/15 text-emerald-200 ring-emerald-400/25",
+    badge: "border-emerald-400/20 bg-[#5dff65]/10 text-emerald-200",
+    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(93,255,101,0.55)]",
   },
   sky: {
     icon: "bg-sky-500/15 text-sky-200 ring-sky-400/25",
@@ -288,7 +288,7 @@ function ServiceMarquee() {
                 </div>
 
                 <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-sm text-emerald-200 opacity-0 transition-all duration-300 group-hover:translate-x-0.5 group-hover:border-emerald-400/30 group-hover:bg-emerald-500/10 group-hover:opacity-100"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-sm text-emerald-200 opacity-0 transition-all duration-300 group-hover:translate-x-0.5 group-hover:border-emerald-400/30 group-hover:bg-[#48e050]/10 group-hover:opacity-100"
                   aria-hidden
                 >
                   →
@@ -305,17 +305,17 @@ function ServiceMarquee() {
 export default function WexonHero() {
   return (
     <section className="relative overflow-hidden border-b border-emerald-950/30 bg-[#03150f] font-sans text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(16,185,129,0.42),transparent_40%),linear-gradient(180deg,#063322_0%,#042418_52%,#02150f_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(93,255,101,0.42),transparent_40%),linear-gradient(180deg,#063322_0%,#042418_52%,#02150f_100%)]" />
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.22]"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(16,185,129,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.22) 1px, transparent 1px)",
+            "linear-gradient(rgba(93,255,101,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(93,255,101,0.22) 1px, transparent 1px)",
           backgroundSize: "72px 72px",
         }}
       />
       <div className="pointer-events-none absolute left-1/2 top-[18%] h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-400/20 blur-[110px]" />
-      <div className="pointer-events-none absolute bottom-0 left-1/2 h-48 w-[760px] -translate-x-1/2 rounded-full bg-emerald-500/15 blur-[90px]" />
+      <div className="pointer-events-none absolute bottom-0 left-1/2 h-48 w-[760px] -translate-x-1/2 rounded-full bg-[#5dff65]/15 blur-[90px]" />
 
       {FLOATING_PROOFS.map((proof, index) => (
         <FloatingProof key={proof.title} {...proof} index={index} />
@@ -323,7 +323,7 @@ export default function WexonHero() {
 
       <div className="relative mx-auto flex min-h-[min(100svh,820px)] max-w-[1500px] flex-col px-5 pb-14 pt-24 sm:min-h-[860px] sm:px-8 sm:pb-16 sm:pt-32 lg:min-h-[900px] lg:px-12 xl:px-16 2xl:px-20">
         <div className="mx-auto max-w-4xl text-center">
-          <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-[11px] font-black text-slate-200 shadow-[0_18px_60px_-30px_rgba(16,185,129,0.45)] backdrop-blur-xl sm:text-xs">
+          <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-[11px] font-black text-slate-200 shadow-[0_18px_60px_-30px_rgba(93,255,101,0.45)] backdrop-blur-xl sm:text-xs">
             <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />
             WexPay aktif · WexHotel ve WexB2B roadmap
           </span>
@@ -344,7 +344,7 @@ export default function WexonHero() {
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               href="/demo/wexpay/business"
-              className="wx-tactile wx-hero-primary-cta inline-flex w-full items-center justify-center rounded-full border border-emerald-400/35 bg-emerald-500 px-7 py-4 text-sm font-black text-white shadow-[0_22px_54px_-18px_rgba(16,185,129,0.55)] hover:bg-emerald-400 sm:w-auto"
+              className="wx-tactile wx-hero-primary-cta inline-flex w-full items-center justify-center rounded-full border border-emerald-400/35 bg-[#5dff65] px-7 py-4 text-sm font-black text-white shadow-[0_22px_54px_-18px_rgba(93,255,101,0.55)] hover:bg-[#48e050] sm:w-auto"
             >
               WexPay demosunu aç
               <span className="ml-2" aria-hidden>

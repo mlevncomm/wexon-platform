@@ -84,7 +84,7 @@ export default async function AdminOrganizationDetailPage({
         <div className="relative min-w-0">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <span className="mb-4 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+              <span className="mb-4 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
                 Müşteri yönetimi
               </span>
               <h1 className="break-words text-3xl font-black tracking-[-0.02em] text-white sm:text-5xl">{organization.name}</h1>
@@ -131,7 +131,7 @@ export default async function AdminOrganizationDetailPage({
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href={dashboardPreviewHref(organization.id)}
-              className="inline-flex rounded-full bg-emerald-500 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-400"
+              className="inline-flex rounded-full bg-[#5dff65] px-5 py-3 text-sm font-black text-white transition hover:bg-[#48e050]"
             >
               Wexon Core paneli
             </Link>

@@ -30,7 +30,7 @@ export default async function AdminPage() {
     <div className="space-y-8">
       <section className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_15%_0%,#0f3024_0%,transparent_48%),linear-gradient(180deg,#050b16_0%,#081424_100%)] p-8 text-white shadow-2xl shadow-slate-950/20 sm:p-12">
         <div className="relative max-w-5xl">
-          <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+          <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
             Wexon Admin
           </span>
           <h1 className="text-4xl font-black leading-tight tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl">
@@ -75,7 +75,7 @@ export default async function AdminPage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href={dashboardPreviewHref(organizations[0].id)}
-              className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600"
+              className="rounded-full bg-[#5dff65] px-4 py-2 text-xs font-black text-white hover:bg-[#48e050]"
             >
               Son müşteri: Core önizleme
             </Link>

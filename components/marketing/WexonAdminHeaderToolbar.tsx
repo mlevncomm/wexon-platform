@@ -461,7 +461,7 @@ export default function WexonAdminHeaderToolbar({
 
           <Link
             href={adminNavigationUrl("/admin/organizations")}
-            className="hidden rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-sm shadow-slate-900/20 transition-colors hover:bg-emerald-700 sm:inline-flex"
+            className="hidden rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-sm shadow-slate-900/20 transition-colors hover:bg-[#48e050] sm:inline-flex"
           >
             + Yeni müşteri
           </Link>

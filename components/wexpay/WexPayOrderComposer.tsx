@@ -131,7 +131,7 @@ export default function WexPayOrderComposer({
         <button
           type="submit"
           disabled={validLines.length === 0}
-          className="w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+          className="w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
         >
           Sipariş oluştur
         </button>

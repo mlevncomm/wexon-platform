@@ -18,7 +18,7 @@ export default function WexonInfoCard({
         ? "bg-amber-500"
         : tone === "slate"
           ? "bg-slate-400"
-          : "bg-emerald-500";
+          : "bg-[#5dff65]";
 
   return (
     <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60">

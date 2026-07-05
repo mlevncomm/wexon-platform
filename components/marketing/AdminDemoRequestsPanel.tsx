@@ -380,7 +380,7 @@ export default function AdminDemoRequestsPanel({
 
         <button
           type="submit"
-          className="h-10 rounded-xl bg-slate-900 px-5 text-sm font-black text-white transition-colors hover:bg-emerald-700"
+          className="h-10 rounded-xl bg-slate-900 px-5 text-sm font-black text-white transition-colors hover:bg-[#48e050]"
         >
           Filtrele
         </button>

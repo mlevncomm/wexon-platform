@@ -62,7 +62,7 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
                   <AdminInfoRow label="Lisans" value={license ? formatAdminStatus(license.status) : "-"} />
                   <AdminInfoRow label="İşletme" value={organization.restaurants.length} />
                 </div>
-                <Link href={`/admin/organizations/${organization.id}`} className="mt-5 inline-flex rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white">
+                <Link href={`/admin/organizations/${organization.id}`} className="mt-5 inline-flex rounded-full bg-[#5dff65] px-5 py-3 text-sm font-bold text-white">
                   Yönet
                 </Link>
                 <details className={`mt-4 rounded-2xl border p-4 ${organization.isActive ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
@@ -86,7 +86,7 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
                         Bu işlem müşteriyi tekrar aktif hale getirir. Mevcut kayıtlar korunur.
                       </p>
                       <form action={reactivateAdminOrganizationAction.bind(null, organization.id)} className="mt-3">
-                        <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white hover:bg-emerald-700">
+                        <button type="submit" className="rounded-xl bg-[#48e050] px-4 py-2.5 text-xs font-black text-white hover:bg-[#48e050]">
                           Tekrar aktif et
                         </button>
                       </form>

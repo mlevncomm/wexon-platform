@@ -26,9 +26,9 @@
   --wx-bg-elevated: #132035;   /* cards, panels */
 
   /* Accents */
-  --wx-accent:      #10b981;   /* emerald green primary */
-  --wx-accent-dim:  #059669;   /* hover / pressed */
-  --wx-accent-glow: rgba(16, 185, 129, 0.18);
+  --wx-accent:      #5dff65;   /* brand green primary */
+  --wx-accent-dim:  #48e050;   /* hover / pressed */
+  --wx-accent-glow: rgba(93, 255, 101, 0.18);
 
   /* Text */
   --wx-text:        #f0f4f8;   /* near-white body copy */
@@ -37,7 +37,7 @@
 
   /* Borders */
   --wx-border:      rgba(255, 255, 255, 0.07);
-  --wx-border-accent: rgba(16, 185, 129, 0.30);
+  --wx-border-accent: rgba(93, 255, 101, 0.30);
 
   /* Radius */
   --wx-radius-card: 1.25rem;   /* 20px — 2xl */
@@ -46,7 +46,7 @@
 
   /* Shadows */
   --wx-shadow-card: 0 4px 32px rgba(0, 0, 0, 0.35);
-  --wx-shadow-glow: 0 0 40px rgba(16, 185, 129, 0.12);
+  --wx-shadow-glow: 0 0 40px rgba(93, 255, 101, 0.12);
 
   /* Motion */
   --wx-motion-fast:   180ms;
@@ -565,7 +565,7 @@ input[type="password"]::-webkit-password-toggle-button {
 
 .wx-btn-primary:hover {
   background: var(--wx-accent-dim);
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 0 24px rgba(93, 255, 101, 0.35);
 }
 
 .wx-btn-primary:active {

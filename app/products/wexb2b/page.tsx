@@ -14,7 +14,7 @@ const plannedModules = [
 function PlannedModuleCard({ module }: { module: string }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 h-2 w-10 rounded-full bg-[#10b981]" />
+      <div className="mb-4 h-2 w-10 rounded-full bg-[#5dff65]" />
       <p className="text-base font-bold text-slate-950">{module}</p>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
         WexB2B ürün kapsamı içinde planlanan ana modüllerden biri.
@@ -44,7 +44,7 @@ export default function WexB2BPage() {
                     WexB2B; bayi, toptan satış, teklif, sipariş, cari ve ödeme süreçlerini dijitalleştirmek için planlanan Wexon ürünüdür. Şu anda ürün kapsamı ve mimari planlaması devam etmektedir.
                   </p>
                   <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap">
-                    <Link href="/products/wexpay" className="inline-flex items-center justify-center rounded-2xl bg-[#10b981] px-8 py-3.5 text-base font-semibold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-700">
+                    <Link href="/products/wexpay" className="inline-flex items-center justify-center rounded-2xl bg-[#5dff65] px-8 py-3.5 text-base font-semibold text-white shadow-sm shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050]">
                       WexPay&apos;i İncele
                     </Link>
                     <Link href="/demo-request" className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-3.5 text-base font-semibold text-slate-900 transition-colors hover:bg-slate-50">
@@ -54,7 +54,7 @@ export default function WexB2BPage() {
                 </div>
 
                 <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-6 shadow-sm">
-                  <p className="text-sm font-semibold text-[#10b981]">Planlanan konum</p>
+                  <p className="text-sm font-semibold text-[#5dff65]">Planlanan konum</p>
                   <h2 className="mt-3 text-2xl font-bold text-slate-950">Üçüncü ana Wexon ürünü</h2>
                   <p className="mt-4 text-sm leading-relaxed text-slate-600">
                     WexB2B, Wexon ekosisteminin üçüncü ana ürünü olarak WexPay ve WexHotel&apos;den sonra geliştirilecektir.
@@ -105,7 +105,7 @@ export default function WexB2BPage() {
               Wexon ekosisteminde şu anda hazır ürün WexPay&apos;dir. Bayi, toptan satış ve cari takip kapsamı WexB2B planlamasında ele alınacaktır.
             </p>
             <div className="flex flex-col justify-center gap-4 sm:flex-row">
-              <Link href="/products/wexpay" className="inline-flex items-center justify-center rounded-2xl bg-[#10b981] px-9 py-4 text-base font-semibold text-white transition-colors hover:bg-emerald-700">
+              <Link href="/products/wexpay" className="inline-flex items-center justify-center rounded-2xl bg-[#5dff65] px-9 py-4 text-base font-semibold text-white transition-colors hover:bg-[#48e050]">
                 WexPay&apos;i İncele
               </Link>
               <Link href="/demo-request" className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-9 py-4 text-base font-semibold text-slate-900 transition-colors hover:bg-slate-50">

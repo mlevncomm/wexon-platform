@@ -54,7 +54,7 @@ export default async function WexPaySettingsPage({ searchParams }: { searchParam
         eyebrow="Aktif paket"
         title={access.license.plan.name}
         headerAction={
-          <span className="rounded-full border border-emerald-300/30 bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-100">
+          <span className="rounded-full border border-emerald-300/30 bg-[#5dff65]/20 px-3 py-1.5 text-xs font-bold text-emerald-100">
             {formatCoreStatus(access.license.status)}
           </span>
         }

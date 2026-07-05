@@ -123,7 +123,7 @@ function FilterChip({ label, href, active }: { label: string; href: string; acti
       href={href}
       className={`min-w-0 rounded-2xl border px-4 py-2 text-center text-xs font-bold transition-colors ${
         active
-          ? "border-emerald-200 bg-[#10b981] text-white"
+          ? "border-emerald-200 bg-[#5dff65] text-white"
           : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
       }`}
     >

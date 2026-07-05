@@ -76,7 +76,7 @@ export default function WexPayOrdersBoard({
                 onClick={() => setOrderFilter(filter.value)}
                 className={`min-w-0 rounded-2xl border px-3 py-2 text-xs font-black transition-all ${
                   orderFilter === filter.value
-                    ? "border-emerald-500 bg-[#10b981] text-white shadow-sm shadow-emerald-500/25"
+                    ? "border-[#5dff65] bg-[#5dff65] text-white shadow-sm shadow-[#5dff65]/25"
                     : "border-slate-200 bg-white text-slate-700 shadow-sm shadow-slate-900/5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
                 }`}
               >

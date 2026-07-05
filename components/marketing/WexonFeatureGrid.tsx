@@ -80,7 +80,7 @@ export default function WexonFeatureGrid() {
       <div className="mx-auto max-w-[1480px]">
         <div className="mx-auto max-w-3xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-600">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
             Çözümler
           </span>
           <h2 className="mt-5 text-3xl font-black tracking-[-0.02em] text-slate-950 sm:text-4xl lg:text-5xl">
@@ -101,7 +101,7 @@ export default function WexonFeatureGrid() {
               key={f.title}
               className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-7 shadow-sm shadow-slate-200/50 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-xl hover:shadow-emerald-100/40"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-sm shadow-emerald-500/25">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-sm shadow-[#5dff65]/25">
                 {f.icon}
               </div>
               <h3 className="mt-5 text-lg font-bold tracking-tight text-slate-950">{f.title}</h3>

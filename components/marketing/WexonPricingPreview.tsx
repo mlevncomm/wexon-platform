@@ -44,7 +44,7 @@ export default function WexonPricingPreview() {
       <div className="mx-auto max-w-[1480px]">
         <div className="mx-auto max-w-3xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-600">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
             Paket modeli
           </span>
           <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
@@ -55,7 +55,7 @@ export default function WexonPricingPreview() {
             entegrasyon seviyesini belirlemek için tasarlanır.
           </p>
           <p className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-semibold text-emerald-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
             QR menü ve temel operasyon tüm WexPay paketlerinde bulunur.
           </p>
         </div>
@@ -75,7 +75,7 @@ export default function WexonPricingPreview() {
                 <h3 className="text-xl font-black tracking-tight text-slate-950">{m.name}</h3>
                 <span
                   className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] ${
-                    m.highlight ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600"
+                    m.highlight ? "bg-[#5dff65] text-white" : "bg-slate-100 text-slate-600"
                   }`}
                 >
                   {m.tag}
@@ -114,11 +114,11 @@ export default function WexonPricingPreview() {
               WebkitMaskImage: "radial-gradient(circle at 50% 30%, black 0%, black 60%, transparent 95%)",
             }}
           />
-          <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-emerald-500/15 blur-[140px]" />
+          <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-[#5dff65]/15 blur-[140px]" />
 
           <div className="relative">
             <div className="mx-auto max-w-2xl text-center">
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">
                 WexPay paket seviyeleri
               </span>
               <h3 className="mt-5 text-3xl font-black tracking-tight text-white sm:text-4xl">
@@ -136,12 +136,12 @@ export default function WexonPricingPreview() {
                   key={tier.name}
                   className={`relative rounded-2xl border p-6 backdrop-blur transition-all hover:-translate-y-1 ${
                     tier.highlight
-                      ? "border-emerald-400/50 bg-emerald-500/10 shadow-2xl shadow-emerald-500/30 lg:scale-[1.03]"
+                      ? "border-emerald-400/50 bg-[#5dff65]/10 shadow-2xl shadow-[#5dff65]/30 lg:scale-[1.03]"
                       : "border-white/10 bg-white/[0.04] hover:border-white/20"
                   }`}
                 >
                   {tier.highlight && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white shadow-lg shadow-emerald-500/30">
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#5dff65] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white shadow-lg shadow-[#5dff65]/30">
                       En çok tercih edilen
                     </span>
                   )}
@@ -150,7 +150,7 @@ export default function WexonPricingPreview() {
                   <ul className="mt-5 space-y-2.5">
                     {tier.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm text-slate-200">
-                        <span className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+                        <span className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#5dff65]/20 text-emerald-300">
                           <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
                             <path d="M2 7.5L5.5 11L12 3.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
@@ -166,7 +166,7 @@ export default function WexonPricingPreview() {
             <div className="mt-12 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 href="/checkout?product=wexpay&plan=standard"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/30 transition-all hover:bg-emerald-400 sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5dff65] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/30 transition-all hover:bg-[#48e050] sm:w-auto"
               >
                 WexPay aboneliği başlat
                 <span aria-hidden>→</span>

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 export function WexPayDarkPanelHeaderBackdrop() {
   return (
     <>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.22),transparent_58%)]" aria-hidden />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(93,255,101,0.22),transparent_58%)]" aria-hidden />
       <div
         className="absolute inset-0 opacity-[0.14]"
         style={{
@@ -53,7 +53,7 @@ export function WexPayMetricCard({
     >
       <span
         className={`absolute right-3 top-3 h-2 w-2 rounded-full ${
-          accent ? "bg-emerald-500 shadow-sm shadow-emerald-500/40" : "bg-slate-200"
+          accent ? "bg-[#5dff65] shadow-sm shadow-[#5dff65]/40" : "bg-slate-200"
         }`}
         aria-hidden
       />
@@ -235,7 +235,7 @@ export function WexPayEmptyAccess({
       <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
         <Link
           href={dashboardHref}
-          className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-emerald-700"
+          className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-[#48e050]"
         >
           Wexon Core paneline dön
         </Link>
@@ -366,7 +366,7 @@ export function PillButton({
     <span
       className={`min-w-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
         active
-          ? "border-emerald-500 bg-[#10b981] text-white shadow-sm shadow-emerald-500/25"
+          ? "border-[#5dff65] bg-[#5dff65] text-white shadow-sm shadow-[#5dff65]/25"
           : "border-slate-200 bg-white text-slate-700 shadow-sm shadow-slate-900/5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
       } ${className}`}
     >
@@ -451,7 +451,7 @@ export function DemoPrimaryButton({ children, className = "" }: { children: Reac
   return (
     <button
       type="submit"
-      className={`w-full rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-500/25 sm:w-auto ${className}`}
+      className={`w-full rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-black text-white shadow-sm shadow-[#5dff65]/25 transition-all hover:-translate-y-0.5 hover:bg-[#48e050] hover:shadow-md hover:shadow-[#5dff65]/25 sm:w-auto ${className}`}
     >
       {children}
     </button>
