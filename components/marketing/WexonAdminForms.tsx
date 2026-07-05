@@ -119,7 +119,7 @@ export function AdminSubmitButton({ children }: { children: ReactNode }) {
   return (
     <button
       type="submit"
-      className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-[#48e050] sm:w-auto"
+      className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700 sm:w-auto"
     >
       {children}
     </button>

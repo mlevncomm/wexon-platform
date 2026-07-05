@@ -76,7 +76,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950";
 
   const navShellClass = overDark
-    ? "border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(93,255,101,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
+    ? "border-white/12 bg-white/[0.1] shadow-[0_18px_60px_-28px_rgba(16,185,129,0.55)] backdrop-blur-xl hover:border-white/22 hover:bg-white/[0.14]"
     : "border-slate-200/80 bg-white/80 shadow-sm shadow-slate-200/30 hover:border-slate-200 hover:bg-white/90";
 
   const navLinkClass = overDark
@@ -120,7 +120,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
             </Link>
             <Link
               href={publicUrl("/signup")}
-              className="wx-tactile inline-flex h-11 items-center justify-center rounded-full bg-[#5dff65] px-5 text-sm font-bold text-white shadow-sm shadow-[#5dff65]/25 hover:bg-[#48e050] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
+              className="wx-tactile inline-flex h-11 items-center justify-center rounded-full bg-[#10b981] px-5 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2"
             >
               Kayıt Ol
             </Link>
@@ -179,7 +179,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
                   onClick={() => setMenuOpen(false)}
                   tabIndex={menuOpen ? 0 : -1}
                   aria-hidden={!menuOpen}
-                  className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#5dff65] px-5 py-3 text-sm font-bold text-white hover:bg-[#48e050]"
+                  className="wx-tactile inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-5 py-3 text-sm font-bold text-white hover:bg-emerald-500"
                 >
                   Kayıt Ol
                 </Link>

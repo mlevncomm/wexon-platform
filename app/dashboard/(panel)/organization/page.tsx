@@ -88,7 +88,7 @@ export default async function DashboardOrganizationPage({ searchParams }: { sear
               <input name="country" defaultValue={organization.country} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
             </label>
             <div className="md:col-span-2">
-              <button type="submit" className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-[#48e050] sm:w-auto">
+              <button type="submit" className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700 sm:w-auto">
                 Bilgileri güncelle
               </button>
             </div>

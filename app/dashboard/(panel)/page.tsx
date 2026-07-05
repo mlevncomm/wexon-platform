@@ -110,7 +110,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
             />
             <div className="relative grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,440px)] lg:items-center">
               <div className="min-w-0 max-w-4xl">
-                <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+                <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
                   Wexon Core
                 </span>
                 <h1 className="break-words text-3xl font-black leading-tight tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl">
@@ -122,7 +122,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                   <Link
                     href={wexpayAppHref}
-                    className="inline-flex w-full items-center justify-center rounded-full bg-[#5dff65] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050] sm:w-auto"
+                    className="inline-flex w-full items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-600 sm:w-auto"
                   >
                     WexPay uygulamasına git
                   </Link>

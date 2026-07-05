@@ -59,7 +59,7 @@ export default async function AdminUsersPage({
             className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-300"
           />
         </label>
-        <button type="submit" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-[#48e050]">
+        <button type="submit" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
           Filtrele
         </button>
       </form>
@@ -124,7 +124,7 @@ export default async function AdminUsersPage({
                           minLength={8}
                         />
                         <input type="hidden" name="mustChangePassword" value="true" />
-                        <button type="submit" className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-[#48e050]">
+                        <button type="submit" className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">
                           Sıfırla
                         </button>
                       </form>

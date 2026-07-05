@@ -15,7 +15,7 @@ const SECONDARY_PILLS: { label: string }[] = [
 function Pill({ label, emphasized = false }: { label: string; emphasized?: boolean }) {
   if (emphasized) {
     return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-[#5dff65] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#5dff65]/30">
+      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-emerald-500/30">
         <span className="h-1.5 w-1.5 rounded-full bg-white" />
         {label}
       </span>
@@ -23,7 +23,7 @@ function Pill({ label, emphasized = false }: { label: string; emphasized?: boole
   }
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm shadow-slate-200/40 transition-colors hover:border-emerald-200 hover:text-slate-950">
-      <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
       {label}
     </span>
   );

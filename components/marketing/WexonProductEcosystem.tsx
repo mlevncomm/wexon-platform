@@ -8,7 +8,7 @@ export default function WexonProductEcosystem() {
       <div className="mx-auto max-w-[1480px]">
         <div className="relative mx-auto max-w-4xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Wexon ürünleri
           </span>
           <h2 className="mt-5 text-3xl font-black tracking-[-0.02em] text-slate-950 sm:text-4xl lg:text-6xl">
@@ -21,7 +21,7 @@ export default function WexonProductEcosystem() {
           <div className="mx-auto mt-8 flex max-w-3xl flex-wrap items-center justify-center gap-2 text-xs font-bold text-slate-600">
             {["WexPay aktif", "WexHotel yakında", "WexB2B yakında", "Wexon Core ortak altyapı"].map((item) => (
               <span key={item} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 shadow-sm shadow-slate-200/50">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 {item}
               </span>
             ))}

@@ -149,8 +149,8 @@ const statusStyles: Record<TableStatus, { label: string; className: string; dot:
   },
   payment_pending: {
     label: "Ödeme Bekliyor",
-    className: "border-slate-200 border-l-[#5dff65] bg-white text-emerald-700",
-    dot: "bg-[#5dff65]",
+    className: "border-slate-200 border-l-[#10b981] bg-white text-emerald-700",
+    dot: "bg-[#10b981]",
   },
   partially_paid: {
     label: "Kısmi Ödendi",
@@ -189,7 +189,7 @@ function ExperienceCard({ title, items }: { title: string; items: string[] }) {
     <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-5 flex items-center justify-between gap-4">
         <h3 className="text-xl font-bold text-slate-950">{title}</h3>
-        <span className="h-2 w-10 rounded-full bg-[#5dff65]" />
+        <span className="h-2 w-10 rounded-full bg-[#10b981]" />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {items.map((item) => (
@@ -197,7 +197,7 @@ function ExperienceCard({ title, items }: { title: string; items: string[] }) {
             key={item}
             className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-800"
           >
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-[#5dff65]">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-[#10b981]">
               ✓
             </span>
             {item}
@@ -213,7 +213,7 @@ function TableManagerPreview() {
     <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#5dff65]">Restoran masa yönetici paneli</p>
+          <p className="text-sm font-semibold text-[#10b981]">Restoran masa yönetici paneli</p>
           <h3 className="text-xl font-bold text-slate-950">Canlı masa ve ödeme paneli</h3>
         </div>
         <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -275,7 +275,7 @@ function MobilePaymentPreview() {
             <p className="text-xs font-semibold text-[#059669]">WexPay</p>
             <h3 className="text-2xl font-bold">Masa 03</h3>
           </div>
-          <span className="rounded-full bg-[#5dff65]/10 px-3 py-1 text-xs font-bold text-[#059669]">
+          <span className="rounded-full bg-[#10b981]/10 px-3 py-1 text-xs font-bold text-[#059669]">
             QR Aktif
           </span>
         </div>
@@ -285,7 +285,7 @@ function MobilePaymentPreview() {
             <div
               key={item.name}
               className={`flex items-center justify-between rounded-2xl border p-3 ${
-                item.selected ? "border-[#5dff65]/30 bg-[#5dff65]/10" : "border-slate-200 bg-white"
+                item.selected ? "border-[#10b981]/30 bg-[#10b981]/10" : "border-slate-200 bg-white"
               }`}
             >
               <div>
@@ -307,18 +307,18 @@ function MobilePaymentPreview() {
           </div>
           <div className="flex items-end justify-between">
             <span className="text-3xl font-bold">770 TL</span>
-            <span className="text-xs text-[#5dff65]">Ödemeye hazır</span>
+            <span className="text-xs text-[#10b981]">Ödemeye hazır</span>
           </div>
         </div>
 
         <div className="mb-4 flex items-center justify-between rounded-2xl bg-slate-100 p-3">
           <span className="text-sm font-semibold">Fiş talep et</span>
-          <span className="flex h-7 w-12 items-center rounded-full bg-[#5dff65] p-1">
+          <span className="flex h-7 w-12 items-center rounded-full bg-[#10b981] p-1">
             <span className="ml-auto h-5 w-5 rounded-full bg-white" />
           </span>
         </div>
 
-        <button className="w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20">
+        <button className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20">
           Seçili ürünleri öde
         </button>
       </div>
@@ -336,7 +336,7 @@ export default function WexPayPage() {
             <div className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white px-6 py-14 shadow-sm sm:px-10 lg:px-16 lg:py-20">
               <div
                 className="absolute -right-32 -top-32 h-[420px] w-[420px] rounded-full blur-3xl"
-                style={{ background: "radial-gradient(circle, #5dff65 0%, transparent 66%)", opacity: 0.13 }}
+                style={{ background: "radial-gradient(circle, #10b981 0%, transparent 66%)", opacity: 0.13 }}
               />
 
               <div className="relative z-10 grid gap-12 lg:grid-cols-[1fr_0.9fr] lg:items-center">
@@ -350,7 +350,7 @@ export default function WexPayPage() {
                     yönetimi, raporlama ve lisans yapısını tek panelde birleştirir.
                   </p>
                   <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap">
-                    <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-8 py-3.5 text-base font-semibold text-white shadow-sm shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050]">
+                    <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full bg-[#10b981] px-8 py-3.5 text-base font-semibold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-700">
                       Demo Talep Et
                     </Link>
                     <Link href="/demo/wexpay/business" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-8 py-3.5 text-base font-semibold text-slate-900 transition-colors hover:bg-slate-50">
@@ -365,10 +365,10 @@ export default function WexPayPage() {
                 <div className="rounded-[28px] border border-slate-800 bg-[#08111f] p-5 shadow-2xl shadow-slate-900/20">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-semibold text-[#5dff65]">Bugün</p>
+                      <p className="text-xs font-semibold text-[#10b981]">Bugün</p>
                       <p className="text-lg font-bold text-[#f0f4f8]">Restoran operasyon akışı</p>
                     </div>
-                    <span className="rounded-full bg-[#5dff65]/10 px-3 py-1 text-xs font-semibold text-[#5dff65]">
+                    <span className="rounded-full bg-[#10b981]/10 px-3 py-1 text-xs font-semibold text-[#10b981]">
                       Çevrimiçi
                     </span>
                   </div>
@@ -378,7 +378,7 @@ export default function WexPayPage() {
                       return (
                         <div key={table.number} className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4">
                           <p className="text-sm font-bold text-[#f0f4f8]">{table.number}</p>
-                          <p className="mb-4 text-xs" style={{ color: table.status === "payment_pending" ? "#5dff65" : "#8a9bb0" }}>{status.label}</p>
+                          <p className="mb-4 text-xs" style={{ color: table.status === "payment_pending" ? "#10b981" : "#8a9bb0" }}>{status.label}</p>
                           <p className="text-xl font-bold">{table.amount}</p>
                         </div>
                       );
@@ -386,11 +386,11 @@ export default function WexPayPage() {
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4">
-                      <p className="text-xs font-semibold text-[#5dff65]">Müşteri QR ekranı</p>
+                      <p className="text-xs font-semibold text-[#10b981]">Müşteri QR ekranı</p>
                       <p className="mt-2 text-sm font-bold text-[#f0f4f8]">Menü · Sepet · Ödeme</p>
                     </div>
                     <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4">
-                      <p className="text-xs font-semibold text-[#5dff65]">Wexon Core</p>
+                      <p className="text-xs font-semibold text-[#10b981]">Wexon Core</p>
                       <p className="mt-2 text-sm font-bold text-[#f0f4f8]">Lisans · Paket · Erişim</p>
                     </div>
                   </div>
@@ -430,7 +430,7 @@ export default function WexPayPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {panelModules.map((module) => (
                 <div key={module} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="mb-4 h-2 w-10 rounded-full bg-[#5dff65]" />
+                  <div className="mb-4 h-2 w-10 rounded-full bg-[#10b981]" />
                   <h3 className="text-base font-bold text-slate-950">{module}</h3>
                 </div>
               ))}
@@ -457,7 +457,7 @@ export default function WexPayPage() {
                   </div>
                 ))}
               </div>
-              <Link href="/demo/wexpay/customer" className="mt-8 inline-flex items-center justify-center rounded-full bg-[#5dff65] px-7 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#48e050]">
+              <Link href="/demo/wexpay/customer" className="mt-8 inline-flex items-center justify-center rounded-full bg-[#10b981] px-7 py-3.5 text-sm font-bold text-white transition-colors hover:bg-emerald-700">
                 QR Müşteri Demosunu Gör
               </Link>
             </div>
@@ -566,7 +566,7 @@ export default function WexPayPage() {
                   >
                     <p className="mb-2 text-lg font-bold text-slate-950">{plan.name}</p>
                     <p className="mb-4 text-xs text-slate-500">Aylık · Yıllık · Tek seferlik</p>
-                    <span className="rounded-full border border-[#5dff65]/30 bg-[#5dff65]/10 px-3 py-1 text-xs font-semibold text-[#5dff65]">
+                    <span className="rounded-full border border-[#10b981]/30 bg-[#10b981]/10 px-3 py-1 text-xs font-semibold text-[#10b981]">
                       Core ile aktif
                     </span>
                   </div>
@@ -586,7 +586,7 @@ export default function WexPayPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {features.map((feature) => (
                 <div key={feature} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="mb-4 h-2 w-10 rounded-full bg-[#5dff65]" />
+                  <div className="mb-4 h-2 w-10 rounded-full bg-[#10b981]" />
                   <h3 className="text-base font-bold text-slate-950">{feature}</h3>
                 </div>
               ))}
@@ -612,7 +612,7 @@ export default function WexPayPage() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {corePackageFeatures.map((feature) => (
                   <div key={feature} className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
                     {feature}
                   </div>
                 ))}
@@ -640,7 +640,7 @@ export default function WexPayPage() {
                   <ul className="mb-8 flex-1 space-y-3">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2 text-sm text-slate-600">
-                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[#10b981]" />
                         {feature}
                       </li>
                     ))}
@@ -649,7 +649,7 @@ export default function WexPayPage() {
                     href="/checkout?product=wexpay&plan=standard"
                     className={`inline-flex w-full items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition-colors ${
                       plan.highlighted
-                        ? "bg-[#5dff65] text-white hover:bg-[#48e050]"
+                        ? "bg-[#10b981] text-white hover:bg-emerald-700"
                         : "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
                     }`}
                   >
@@ -697,7 +697,7 @@ export default function WexPayPage() {
                 className="absolute inset-0 pointer-events-none"
                 style={{
                   background:
-                    "radial-gradient(circle at 50% 0%, rgba(93,255,101,0.18), transparent 55%)",
+                    "radial-gradient(circle at 50% 0%, rgba(16,185,129,0.18), transparent 55%)",
                 }}
               />
               <div className="relative z-10">
@@ -710,7 +710,7 @@ export default function WexPayPage() {
                   müşteri ve işletme tarafında inceleyin.
                 </p>
                 <div className="flex flex-col justify-center gap-4 sm:flex-row">
-                  <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-9 py-4 text-base font-semibold text-white transition-colors hover:bg-[#48e050]">
+                  <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full bg-[#10b981] px-9 py-4 text-base font-semibold text-white transition-colors hover:bg-emerald-700">
                     Demo Talep Et
                   </Link>
                   <Link href="/book-demo" className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-9 py-4 text-base font-semibold text-white transition-colors hover:bg-white/10">

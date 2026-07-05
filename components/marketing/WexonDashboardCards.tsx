@@ -18,7 +18,7 @@ export function DashboardSummaryCard({
           <p className="mt-3 break-words text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{value}</p>
         </div>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-          <span className="h-2 w-2 rounded-full bg-[#5dff65]" />
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
         </span>
       </div>
       {helper && (
@@ -36,13 +36,13 @@ export function DashboardHealthCard({ label, value }: { label: string; value: st
       <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400" />
       <div className="relative flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 ring-1 ring-emerald-100">
-          <span className="h-2 w-2 rounded-full bg-[#5dff65]" />
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
           <p className="mt-2 truncate text-base font-black text-slate-950">{value}</p>
           <div className="mt-3 h-1 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full w-2/3 rounded-full bg-[#5dff65]" />
+            <div className="h-full w-2/3 rounded-full bg-emerald-500" />
           </div>
         </div>
       </div>
@@ -98,7 +98,7 @@ export function DashboardEmptyState({
   return (
     <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm shadow-slate-200/60">
       <span className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50">
-        <span className="h-2 w-2 rounded-full bg-[#5dff65]" />
+        <span className="h-2 w-2 rounded-full bg-emerald-500" />
       </span>
       <p className="text-base font-black text-slate-950">{title}</p>
       <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-500">{description}</p>
@@ -122,7 +122,7 @@ export function DashboardInfoRow({ label, value }: { label: string; value: strin
     <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 transition-colors hover:border-emerald-200 hover:bg-white">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
-          <span className="h-2 w-2 rounded-full bg-[#5dff65]" />
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
         </span>
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
@@ -185,7 +185,7 @@ export function DashboardUsageRow({ label, used, limit }: { label: string; used:
         <p className="text-xs font-bold text-slate-500">{limit > 0 ? `${used} / ${limit}` : "Tanımlanmadı"}</p>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
-        <div className="h-full rounded-full bg-[#5dff65]" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -220,7 +220,7 @@ export function DashboardUsageCard({
         </p>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200">
-        <div className="h-full rounded-full bg-[#5dff65]" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );

@@ -78,7 +78,7 @@ function ShellPackageCard({
           <p className="truncate text-sm font-semibold text-slate-900">{planName}</p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" aria-hidden />
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
           {licenseStatus}
         </span>
       </div>

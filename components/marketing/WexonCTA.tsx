@@ -18,11 +18,11 @@ export default function WexonCTA() {
                 "radial-gradient(circle at 50% 50%, black 0%, black 55%, transparent 90%)",
             }}
           />
-          <div className="pointer-events-none absolute -left-32 top-1/2 h-96 w-96 -translate-y-1/2 rounded-full bg-[#5dff65]/20 blur-[160px]" />
+          <div className="pointer-events-none absolute -left-32 top-1/2 h-96 w-96 -translate-y-1/2 rounded-full bg-emerald-500/20 blur-[160px]" />
           <div className="pointer-events-none absolute -right-32 -bottom-32 h-96 w-96 rounded-full bg-emerald-400/10 blur-[160px]" />
 
           <div className="relative mx-auto max-w-3xl">
-            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-emerald-300">
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-emerald-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               Wexon ile başlayın
             </span>
@@ -43,7 +43,7 @@ export default function WexonCTA() {
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 href="/demo-request"
-                className="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5dff65] px-7 py-3.5 text-sm font-bold text-white shadow-xl shadow-[#5dff65]/30 transition-all hover:bg-[#48e050] hover:shadow-emerald-400/40 sm:w-auto"
+                className="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white shadow-xl shadow-emerald-500/30 transition-all hover:bg-emerald-400 hover:shadow-emerald-400/40 sm:w-auto"
               >
                 Demo Talep Et
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="transition-transform group-hover:translate-x-0.5">

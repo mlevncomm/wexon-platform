@@ -91,7 +91,7 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
                       Kurulum süreci devam ediyor. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçecektir.
                     </p>
                   )}
-                  <Link href={hasActiveWexPay ? wexpayAppHref : "/checkout?product=wexpay&plan=standard"} className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-5 py-3 text-sm font-bold text-white hover:bg-[#48e050]">
+                  <Link href={hasActiveWexPay ? wexpayAppHref : "/checkout?product=wexpay&plan=standard"} className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-600">
                     {hasActiveWexPay ? "Uygulamaya git" : "Abonelik başlat"}
                   </Link>
                   <Link href={dashboardHref("/dashboard/subscription", organizationContext)} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-900 hover:bg-slate-50">

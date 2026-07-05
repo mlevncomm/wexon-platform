@@ -169,7 +169,7 @@ export default function WexonDashboardNav() {
             >
               <span
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${
-                  isActive ? "bg-[#5dff65] text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white"
+                  isActive ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white"
                 }`}
               >
                 <NavIcon type={item.icon} />

@@ -54,7 +54,7 @@ export default function WexonFooter() {
               Restoran, otel ve B2B operasyonları için birleşik SaaS ekosistemi.
             </p>
             <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#5dff65]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               WexPay canlı demo hazır
             </div>
           </div>

@@ -105,7 +105,7 @@ export default async function DashboardIntegrationsPage({ searchParams }: { sear
           <form action={createCustomerApiKeyAction} className="mb-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <input type="hidden" name="organizationId" value={organization.id} />
             <input name="name" required placeholder="Örn. WexPay POS entegrasyonu" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
-            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-[#48e050]">API anahtarı oluştur</button>
+            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">API anahtarı oluştur</button>
           </form>
         )}
         {organization.apiKeys.length === 0 ? (
@@ -151,7 +151,7 @@ export default async function DashboardIntegrationsPage({ searchParams }: { sear
                 </label>
               ))}
             </div>
-            <button type="submit" className="w-fit rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-[#48e050]">Webhook ekle</button>
+            <button type="submit" className="w-fit rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">Webhook ekle</button>
           </form>
         )}
         {organization.webhookEndpoints.length === 0 ? (

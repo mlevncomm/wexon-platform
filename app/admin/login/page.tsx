@@ -40,7 +40,7 @@ export default async function AdminLoginPage({
                 />
               </label>
               <AdminPasswordField />
-              <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-[#48e050]">
+              <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
                 Giriş yap
               </button>
               <Link href={publicUrl("/")} className="text-center text-sm font-bold text-slate-500 hover:text-slate-950">

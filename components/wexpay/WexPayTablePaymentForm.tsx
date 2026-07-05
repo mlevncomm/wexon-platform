@@ -43,7 +43,7 @@ export function WexPayTablePaymentForm({
           />
           <button
             type="submit"
-            className="rounded-xl bg-[#5dff65] px-5 py-3 text-xs font-black text-white shadow-md shadow-[#5dff65]/25 transition-colors hover:bg-[#48e050]"
+            className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-white shadow-md shadow-emerald-500/25 transition-colors hover:bg-emerald-600"
           >
             Tahsilatı al
           </button>

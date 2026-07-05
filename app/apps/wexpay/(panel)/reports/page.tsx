@@ -33,7 +33,7 @@ export default async function WexPayReportsPage({ searchParams }: { searchParams
         headerAction={
           <Link
             href="/apps/wexpay/branches"
-            className="inline-flex rounded-2xl bg-[#5dff65] px-5 py-3 text-sm font-black text-white shadow-sm shadow-[#5dff65]/25 transition-all hover:-translate-y-0.5 hover:bg-[#48e050]"
+            className="inline-flex rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:-translate-y-0.5 hover:bg-emerald-700"
           >
             Şube oluştur
           </Link>

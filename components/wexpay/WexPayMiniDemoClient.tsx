@@ -47,7 +47,7 @@ function RestaurantHeader({ badge, restaurantName }: { badge: string; restaurant
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">WexPay · QR Menü</p>
-          <p className="mt-1 text-xs font-semibold text-[#5dff65]">{restaurantName}</p>
+          <p className="mt-1 text-xs font-semibold text-[#10b981]">{restaurantName}</p>
           <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-950">Masa 12</h1>
         </div>
         <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700">
@@ -82,7 +82,7 @@ function QuantityControl({
       <button
         type="button"
         onClick={onPlus}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5dff65] text-lg font-bold text-white"
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#10b981] text-lg font-bold text-white"
         aria-label="Artır"
       >
         +
@@ -356,7 +356,7 @@ export default function WexPayMiniDemoClient() {
                         type="button"
                         onClick={() => void submitOrder()}
                         disabled={submitting || cartCount === 0}
-                        className="mt-4 w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                        className="mt-4 w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                       >
                         {submitting ? "Sipariş gönderiliyor..." : "Siparişi Gönder"}
                       </button>
@@ -368,7 +368,7 @@ export default function WexPayMiniDemoClient() {
 
             {screen === "order-status" && order ? (
               <section className="text-center">
-                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#5dff65]">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#10b981]">
                   ✓
                 </div>
                 <h2 className="text-2xl font-black text-slate-950">Sipariş alındı</h2>
@@ -404,7 +404,7 @@ export default function WexPayMiniDemoClient() {
                       setActionError(null);
                       setScreen("payment");
                     }}
-                    className="w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 hover:bg-[#48e050]"
+                    className="w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-700"
                   >
                     Ödemeyi Simüle Et
                   </button>
@@ -452,7 +452,7 @@ export default function WexPayMiniDemoClient() {
                   type="button"
                   onClick={() => void simulatePayment()}
                   disabled={submitting}
-                  className="mt-5 w-full rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/20 hover:bg-[#48e050] disabled:bg-slate-300"
+                  className="mt-5 w-full rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 disabled:bg-slate-300"
                 >
                   {submitting ? "Ödeme tamamlanıyor..." : "Ödemeyi Tamamla"}
                 </button>
@@ -468,7 +468,7 @@ export default function WexPayMiniDemoClient() {
 
             {screen === "payment-done" && order ? (
               <section className="text-center">
-                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#5dff65]">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-[#10b981]">
                   ✓
                 </div>
                 <h2 className="text-2xl font-black text-slate-950">Ödeme tamamlandı</h2>
@@ -500,7 +500,7 @@ export default function WexPayMiniDemoClient() {
                   </p>
                   <Link
                     href="/demo-request?product=wexpay&source=wexpay-demo"
-                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#5dff65] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5dff65]/25 transition-colors hover:bg-[#48e050]"
+                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 transition-colors hover:bg-emerald-700"
                   >
                     Demo Talep Et
                   </Link>

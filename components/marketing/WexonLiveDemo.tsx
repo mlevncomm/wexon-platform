@@ -74,11 +74,11 @@ export default function WexonLiveDemo() {
                 "radial-gradient(circle at 50% 30%, black 0%, black 60%, transparent 95%)",
             }}
           />
-          <div className="pointer-events-none absolute -right-32 top-1/3 h-80 w-80 rounded-full bg-[#5dff65]/15 blur-[140px]" />
+          <div className="pointer-events-none absolute -right-32 top-1/3 h-80 w-80 rounded-full bg-emerald-500/15 blur-[140px]" />
 
           <div className="relative">
             <div className="mx-auto max-w-3xl text-center">
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 Canlı demo
               </span>
@@ -124,7 +124,7 @@ export default function WexonLiveDemo() {
 
                   <Link
                     href={card.href}
-                    className="mt-6 inline-flex items-center justify-center gap-1.5 rounded-2xl bg-[#5dff65] px-4 py-3 text-sm font-bold text-white shadow-sm shadow-[#5dff65]/30 transition-colors hover:bg-[#48e050]"
+                    className="mt-6 inline-flex items-center justify-center gap-1.5 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-sm shadow-emerald-500/30 transition-colors hover:bg-emerald-400"
                   >
                     {card.cta} Aç
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">

@@ -116,7 +116,7 @@ export default async function WexonAdminAuditLogsPanel({
 
           <button
             type="submit"
-            className="h-10 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-[#48e050]"
+            className="h-10 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
           >
             Filtrele
           </button>

@@ -19,7 +19,7 @@ function SubmitButton({ pending }: { pending: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex w-full items-center justify-center rounded-full bg-[#5dff65] px-6 py-4 text-sm font-bold text-white shadow-sm shadow-[#5dff65]/20 transition-colors hover:bg-[#48e050] disabled:cursor-not-allowed disabled:opacity-70"
+      className="inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-6 py-4 text-sm font-bold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
     >
       {pending ? "Gönderiliyor..." : "Demo Talebi Gönder"}
     </button>
@@ -31,7 +31,7 @@ function SuccessPanel({ state }: { state: DemoRequestFormState }) {
 
   return (
     <div className="mb-6 rounded-[24px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-sm shadow-emerald-100/60">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#5dff65] text-white shadow-lg shadow-[#5dff65]/25">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
           <path d="M5 12l5 5L19 7" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -43,7 +43,7 @@ function SuccessPanel({ state }: { state: DemoRequestFormState }) {
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         <Link
           href="/demo/wexpay?source=links"
-          className="inline-flex items-center justify-center rounded-full bg-[#5dff65] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#48e050]"
+          className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-600"
         >
           WexPay Demo Dene
         </Link>

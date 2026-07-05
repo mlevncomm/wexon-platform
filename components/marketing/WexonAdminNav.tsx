@@ -129,7 +129,7 @@ export default function WexonAdminNav() {
                 isActive ? "bg-emerald-50 text-emerald-700 shadow-sm" : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
               }`}
             >
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${isActive ? "bg-[#5dff65] text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white"}`}>
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${isActive ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white"}`}>
                 <AdminIcon type={item.icon} />
               </span>
               <span className="truncate">{item.label}</span>

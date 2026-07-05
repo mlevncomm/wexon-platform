@@ -273,7 +273,7 @@ function LiveEvents({ notifications }: { notifications: OperationsNotification[]
                   {notificationTypeLabels[notification.type] ?? "Olay"}
                 </span>
                 {!notification.isRead && (
-                  <span className="rounded-full border border-emerald-200 bg-[#5dff65] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white">
+                  <span className="rounded-full border border-emerald-200 bg-emerald-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white">
                     Yeni
                   </span>
                 )}

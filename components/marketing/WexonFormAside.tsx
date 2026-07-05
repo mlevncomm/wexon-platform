@@ -24,7 +24,7 @@ export default function WexonFormAside({
         }}
       />
       <div className="relative">
-        <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+        <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
           {badge}
         </span>
         <h1 className="text-4xl font-black leading-tight tracking-[-0.02em] text-white sm:text-5xl">

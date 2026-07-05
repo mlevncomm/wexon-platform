@@ -81,7 +81,7 @@ export default async function DashboardSupportPage({ searchParams }: { searchPar
             <textarea name="message" required rows={5} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
           </label>
           <div className="md:col-span-2">
-            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-[#48e050]">
+            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
               Destek talebi oluştur
             </button>
           </div>

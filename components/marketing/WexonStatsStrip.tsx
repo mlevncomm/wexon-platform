@@ -23,7 +23,7 @@ export default function WexonStatsStrip() {
             stat.emphasized ? (
               <div
                 key={stat.value}
-                className="relative overflow-hidden rounded-2xl border border-transparent bg-[#5dff65] p-7 text-white shadow-xl shadow-[#5dff65]/25"
+                className="relative overflow-hidden rounded-2xl border border-transparent bg-emerald-500 p-7 text-white shadow-xl shadow-emerald-500/25"
               >
                 <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-400/30 blur-2xl" />
                 <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-100">

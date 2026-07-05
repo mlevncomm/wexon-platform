@@ -134,7 +134,7 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
                         </label>
                         <button
                           type="submit"
-                          className="shrink-0 rounded-[16px] bg-[#5dff65] px-4 py-2.5 text-sm font-black text-white shadow-sm shadow-[#5dff65]/25 transition-colors hover:bg-[#48e050]"
+                          className="shrink-0 rounded-[16px] bg-[#10b981] px-4 py-2.5 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-colors hover:bg-emerald-700"
                         >
                           Kaydet
                         </button>

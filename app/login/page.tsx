@@ -27,7 +27,7 @@ export default async function LoginPage({
             <Link href={publicUrl("/")} className="inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-slate-950 shadow-2xl shadow-emerald-950/20">Wexon</Link>
             <Link href={publicUrl("/")} className="inline-flex rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/10">Ana sayfaya dön</Link>
           </div>
-          <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-[#5dff65]/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+          <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
             Güvenli erişim
           </span>
           <h1 className="max-w-3xl text-3xl font-black leading-tight tracking-[-0.03em] text-white sm:text-5xl xl:text-6xl">
@@ -58,7 +58,7 @@ export default async function LoginPage({
               <input name="email" type="email" required className="wx-input-focus mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
             </label>
             <LoginPasswordField />
-            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white hover:bg-[#48e050]">Giriş yap</button>
+            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white hover:bg-emerald-700">Giriş yap</button>
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-semibold text-slate-500">
               <span>Şifremi unuttum: Yakında</span>
               <Link href={publicUrl("/signup")} className="font-black text-emerald-700">Hesabınız yok mu? Kayıt olun</Link>
