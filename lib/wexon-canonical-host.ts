@@ -39,6 +39,11 @@ export function isWexonProductionDeployment() {
 
 export const MAINTENANCE_ENTRY_PATH = "/on-basvuru";
 
+export function isAdminHost(host: string) {
+  const normalized = normalizeHost(host);
+  return normalized === `admin.${PRODUCTION_ROOT_HOST}` || normalized.startsWith("admin.");
+}
+
 export function isMaintenanceExemptRoute(surface: HostSurface, pathname: string) {
   const isAdminRoute =
     surface === "admin" ||

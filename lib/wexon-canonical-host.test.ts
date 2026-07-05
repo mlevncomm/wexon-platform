@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildProductionSubdomainUrl,
+  isAdminHost,
   isMaintenanceExemptRoute,
   publicPanelCanonicalTarget,
   resolvePostLoginDestination,
@@ -130,5 +131,13 @@ describe("isMaintenanceExemptRoute", () => {
     assert.equal(isMaintenanceExemptRoute("public", "/"), false);
     assert.equal(isMaintenanceExemptRoute("public", "/contact"), false);
     assert.equal(isMaintenanceExemptRoute("public", "/on-basvuru"), true);
+  });
+});
+
+describe("isAdminHost", () => {
+  it("matches production admin subdomain", () => {
+    assert.equal(isAdminHost("admin.wexon.dev"), true);
+    assert.equal(isAdminHost("www.wexon.dev"), false);
+    assert.equal(isAdminHost("wexon.dev"), false);
   });
 });
