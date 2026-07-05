@@ -155,14 +155,13 @@ export function resolvePostLoginDestination(
   }
 
   if (options.isAdmin) {
-    if (!safeNext) {
-      return buildProductionSubdomainUrl("admin", "/");
-    }
-    if (safeNext.startsWith(ADMIN_PREFIX)) {
-      const path = stripPathPrefix(safeNext, ADMIN_PREFIX);
-      return buildProductionSubdomainUrl("admin", path || "/");
-    }
-    return buildProductionSubdomainUrl("admin", safeNext);
+    const adminPath =
+      !safeNext || safeNext === "/" || safeNext === ADMIN_PREFIX
+        ? "/applications"
+        : safeNext.startsWith(ADMIN_PREFIX)
+          ? stripPathPrefix(safeNext, ADMIN_PREFIX) || "/applications"
+          : safeNext;
+    return buildProductionSubdomainUrl("admin", adminPath);
   }
 
   if (safeNext.startsWith(ADMIN_PREFIX)) {

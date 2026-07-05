@@ -13,12 +13,15 @@ function readString(formData: FormData, key: string) {
 }
 
 function safeAdminNextPath(value: string) {
-  const path = canonicalSafeNextPath(value, "/admin");
+  const path = canonicalSafeNextPath(value, "/applications");
   if (path === "/login" || path.startsWith("/login/")) {
-    return isWexonProductionDeployment() ? "/" : "/admin";
+    return isWexonProductionDeployment() ? "/applications" : "/admin";
   }
   if (path.startsWith("/admin/login")) {
-    return isWexonProductionDeployment() ? "/" : "/admin";
+    return isWexonProductionDeployment() ? "/applications" : "/admin";
+  }
+  if (path === "/" || path === "/admin") {
+    return isWexonProductionDeployment() ? "/applications" : "/admin";
   }
   return path;
 }
@@ -47,7 +50,7 @@ export async function loginAdminAction(formData: FormData) {
   adminDebug("login:start");
   const email = readString(formData, "email").toLowerCase();
   const password = readString(formData, "password");
-  const nextPath = safeAdminNextPath(readString(formData, "next") || "/admin");
+  const nextPath = safeAdminNextPath(readString(formData, "next") || "/applications");
   const productionWexon = isWexonProductionDeployment();
   const ipAddress = await getServerActionIpAddress();
 

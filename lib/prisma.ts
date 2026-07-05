@@ -19,6 +19,7 @@ function createPrismaClient() {
     max: Number(process.env.PRISMA_PG_POOL_MAX ?? 1),
     idleTimeoutMillis: 20_000,
     connectionTimeoutMillis: 10_000,
+    ssl: databaseUrl.includes("supabase.com") ? { rejectUnauthorized: false } : undefined,
   });
 
   pool.on("error", (error) => {

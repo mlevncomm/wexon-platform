@@ -86,10 +86,18 @@ describe("resolvePostLoginDestination", () => {
     );
   });
 
-  it("defaults admin login to admin host root in production", () => {
+  it("defaults admin login to applications in production", () => {
     assert.equal(
       resolvePostLoginDestination(undefined, { isAdmin: true, productionWexon: true }),
-      "https://admin.wexon.dev/",
+      "https://admin.wexon.dev/applications",
+    );
+    assert.equal(
+      resolvePostLoginDestination("/", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/applications",
+    );
+    assert.equal(
+      resolvePostLoginDestination("/admin", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/applications",
     );
   });
 

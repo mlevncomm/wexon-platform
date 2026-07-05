@@ -78,13 +78,26 @@ function handleAdminHost(request: NextRequest) {
   });
 
   if (request.method === "GET" && originalPathname === "/") {
-    url.pathname = "/login";
-    url.search = "";
-    adminProxyDebug("admin-host:redirect_root_login", { to: url.pathname });
-    return NextResponse.redirect(url);
+    if (!adminSessionCookie) {
+      url.pathname = "/login";
+      url.search = "";
+      adminProxyDebug("admin-host:redirect_root_login", { to: url.pathname });
+      return NextResponse.redirect(url);
+    }
+
+    url.pathname = "/admin";
+    adminProxyDebug("admin-host:rewrite_root_dashboard", { to: url.pathname });
+    return withOrganizationContext(request, url, "/admin", (init) => NextResponse.rewrite(url, init));
   }
 
   if (originalPathname === "/login" || originalPathname.startsWith("/login/")) {
+    if (adminSessionCookie && request.method === "GET") {
+      url.pathname = "/";
+      url.search = "";
+      adminProxyDebug("admin-host:redirect_login_authed", { to: url.pathname });
+      return NextResponse.redirect(url);
+    }
+
     url.pathname = originalPathname.replace(/^\/login/, "/admin/login");
     url.search = search;
     adminProxyDebug("admin-host:rewrite_login", { to: url.pathname });

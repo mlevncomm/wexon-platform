@@ -6,6 +6,7 @@ import { clearCustomerSessionCookie, createCustomerSessionCookie } from "@/lib/w
 import { buildProductionSubdomainUrl, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath, isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
 import { customerLoginUrl, unifiedLoginUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
+import { isDatabaseUnavailableError, resolveAuthDatabaseErrorMessage } from "@/lib/wexon-pre-application-errors";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
 
@@ -63,14 +64,27 @@ export async function loginCustomerAction(formData: FormData) {
     redirectLoginError("E-posta ve şifre zorunludur.", nextPath);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: {
-      memberships: {
-        where: { status: "ACTIVE" },
+  let user;
+
+  try {
+    user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          where: { status: "ACTIVE" },
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    console.error("[customer-auth] user lookup failed", error);
+    redirectLoginError(
+      isDatabaseUnavailableError(error)
+        ? resolveAuthDatabaseErrorMessage()
+        : "Giriş şu anda tamamlanamıyor. Lütfen tekrar deneyin.",
+      nextPath,
+      { email },
+    );
+  }
 
   if (!user) {
     redirectLoginError("E-posta veya şifre hatalı.", nextPath, { email });

@@ -29,7 +29,7 @@ export default async function AdminLoginPage({
               </div>
             )}
             <form action={loginAdminAction} className="mt-6 grid gap-4">
-              <input type="hidden" name="next" value={next ?? "/"} />
+              <input type="hidden" name="next" value={next ?? "/applications"} />
               <label className="block">
                 <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">E-posta</span>
                 <input

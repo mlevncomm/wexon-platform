@@ -22,6 +22,7 @@
     "production:check:psp": "node scripts/check-production-env.mjs --strict-psp",
     "production:preflight": "node scripts/run-production-preflight.mjs",
     "db:check:payment-provider-ref": "node scripts/check-payment-provider-ref-duplicates.mjs",
+    "db:ping": "node scripts/db-ping.mjs",
     "staging:validate": "npm run prisma:seed:real && npm run test:unit && npm run test:smoke:build",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

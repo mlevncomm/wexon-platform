@@ -12,6 +12,7 @@ import {
 } from "@/lib/wexon-canonical-host";
 import { publicUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
+import { isDatabaseUnavailableError, resolveAuthDatabaseErrorMessage } from "@/lib/wexon-pre-application-errors";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
 
@@ -72,14 +73,26 @@ export async function loginUnifiedAction(formData: FormData) {
     );
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: {
-      memberships: {
-        where: { status: "ACTIVE" },
+  let user;
+
+  try {
+    user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          where: { status: "ACTIVE" },
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    console.error("[unified-auth] user lookup failed", error);
+    redirectUnifiedError(
+      isDatabaseUnavailableError(error)
+        ? resolveAuthDatabaseErrorMessage()
+        : "Giriş şu anda tamamlanamıyor. Lütfen tekrar deneyin.",
+      { email },
+    );
+  }
 
   if (!user || !user.isActive) {
     redirectUnifiedError(undefined, { email });
@@ -95,10 +108,18 @@ export async function loginUnifiedAction(formData: FormData) {
   }
 
   await createCustomerSessionCookie(user.id);
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date() },
-  });
+
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+  } catch (error) {
+    console.error("[unified-auth] lastLoginAt update failed", error);
+    if (isDatabaseUnavailableError(error)) {
+      redirectUnifiedError(resolveAuthDatabaseErrorMessage(), { email });
+    }
+  }
 
   if (user.mustChangePassword) {
     const changePasswordPath = productionWexon
