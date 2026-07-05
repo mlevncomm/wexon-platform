@@ -3,17 +3,17 @@ import DemoRequestForm from "@/components/marketing/DemoRequestForm";
 import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
 
 export const metadata: Metadata = {
-  title: "?n Ba?vuru",
+  title: "Ön Başvuru",
   description:
-    "Wexon sistemleri haz?rl?k modundayken WexPay, WexHotel ve WexB2B i?in ?n ba?vuru al?n?r.",
+    "Wexon sistemleri hazırlık modundayken WexPay, WexHotel ve WexB2B için ön başvuru alınır.",
   alternates: { canonical: "/on-basvuru" },
 };
 
 const products = [
   {
     name: "WexPay",
-    status: "?ncelikli eri?im",
-    description: "QR men?, masa y?netimi, sipari?, ?deme, fi? talebi ve restoran operasyon paneli.",
+    status: "Öncelikli erişim",
+    description: "QR menü, masa yönetimi, sipariş, ödeme, fiş talebi ve restoran operasyon paneli.",
     accent: "border-emerald-200 bg-emerald-50 text-emerald-700",
     marker: "bg-emerald-500",
     metric: "Restoran",
@@ -21,7 +21,7 @@ const products = [
   {
     name: "WexHotel",
     status: "Planlama",
-    description: "Oda, rezervasyon, misafir, ?deme, fatura ve personel s?re?leri i?in otel y?netimi.",
+    description: "Oda, rezervasyon, misafir, ödeme, fatura ve personel süreçleri için otel yönetimi.",
     accent: "border-sky-200 bg-sky-50 text-sky-700",
     marker: "bg-sky-500",
     metric: "Konaklama",
@@ -29,7 +29,7 @@ const products = [
   {
     name: "WexB2B",
     status: "Planlama",
-    description: "Bayi, toptan sat??, teklif, sipari?, cari ve ?deme takibi i?in B2B y?netim altyap?s?.",
+    description: "Bayi, toptan satış, teklif, sipariş, cari ve ödeme takibi için B2B yönetim altyapısı.",
     accent: "border-violet-200 bg-violet-50 text-violet-700",
     marker: "bg-violet-500",
     metric: "Ticaret",
@@ -40,23 +40,23 @@ const productOptions = products.map((product) => product.name);
 
 const steps = [
   {
-    title: "Ba?vuru",
-    description: "?leti?im ve i?letme bilgileriniz g?venli ?ekilde al?n?r.",
+    title: "Başvuru",
+    description: "İletişim ve işletme bilgileriniz güvenli şekilde alınır.",
   },
   {
-    title: "De?erlendirme",
-    description: "?r?n, lisans ve operasyon kapsam? Wexon ekibi taraf?ndan netle?tirilir.",
+    title: "Değerlendirme",
+    description: "Ürün, lisans ve operasyon kapsamı Wexon ekibi tarafından netleştirilir.",
   },
   {
-    title: "Eri?im plan?",
-    description: "Uygun kurulum ve onboarding yolu sizinle payla??l?r.",
+    title: "Erişim planı",
+    description: "Uygun kurulum ve onboarding yolu sizinle paylaşılır.",
   },
 ];
 
 const highlights = [
-  { label: "Durum", value: "Haz?rl?k modu" },
-  { label: "Odak", value: "?n ba?vuru" },
-  { label: "Kapsam", value: "3 ?r?n" },
+  { label: "Durum", value: "Hazırlık modu" },
+  { label: "Odak", value: "Ön başvuru" },
+  { label: "Kapsam", value: "3 ürün" },
 ];
 
 export default function PreApplicationPage() {
@@ -78,7 +78,7 @@ export default function PreApplicationPage() {
             <WexonBrandLogo variant="hero" priority className="h-9 md:h-10" />
             <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] px-3 py-1.5 text-[10px] font-black text-emerald-100 backdrop-blur sm:px-4 sm:py-2 sm:text-xs">
               <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-              <span className="truncate">Sistemler ge?ici eri?im modunda</span>
+              <span className="truncate">Sistemler geçici erişim modunda</span>
             </div>
           </header>
 
@@ -86,16 +86,16 @@ export default function PreApplicationPage() {
             <div className="min-w-0">
               <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-100 backdrop-blur">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" />
-                Wexon ?n ba?vuru
+                Wexon ön başvuru
               </div>
 
               <h1 className="mt-6 max-w-5xl text-[clamp(2rem,5vw,4.25rem)] font-black leading-[1.02] tracking-[-0.02em] text-white">
-                Wexon sistemleri yeni eri?im d?nemine haz?rlan?yor.
+                Wexon sistemleri yeni erişim dönemine hazırlanıyor.
               </h1>
 
               <p className="mt-6 max-w-3xl text-base font-semibold leading-8 text-slate-300 sm:text-lg">
-                WexPay, WexHotel ve WexB2B i?in ba?vuru s?recini tek ekranda toplad?k. Paneller ge?ici olarak kapal?;
-                ba?vurunuzu buradan iletip ?r?n eri?im planlamas?na dahil olabilirsiniz.
+                WexPay, WexHotel ve WexB2B için başvuru sürecini tek ekranda topladık. Paneller geçici olarak kapalı;
+                başvurunuzu buradan iletip ürün erişim planlamasına dahil olabilirsiniz.
               </p>
 
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -142,15 +142,15 @@ export default function PreApplicationPage() {
           <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
             <div>
               <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">
-                ?r?n kapsam?
+                Ürün kapsamı
               </span>
               <h2 className="mt-4 max-w-2xl text-3xl font-black tracking-[-0.02em] text-slate-950 sm:text-4xl">
-                Ba?vuru ald???m?z Wexon sistemleri
+                Başvuru aldığımız Wexon sistemleri
               </h2>
             </div>
             <p className="max-w-xl text-sm font-semibold leading-relaxed text-slate-600">
-              Her ?r?n Wexon Core lisans ve eri?im katman? alt?nda planlan?r. Ba?vuru sonras? ekip, do?ru ?r?n
-              kapsam?n? sizinle birlikte netle?tirir.
+              Her ürün Wexon Core lisans ve erişim katmanı altında planlanır. Başvuru sonrası ekip, doğru ürün
+              kapsamını sizinle birlikte netleştirir.
             </p>
           </div>
 
