@@ -94,10 +94,19 @@ export default function PreApplicationFooter() {
           <p className="text-xs font-semibold text-slate-500">© 2026 Wexon Technologies. Tüm hakları saklıdır.</p>
           <a
             href="#basvuru"
-            className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-xs font-black text-emerald-100 transition-colors hover:border-emerald-400/40 hover:bg-emerald-400/15 hover:text-white"
+            className="group inline-flex w-full items-center justify-between gap-4 rounded-[20px] border border-white/10 bg-white/[0.05] p-2 pl-4 transition-all hover:border-emerald-400/30 hover:bg-white/[0.08] sm:w-auto sm:min-w-[280px]"
           >
-            Başvuru formuna dön
-            <span aria-hidden>↑</span>
+            <span className="min-w-0 text-left">
+              <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">
+                Ön başvuru
+              </span>
+              <span className="block text-sm font-black text-white">Forma geri dön</span>
+            </span>
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#10b981] text-white shadow-lg shadow-emerald-950/30 transition-transform group-hover:scale-105">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+                <path d="M12 19V5M6 11l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
           </a>
         </div>
       </div>
