@@ -14,19 +14,21 @@ import WexonTextarea from "@/components/marketing/WexonTextarea";
 
 const productOptions = ["WexPay", "WexHotel", "WexB2B", "Wexon Core"];
 
-function SubmitButton({ pending }: { pending: boolean }) {
+type DemoRequestMode = "demo" | "application";
+
+function SubmitButton({ pending, mode }: { pending: boolean; mode: DemoRequestMode }) {
   return (
     <button
       type="submit"
       disabled={pending}
       className="inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-6 py-4 text-sm font-bold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
     >
-      {pending ? "Gönderiliyor..." : "Demo Talebi Gönder"}
+      {pending ? "Gönderiliyor..." : mode === "application" ? "Ön Başvuru Gönder" : "Demo Talebi Gönder"}
     </button>
   );
 }
 
-function SuccessPanel({ state }: { state: DemoRequestFormState }) {
+function SuccessPanel({ state, mode }: { state: DemoRequestFormState; mode: DemoRequestMode }) {
   if (!state.submitted) return null;
 
   return (
@@ -38,22 +40,26 @@ function SuccessPanel({ state }: { state: DemoRequestFormState }) {
       </div>
       <h3 className="mt-4 text-xl font-black tracking-tight text-slate-950">Talebiniz alındı</h3>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        Demo talebiniz Wexon ekibine iletildi. En kısa sürede sizinle iletişime geçeceğiz.
+        {mode === "application"
+          ? "Ön başvurunuz Wexon ekibine iletildi. En kısa sürede sizinle iletişime geçeceğiz."
+          : "Demo talebiniz Wexon ekibine iletildi. En kısa sürede sizinle iletişime geçeceğiz."}
       </p>
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-        <Link
-          href="/demo/wexpay?source=links"
-          className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-600"
-        >
-          WexPay Demo Dene
-        </Link>
-        <Link
-          href="/links"
-          className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-        >
-          Bağlantılara Dön
-        </Link>
-      </div>
+      {mode === "demo" ? (
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+          <Link
+            href="/demo/wexpay?source=links"
+            className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-600"
+          >
+            WexPay Demo Dene
+          </Link>
+          <Link
+            href="/links"
+            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            Bağlantılara Dön
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -61,9 +67,10 @@ function SuccessPanel({ state }: { state: DemoRequestFormState }) {
 type DemoRequestFormProps = {
   defaultProduct?: string;
   defaultSource?: string;
+  mode?: DemoRequestMode;
 };
 
-export default function DemoRequestForm({ defaultProduct, defaultSource }: DemoRequestFormProps) {
+export default function DemoRequestForm({ defaultProduct, defaultSource, mode = "demo" }: DemoRequestFormProps) {
   const [state, formAction, pending] = useActionState(createDemoRequestAction, initialDemoRequestState);
   const sourceValue = normalizeDemoRequestSource(defaultSource);
   const selectedProduct =
@@ -75,13 +82,17 @@ export default function DemoRequestForm({ defaultProduct, defaultSource }: DemoR
         <span className="mb-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-700">
           Form
         </span>
-        <h2 className="text-2xl font-black tracking-[-0.02em] text-slate-950">Demo talebinizi oluşturun</h2>
+        <h2 className="text-2xl font-black tracking-[-0.02em] text-slate-950">
+          {mode === "application" ? "Ön başvuru bilgileri" : "Demo talebinizi oluşturun"}
+        </h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          İletişim ve işletme bilgilerinizi paylaşın; size en uygun demo akışını hazırlayalım.
+          {mode === "application"
+            ? "İletişim ve işletme bilgilerinizi paylaşın; Wexon ekibi başvurunuzu inceleyip sizinle iletişime geçsin."
+            : "İletişim ve işletme bilgilerinizi paylaşın; size en uygun demo akışını hazırlayalım."}
         </p>
       </div>
 
-      <SuccessPanel state={state} />
+      <SuccessPanel state={state} mode={mode} />
 
       {state.error ? (
         <p className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
@@ -111,7 +122,7 @@ export default function DemoRequestForm({ defaultProduct, defaultSource }: DemoR
             Talepler güvenli şekilde Wexon admin paneline kaydedilir. Gerçek ödeme veya hesap oluşturma yapılmaz.
           </p>
           <div className="sm:col-span-2">
-            <SubmitButton pending={pending} />
+            <SubmitButton pending={pending} mode={mode} />
           </div>
         </form>
       ) : null}

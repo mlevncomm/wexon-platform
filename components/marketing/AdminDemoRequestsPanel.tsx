@@ -50,6 +50,7 @@ export type AdminDemoRequestFilters = {
 const demoProducts = ["WexPay", "WexHotel", "WexB2B", "Wexon Core"] as const;
 
 const demoSourceOptions = [
+  { value: "on-basvuru", label: demoRequestSourceLabels["on-basvuru"] },
   { value: "links", label: demoRequestSourceLabels.links },
   { value: "wexpay-demo", label: demoRequestSourceLabels["wexpay-demo"] },
   { value: "direct", label: demoRequestSourceLabels.direct },
@@ -67,7 +68,7 @@ function resolveSource(meta: DemoRequestMeta) {
   };
 }
 
-function buildSupportReturnTo(filters: AdminDemoRequestFilters) {
+function buildSupportReturnTo(filters: AdminDemoRequestFilters, basePath = "/admin/support") {
   const params = new URLSearchParams();
   if (filters.product && filters.product !== "all") {
     params.set("demoProduct", filters.product);
@@ -76,7 +77,7 @@ function buildSupportReturnTo(filters: AdminDemoRequestFilters) {
     params.set("demoSource", filters.source);
   }
   const query = params.toString();
-  return query ? `/admin/support?${query}` : "/admin/support";
+  return query ? `${basePath}?${query}` : basePath;
 }
 
 function productBadgeClass(product?: string) {
@@ -100,6 +101,8 @@ function sourceBadgeClass(sourceKey: string) {
       return "bg-teal-50 text-teal-700 ring-teal-100";
     case "wexpay-demo":
       return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+    case "on-basvuru":
+      return "bg-blue-50 text-blue-700 ring-blue-100";
     default:
       return "bg-slate-100 text-slate-600 ring-slate-200/80";
   }
@@ -316,11 +319,17 @@ function DemoRequestCard({
 export default function AdminDemoRequestsPanel({
   requests,
   filters,
+  basePath = "/admin/support",
+  title = "Public demo talepleri",
+  description = "WexPay demo, /links ve demo-request formundan gelen lead kayıtları. En yeni talepler üstte listelenir.",
 }: {
   requests: AdminDemoRequestRow[];
   filters: AdminDemoRequestFilters;
+  basePath?: string;
+  title?: string;
+  description?: string;
 }) {
-  const returnTo = buildSupportReturnTo(filters);
+  const returnTo = buildSupportReturnTo(filters, basePath);
   const filteredRequests = filterDemoRequests(requests, filters);
   const wexPayCount = requests.filter((request) => readDemoMeta(request.metadataJson).product === "WexPay").length;
   const linksCount = requests.filter((request) => resolveSource(readDemoMeta(request.metadataJson)).key === "links").length;
@@ -334,8 +343,8 @@ export default function AdminDemoRequestsPanel({
     <AdminPanel>
       <AdminSectionTitle
         badge="Demo"
-        title="Public demo talepleri"
-        description="WexPay demo, /links ve demo-request formundan gelen lead kayıtları. En yeni talepler üstte listelenir."
+        title={title}
+        description={description}
       />
 
       <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -387,7 +396,7 @@ export default function AdminDemoRequestsPanel({
 
         {hasActiveFilter ? (
           <Link
-            href="/admin/support"
+            href={basePath}
             className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
           >
             Sıfırla

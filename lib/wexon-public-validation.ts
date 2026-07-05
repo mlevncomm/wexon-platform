@@ -30,6 +30,7 @@ export const demoRequestSourceLabels: Record<string, string> = {
   direct: "Direct",
   links: "WexPay Links",
   "wexpay-demo": "WexPay Demo",
+  "on-basvuru": "Ön Başvuru",
 };
 
 function readString(formData: FormData, key: string) {

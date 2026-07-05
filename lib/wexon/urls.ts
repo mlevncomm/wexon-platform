@@ -133,6 +133,7 @@ export const PUBLIC_MARKETING_PATHS = [
   "/signup",
   "/checkout",
   "/apply",
+  "/on-basvuru",
   "/start",
   "/products",
   "/legal",

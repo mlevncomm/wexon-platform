@@ -2,6 +2,7 @@ export const adminNavigation = [
   { label: "Genel Bakış", shortLabel: "Özet", icon: "overview", href: "/admin" },
   { label: "Müşteriler", shortLabel: "Müşteri", icon: "customers", href: "/admin/organizations" },
   { label: "Kullanıcılar", shortLabel: "Kullanıcı", icon: "customers", href: "/admin/users" },
+  { label: "Ön Başvurular", shortLabel: "Başvuru", icon: "support", href: "/admin/applications" },
   { label: "Destek", shortLabel: "Destek", icon: "support", href: "/admin/support" },
   { label: "Lisanslar", shortLabel: "Lisans", icon: "license", href: "/admin/licenses" },
   { label: "Faturalar", shortLabel: "Fatura", icon: "billing", href: "/admin/billing" },
