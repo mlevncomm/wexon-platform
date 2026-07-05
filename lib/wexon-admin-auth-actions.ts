@@ -94,7 +94,7 @@ export async function loginAdminAction(formData: FormData) {
 
   if (!allowed) {
     adminDebug("login:unauthorized", { email });
-    redirect("/unauthorized");
+    redirectLoginError("Bu e-posta admin yetki listesinde değil.", nextPath, { email });
   }
 
   if (!passwordValid) {
