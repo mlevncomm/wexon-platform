@@ -278,41 +278,151 @@ function DemoRequestCard({
   const phone = meta.phone?.trim();
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-lg font-black text-slate-950">{meta.fullName ?? "—"}</p>
+          <p className="mt-1 break-words text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
+          <p className="mt-2 text-xs font-semibold text-slate-500">{formatAdminDate(request.createdAt)}</p>
+        </div>
         <LeadStatusBadge status={request.leadStatus} />
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
         <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
         <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
       </div>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-base font-black text-slate-950">{meta.fullName ?? "—"}</p>
-          <p className="mt-1 truncate text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{formatAdminDate(request.createdAt)}</p>
+      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">E-posta</p>
+          <p className="mt-1 break-all font-semibold text-slate-700">{email ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Telefon</p>
+          <p className="mt-1 break-words font-semibold text-slate-700">{phone ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Talep notu</p>
+          <p className="mt-1 break-words leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
         </div>
       </div>
-
-      <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <QuickActionLink href={email ? `mailto:${email}` : "#"} label="E-posta" disabled={!email} />
         <QuickActionLink href={phone ? `tel:${phone.replace(/\s/g, "")}` : "#"} label="Telefon" disabled={!phone} />
       </div>
 
-      <div className="mt-3 space-y-1 text-xs font-semibold text-slate-500">
-        <p className="truncate">{email ?? "—"}</p>
-        <p className="truncate">{phone ?? "—"}</p>
-      </div>
-
       <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} />
 
-      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3">
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Son takip</p>
         <FollowUpSummary followUp={request.followUp} />
         <LeadFollowUpUpdateForm requestId={request.id} followUp={request.followUp} returnTo={returnTo} compact />
       </div>
     </article>
+  );
+}
+
+function DemoRequestTableRow({
+  request,
+  returnTo,
+}: {
+  request: AdminDemoRequestRow;
+  returnTo: string;
+}) {
+  const meta = readDemoMeta(request.metadataJson);
+  const source = resolveSource(meta);
+  const email = meta.email?.trim();
+  const phone = meta.phone?.trim();
+
+  return (
+    <tr className="align-top transition-colors hover:bg-slate-50/80">
+      <td className="whitespace-nowrap px-4 py-5 text-xs font-semibold text-slate-500 xl:px-6">
+        <span className="block font-bold text-slate-700">{formatAdminDate(request.createdAt)}</span>
+      </td>
+      <td className="px-4 py-5 xl:px-6">
+        <div className="min-w-[168px] space-y-3">
+          <LeadStatusBadge status={request.leadStatus} />
+          <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} compact />
+        </div>
+      </td>
+      <td className="min-w-[180px] px-4 py-5 xl:min-w-[220px] xl:px-6">
+        <p className="break-words text-base font-black leading-snug text-slate-950">{meta.fullName ?? "—"}</p>
+        <p className="mt-1 break-words text-sm font-semibold text-slate-600 2xl:hidden">{meta.company ?? "—"}</p>
+      </td>
+      <td className="hidden min-w-[180px] px-4 py-5 2xl:table-cell xl:px-6">
+        <p className="break-words text-sm font-semibold text-slate-700">{meta.company ?? "—"}</p>
+      </td>
+      <td className="min-w-[220px] px-4 py-5 xl:min-w-[260px] xl:px-6">
+        <div className="space-y-2">
+          <p className="break-all text-sm font-semibold text-slate-700">{email ?? "—"}</p>
+          <p className="break-words text-sm font-semibold text-slate-500 xl:hidden">{phone ?? "—"}</p>
+        </div>
+      </td>
+      <td className="hidden min-w-[140px] px-4 py-5 xl:table-cell xl:px-6">
+        <p className="break-words text-sm font-semibold text-slate-600">{phone ?? "—"}</p>
+      </td>
+      <td className="px-4 py-5 xl:px-6">
+        <div className="flex min-w-[108px] flex-col gap-2">
+          <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
+          <DemoBadge className={`2xl:hidden ${sourceBadgeClass(source.key)}`}>{source.label}</DemoBadge>
+        </div>
+      </td>
+      <td className="hidden min-w-[130px] px-4 py-5 2xl:table-cell xl:px-6">
+        <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
+      </td>
+      <td className="min-w-[240px] px-4 py-5 xl:min-w-[320px] xl:px-6">
+        <p className="line-clamp-4 break-words text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
+      </td>
+      <td className="min-w-[280px] px-4 py-5 xl:min-w-[340px] xl:px-6">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+          <FollowUpSummary followUp={request.followUp} compact />
+          <LeadFollowUpUpdateForm requestId={request.id} followUp={request.followUp} returnTo={returnTo} compact />
+        </div>
+      </td>
+      <td className="px-4 py-5 xl:px-6">
+        <div className="flex min-w-[112px] flex-col gap-2">
+          <QuickActionLink href={email ? `mailto:${email}` : "#"} label="E-posta" disabled={!email} />
+          <QuickActionLink href={phone ? `tel:${phone.replace(/\s/g, "")}` : "#"} label="Telefon" disabled={!phone} />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function DemoRequestTable({
+  requests,
+  returnTo,
+}: {
+  requests: AdminDemoRequestRow[];
+  returnTo: string;
+}) {
+  return (
+    <AdminTableShell>
+      <table className="w-full min-w-[960px] border-collapse text-left text-sm xl:min-w-[1280px] 2xl:min-w-[1480px]">
+        <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 text-[11px] uppercase tracking-[0.14em] text-slate-500 backdrop-blur-sm">
+          <tr>
+            <th className="px-4 py-4 font-black xl:px-6">Tarih</th>
+            <th className="px-4 py-4 font-black xl:px-6">Durum</th>
+            <th className="px-4 py-4 font-black xl:px-6">Ad soyad</th>
+            <th className="hidden px-4 py-4 font-black 2xl:table-cell xl:px-6">Firma</th>
+            <th className="px-4 py-4 font-black xl:px-6">E-posta</th>
+            <th className="hidden px-4 py-4 font-black xl:table-cell xl:px-6">Telefon</th>
+            <th className="px-4 py-4 font-black xl:px-6">Ürün</th>
+            <th className="hidden px-4 py-4 font-black 2xl:table-cell xl:px-6">Kaynak</th>
+            <th className="px-4 py-4 font-black xl:px-6">Talep notu</th>
+            <th className="px-4 py-4 font-black xl:px-6">Takip</th>
+            <th className="px-4 py-4 font-black xl:px-6">Aksiyon</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 bg-white">
+          {requests.map((request) => (
+            <DemoRequestTableRow key={request.id} request={request} returnTo={returnTo} />
+          ))}
+        </tbody>
+      </table>
+    </AdminTableShell>
   );
 }
 
@@ -322,12 +432,14 @@ export default function AdminDemoRequestsPanel({
   basePath = "/admin/support",
   title = "Public demo talepleri",
   description = "WexPay demo, /links ve demo-request formundan gelen lead kayıtları. En yeni talepler üstte listelenir.",
+  showSummaryCards = true,
 }: {
   requests: AdminDemoRequestRow[];
   filters: AdminDemoRequestFilters;
   basePath?: string;
   title?: string;
   description?: string;
+  showSummaryCards?: boolean;
 }) {
   const returnTo = buildSupportReturnTo(filters, basePath);
   const filteredRequests = filterDemoRequests(requests, filters);
@@ -340,21 +452,24 @@ export default function AdminDemoRequestsPanel({
     (filters.product && filters.product !== "all") || (filters.source && filters.source !== "all");
 
   return (
-    <AdminPanel>
+    <AdminPanel className="overflow-hidden p-0">
+      <div className="p-5 sm:p-8">
       <AdminSectionTitle
         badge="Demo"
         title={title}
         description={description}
       />
 
+      {showSummaryCards ? (
       <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <AdminSummaryCard label="Toplam talep" value={requests.length} />
         <AdminSummaryCard label="WexPay" value={wexPayCount} />
         <AdminSummaryCard label="WexPay Links" value={linksCount} />
         <AdminSummaryCard label="WexPay Demo" value={demoSourceCount} />
       </section>
+      ) : null}
 
-      <form method="get" className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
+      <form method="get" className="mb-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
         <label className="grid gap-1.5 text-sm">
           <span className="text-xs font-semibold text-slate-500">Ürün</span>
           <select
@@ -415,106 +530,25 @@ export default function AdminDemoRequestsPanel({
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
             <AdminStatusPill active>{`${filteredRequests.length} kayıt gösteriliyor`}</AdminStatusPill>
             {hasActiveFilter ? <span>Filtrelenmiş görünüm</span> : null}
+            <span className="hidden md:inline">Geniş tablo için yatay kaydırma kullanılabilir.</span>
+          </div>
+        </>
+      )}
+      </div>
+
+      {filteredRequests.length > 0 ? (
+        <>
+          <div className="hidden md:block">
+            <DemoRequestTable requests={filteredRequests} returnTo={returnTo} />
           </div>
 
-          <div className="hidden lg:block">
-            <AdminTableShell>
-              <table className="w-full min-w-[1480px] text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
-                  <tr>
-                    <th className="px-5 py-4 font-bold">Tarih</th>
-                    <th className="px-5 py-4 font-bold">Durum</th>
-                    <th className="px-5 py-4 font-bold">Ad soyad</th>
-                    <th className="px-5 py-4 font-bold">Firma</th>
-                    <th className="px-5 py-4 font-bold">E-posta</th>
-                    <th className="px-5 py-4 font-bold">Telefon</th>
-                    <th className="px-5 py-4 font-bold">Ürün</th>
-                    <th className="px-5 py-4 font-bold">Kaynak</th>
-                    <th className="px-5 py-4 font-bold">Talep notu</th>
-                    <th className="px-5 py-4 font-bold">Takip</th>
-                    <th className="px-5 py-4 font-bold">Aksiyon</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredRequests.map((request) => {
-                    const meta = readDemoMeta(request.metadataJson);
-                    const source = resolveSource(meta);
-                    const email = meta.email?.trim();
-                    const phone = meta.phone?.trim();
-
-                    return (
-                      <tr key={request.id} className="align-top">
-                        <td className="whitespace-nowrap px-5 py-4 text-xs font-semibold text-slate-500">
-                          {formatAdminDate(request.createdAt)}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="space-y-3">
-                            <LeadStatusBadge status={request.leadStatus} />
-                            <LeadStatusUpdateForm
-                              requestId={request.id}
-                              leadStatus={request.leadStatus}
-                              returnTo={returnTo}
-                              compact
-                            />
-                          </div>
-                        </td>
-                        <td className="max-w-[140px] px-5 py-4">
-                          <p className="break-words font-black text-slate-950">{meta.fullName ?? "—"}</p>
-                        </td>
-                        <td className="max-w-[160px] px-5 py-4">
-                          <p className="break-words font-semibold text-slate-700">{meta.company ?? "—"}</p>
-                        </td>
-                        <td className="max-w-[180px] px-5 py-4">
-                          <p className="break-all text-xs font-semibold text-slate-600">{email ?? "—"}</p>
-                        </td>
-                        <td className="max-w-[140px] px-5 py-4">
-                          <p className="break-words text-xs font-semibold text-slate-600">{phone ?? "—"}</p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
-                        </td>
-                        <td className="px-5 py-4">
-                          <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
-                        </td>
-                        <td className="max-w-[220px] px-5 py-4">
-                          <p className="line-clamp-2 break-words text-sm leading-relaxed text-slate-600">
-                            {meta.message ?? "—"}
-                          </p>
-                        </td>
-                        <td className="max-w-[240px] px-5 py-4">
-                          <FollowUpSummary followUp={request.followUp} compact />
-                          <LeadFollowUpUpdateForm
-                            requestId={request.id}
-                            followUp={request.followUp}
-                            returnTo={returnTo}
-                            compact
-                          />
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-[120px] flex-col gap-2">
-                            <QuickActionLink href={email ? `mailto:${email}` : "#"} label="E-posta" disabled={!email} />
-                            <QuickActionLink
-                              href={phone ? `tel:${phone.replace(/\s/g, "")}` : "#"}
-                              label="Telefon"
-                              disabled={!phone}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </AdminTableShell>
-          </div>
-
-          <div className="space-y-4 lg:hidden">
+          <div className="space-y-4 p-5 md:hidden sm:p-8">
             {filteredRequests.map((request) => (
               <DemoRequestCard key={request.id} request={request} returnTo={returnTo} />
             ))}
           </div>
         </>
-      )}
+      ) : null}
     </AdminPanel>
   );
 }

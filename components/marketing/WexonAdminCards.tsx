@@ -115,10 +115,12 @@ export function AdminEmptyState({ children }: { children: string }) {
   );
 }
 
-export function AdminTableShell({ children }: { children: ReactNode }) {
+export function AdminTableShell({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm shadow-slate-200/60">
-      <div className="overflow-x-auto">{children}</div>
+    <div className={`overflow-hidden rounded-none border-y border-slate-200 bg-white sm:rounded-[24px] sm:border ${className}`}>
+      <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+        <div className="min-w-full">{children}</div>
+      </div>
     </div>
   );
 }

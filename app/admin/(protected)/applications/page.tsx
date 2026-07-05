@@ -41,6 +41,7 @@ export default async function AdminApplicationsPage({
         basePath="/admin/applications"
         title="Ön başvuru kayıtları"
         description="Bakım modu ön başvuru sayfasından gelen kayıtlar. En yeni talepler üstte listelenir."
+        showSummaryCards={false}
       />
     </div>
   );
