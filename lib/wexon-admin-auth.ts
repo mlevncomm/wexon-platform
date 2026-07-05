@@ -1,7 +1,13 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { sessionCookieClearOptions, sessionCookieOptions } from "@/lib/wexon-canonical-host";
+import {
+  isWexonProductionDeployment,
+  normalizeHost,
+  resolveHostSurface,
+  sessionCookieClearOptions,
+  sessionCookieOptions,
+} from "@/lib/wexon-canonical-host";
 
 /**
  * Admin session auth (MVP).
@@ -115,12 +121,27 @@ export async function getAdminSession() {
   return parseSessionCookie(value);
 }
 
+async function adminLoginRedirectPath() {
+  if (!isWexonProductionDeployment()) {
+    return "/admin/login";
+  }
+
+  const headerStore = await headers();
+  const host = normalizeHost(headerStore.get("host"));
+  if (resolveHostSurface(host) === "admin") {
+    return "/login";
+  }
+
+  return "/admin/login";
+}
+
 export async function assertAdminAccess() {
   adminDebug("assert:start");
   const session = await getAdminSession();
   if (!session) {
-    adminDebug("assert:redirect", { to: "/admin/login", hasSession: false });
-    redirect("/admin/login");
+    const loginPath = await adminLoginRedirectPath();
+    adminDebug("assert:redirect", { to: loginPath, hasSession: false });
+    redirect(loginPath);
   }
   adminDebug("assert:ok", { email: session.email });
   return session;

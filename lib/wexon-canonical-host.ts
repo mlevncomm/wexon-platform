@@ -37,18 +37,13 @@ export function isWexonProductionDeployment() {
   return appUrl.includes(PRODUCTION_ROOT_HOST);
 }
 
-export function shouldUseWexonCookieDomain() {
-  return isWexonProductionDeployment();
-}
-
 export function stripPathPrefix(pathname: string, prefix: string) {
   if (pathname === prefix || pathname === `${prefix}/`) return "/";
   if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length) || "/";
   return pathname;
 }
 
-function normalizeCanonicalSubdomainPath(subdomain: ProductionSubdomain, pathname: string) {
-  if (subdomain === "admin" && pathname === "/login") return "/";
+function normalizeCanonicalSubdomainPath(_subdomain: ProductionSubdomain, pathname: string) {
   return pathname;
 }
 
@@ -137,13 +132,20 @@ export function resolvePostLoginDestination(
     return buildProductionSubdomainUrl("core", path);
   }
 
-  if (safeNext.startsWith(ADMIN_PREFIX)) {
-    const path = normalizeCanonicalSubdomainPath("admin", stripPathPrefix(safeNext, ADMIN_PREFIX));
-    return buildProductionSubdomainUrl("admin", path);
+  if (options.isAdmin) {
+    if (!safeNext) {
+      return buildProductionSubdomainUrl("admin", "/");
+    }
+    if (safeNext.startsWith(ADMIN_PREFIX)) {
+      const path = stripPathPrefix(safeNext, ADMIN_PREFIX);
+      return buildProductionSubdomainUrl("admin", path || "/");
+    }
+    return buildProductionSubdomainUrl("admin", safeNext);
   }
 
-  if (options.isAdmin) {
-    return buildProductionSubdomainUrl("admin", "/");
+  if (safeNext.startsWith(ADMIN_PREFIX)) {
+    const path = stripPathPrefix(safeNext, ADMIN_PREFIX);
+    return buildProductionSubdomainUrl("admin", path || "/");
   }
 
   return buildProductionSubdomainUrl("core", "/");
@@ -162,7 +164,7 @@ export function resolveUnauthenticatedLoginRedirect(
       const params = new URLSearchParams();
       if (next) params.set("next", next);
       const query = params.toString();
-      return `https://admin.${PRODUCTION_ROOT_HOST}/${query ? `?${query}` : ""}`;
+      return `https://admin.${PRODUCTION_ROOT_HOST}/login${query ? `?${query}` : ""}`;
     }
     return buildProductionUnifiedLoginUrl(next);
   }
@@ -175,47 +177,21 @@ export function resolveUnauthenticatedLoginRedirect(
 }
 
 export function sessionCookieOptions(expires: Date) {
-  const options: {
-    httpOnly: true;
-    sameSite: "lax";
-    secure: boolean;
-    path: "/";
-    expires: Date;
-    domain?: string;
-  } = {
-    httpOnly: true,
-    sameSite: "lax",
+  return {
+    httpOnly: true as const,
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     expires,
   };
-
-  if (shouldUseWexonCookieDomain()) {
-    options.domain = `.${PRODUCTION_ROOT_HOST}`;
-  }
-
-  return options;
 }
 
 export function sessionCookieClearOptions() {
-  const options: {
-    httpOnly: true;
-    sameSite: "lax";
-    secure: boolean;
-    path: "/";
-    expires: Date;
-    domain?: string;
-  } = {
-    httpOnly: true,
-    sameSite: "lax",
+  return {
+    httpOnly: true as const,
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     expires: new Date(0),
   };
-
-  if (shouldUseWexonCookieDomain()) {
-    options.domain = `.${PRODUCTION_ROOT_HOST}`;
-  }
-
-  return options;
 }

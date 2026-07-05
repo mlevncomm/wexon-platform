@@ -14,8 +14,17 @@ function readString(formData: FormData, key: string) {
 
 function safeAdminNextPath(value: string) {
   const path = canonicalSafeNextPath(value, "/admin");
-  if (path.startsWith("/admin/login")) return "/admin";
+  if (path === "/login" || path.startsWith("/login/")) {
+    return isWexonProductionDeployment() ? "/" : "/admin";
+  }
+  if (path.startsWith("/admin/login")) {
+    return isWexonProductionDeployment() ? "/" : "/admin";
+  }
   return path;
+}
+
+function adminLoginPath() {
+  return isWexonProductionDeployment() ? "/login" : "/admin/login";
 }
 
 function redirectLoginError(message: string, nextPath: string, details?: { email?: string; reason?: string }) {
@@ -31,7 +40,7 @@ function redirectLoginError(message: string, nextPath: string, details?: { email
   if (nextPath) {
     params.set("next", safeAdminNextPath(nextPath));
   }
-  redirect(`/admin/login?${params.toString()}`);
+  redirect(`${adminLoginPath()}?${params.toString()}`);
 }
 
 export async function loginAdminAction(formData: FormData) {

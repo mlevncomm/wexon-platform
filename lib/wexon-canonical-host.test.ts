@@ -43,8 +43,8 @@ describe("subdomainPrefixedCanonicalPath", () => {
     assert.equal(subdomainPrefixedCanonicalPath("admin", "/admin"), "/");
   });
 
-  it("redirects admin host /admin/login to /", () => {
-    assert.equal(subdomainPrefixedCanonicalPath("admin", "/admin/login"), "/");
+  it("redirects admin host /admin/login to /login", () => {
+    assert.equal(subdomainPrefixedCanonicalPath("admin", "/admin/login"), "/login");
   });
 
   it("redirects core host /dashboard to /", () => {
@@ -82,6 +82,13 @@ describe("resolvePostLoginDestination", () => {
     assert.equal(
       resolvePostLoginDestination(undefined, { isAdmin: true, productionWexon: true }),
       "https://admin.wexon.dev/",
+    );
+  });
+
+  it("maps admin subdomain relative next paths in production", () => {
+    assert.equal(
+      resolvePostLoginDestination("/applications", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/applications",
     );
   });
 

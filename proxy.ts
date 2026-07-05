@@ -56,13 +56,6 @@ function productionCanonicalRedirect(request: NextRequest, host: string, surface
   }
 
   if (isProductionWexonHost(host) && surface !== "public") {
-    if (surface === "admin" && pathname === "/login") {
-      const targetUrl = request.nextUrl.clone();
-      targetUrl.pathname = "/";
-      targetUrl.search = "";
-      return NextResponse.redirect(targetUrl);
-    }
-
     if (surface === "core" && (pathname === `${CORE_PREFIX}/login` || pathname.startsWith(`${CORE_PREFIX}/login/`))) {
       return NextResponse.redirect(buildProductionUnifiedLoginUrl());
     }
@@ -170,25 +163,35 @@ export function proxy(request: NextRequest) {
     const nextPath = `${surface === "admin" ? stripAdminPrefix(pathname) : pathname}${search}`;
 
     if (surface === "admin") {
-      const isLoginSurface =
-        originalPathname === "/" ||
-        originalPathname === "/login" ||
-        pathname === "/admin/login";
+      const isLoginRoute = originalPathname === "/login" || pathname === "/admin/login";
 
-      const loginUrl = routedUrl.clone();
-      loginUrl.pathname = "/admin/login";
-      loginUrl.search = "";
-      if (nextPath && nextPath !== "/" && nextPath !== "/login") {
-        loginUrl.searchParams.set("next", nextPath);
-      }
-
-      if (isLoginSurface || !isProductionWexonHost(host)) {
-        adminProxyDebug("proxy:rewrite_admin_login", { from: pathname, to: loginUrl.pathname });
+      if (isLoginRoute) {
+        const loginUrl = routedUrl.clone();
+        loginUrl.pathname = "/admin/login";
+        loginUrl.search = search;
+        adminProxyDebug("proxy:rewrite_admin_login", {
+          from: pathname,
+          originalPathname,
+          to: loginUrl.pathname,
+        });
         return NextResponse.rewrite(loginUrl);
       }
+
+      const loginRedirect = request.nextUrl.clone();
+      loginRedirect.pathname = "/login";
+      loginRedirect.search = "";
+      if (nextPath && nextPath !== "/" && nextPath !== "/login") {
+        loginRedirect.searchParams.set("next", nextPath);
+      }
+      adminProxyDebug("proxy:redirect_admin_login", {
+        from: originalPathname,
+        to: loginRedirect.pathname,
+        nextPath,
+      });
+      return NextResponse.redirect(loginRedirect);
     }
 
-    const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, nextPath, "");
+    const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, nextPath, search);
     adminProxyDebug("proxy:redirect_login", { from: pathname, to: loginTarget });
     return NextResponse.redirect(loginTarget);
   }
