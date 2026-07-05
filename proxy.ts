@@ -6,8 +6,10 @@ import {
   CORE_PREFIX,
   buildProductionSubdomainUrl,
   buildProductionUnifiedLoginUrl,
+  isMaintenanceExemptRoute,
   isProductionWexonHost,
   isPublicRootHost,
+  MAINTENANCE_ENTRY_PATH,
   normalizeHost,
   publicPanelCanonicalTarget,
   resolveHostSurface,
@@ -22,7 +24,6 @@ const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
 const INTERNAL_PREFIXES = [APP_PREFIX, CORE_PREFIX, ADMIN_PREFIX, "/demo", "/wexpay", "/checkout", "/signup", "/start", "/contact"];
 const MAINTENANCE_MODE_ENABLED = true;
-const MAINTENANCE_ENTRY_PATH = "/on-basvuru";
 
 function adminProxyDebug(label: string, data?: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "production") {
@@ -94,11 +95,9 @@ function resolveSurfacePath(pathname: string, surface: HostSurface) {
 
 function maintenanceModeRedirect(request: NextRequest, surface: HostSurface) {
   if (!MAINTENANCE_MODE_ENABLED || request.method !== "GET") return null;
-  if (surface === "admin") return null;
 
   const { pathname, search } = request.nextUrl;
-  if (pathname === ADMIN_PREFIX || pathname.startsWith(`${ADMIN_PREFIX}/`)) return null;
-  if (pathname === MAINTENANCE_ENTRY_PATH) return null;
+  if (isMaintenanceExemptRoute(surface, pathname)) return null;
 
   const targetUrl = request.nextUrl.clone();
   targetUrl.pathname = MAINTENANCE_ENTRY_PATH;
@@ -112,11 +111,12 @@ function maintenanceModeRedirect(request: NextRequest, surface: HostSurface) {
 export function proxy(request: NextRequest) {
   const host = normalizeHost(request.headers.get("host"));
   const surface = resolveHostSurface(host);
-  const maintenanceRedirect = maintenanceModeRedirect(request, surface);
-  if (maintenanceRedirect) return maintenanceRedirect;
 
   const canonicalRedirect = productionCanonicalRedirect(request, host, surface);
   if (canonicalRedirect) return canonicalRedirect;
+
+  const maintenanceRedirect = maintenanceModeRedirect(request, surface);
+  if (maintenanceRedirect) return maintenanceRedirect;
 
   const routedUrl = request.nextUrl.clone();
   const originalPathname = routedUrl.pathname;

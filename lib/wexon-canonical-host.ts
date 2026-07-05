@@ -37,6 +37,23 @@ export function isWexonProductionDeployment() {
   return appUrl.includes(PRODUCTION_ROOT_HOST);
 }
 
+export const MAINTENANCE_ENTRY_PATH = "/on-basvuru";
+
+export function isMaintenanceExemptRoute(surface: HostSurface, pathname: string) {
+  const isAdminRoute =
+    surface === "admin" ||
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname === ADMIN_PREFIX ||
+    pathname.startsWith(`${ADMIN_PREFIX}/`) ||
+    pathname === "/api" ||
+    pathname.startsWith("/api/");
+
+  if (isAdminRoute) return true;
+  if (pathname === MAINTENANCE_ENTRY_PATH) return true;
+  return false;
+}
+
 export function stripPathPrefix(pathname: string, prefix: string) {
   if (pathname === prefix || pathname === `${prefix}/`) return "/";
   if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length) || "/";

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildProductionSubdomainUrl,
+  isMaintenanceExemptRoute,
   publicPanelCanonicalTarget,
   resolvePostLoginDestination,
   subdomainPrefixedCanonicalPath,
@@ -17,6 +18,12 @@ describe("publicPanelCanonicalTarget", () => {
   it("redirects public /admin/organizations to admin host path", () => {
     const target = publicPanelCanonicalTarget("wexon.dev", "/admin/organizations");
     assert.deepEqual(target, { kind: "subdomain", subdomain: "admin", pathname: "/organizations" });
+  });
+
+  it("redirects public /admin/login to admin host login", () => {
+    const target = publicPanelCanonicalTarget("www.wexon.dev", "/admin/login");
+    assert.deepEqual(target, { kind: "subdomain", subdomain: "admin", pathname: "/login" });
+    assert.equal(buildProductionSubdomainUrl("admin", "/login"), "https://admin.wexon.dev/login");
   });
 
   it("redirects public /dashboard to core host", () => {
@@ -102,5 +109,26 @@ describe("resolvePostLoginDestination", () => {
   it("keeps relative paths in local development", () => {
     assert.equal(resolvePostLoginDestination("/dashboard", { isAdmin: false, productionWexon: false }), "/dashboard");
     assert.equal(resolvePostLoginDestination("/admin", { isAdmin: true, productionWexon: false }), "/admin");
+  });
+});
+
+describe("isMaintenanceExemptRoute", () => {
+  it("exempts admin subdomain routes", () => {
+    assert.equal(isMaintenanceExemptRoute("admin", "/"), true);
+    assert.equal(isMaintenanceExemptRoute("admin", "/login"), true);
+    assert.equal(isMaintenanceExemptRoute("admin", "/applications"), true);
+  });
+
+  it("exempts admin login paths on public host", () => {
+    assert.equal(isMaintenanceExemptRoute("public", "/login"), true);
+    assert.equal(isMaintenanceExemptRoute("public", "/admin"), true);
+    assert.equal(isMaintenanceExemptRoute("public", "/admin/login"), true);
+    assert.equal(isMaintenanceExemptRoute("public", "/admin/applications"), true);
+  });
+
+  it("does not exempt public marketing routes", () => {
+    assert.equal(isMaintenanceExemptRoute("public", "/"), false);
+    assert.equal(isMaintenanceExemptRoute("public", "/contact"), false);
+    assert.equal(isMaintenanceExemptRoute("public", "/on-basvuru"), true);
   });
 });
