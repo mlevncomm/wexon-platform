@@ -1,5 +1,7 @@
-<svg width="1198" height="719" viewBox="0 0 1198 719" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1198" height="1198" viewBox="0 0 1198 1198" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(0 239.5)">
 <path d="M237.087 0.000793457H0V245.465L473.336 718.801H714.611V477.525L237.087 0.000793457Z" fill="#5DFF65"/>
 <path d="M719.637 0.000793457H482.551V245.465L955.886 718.801H1197.16V477.525L719.637 0.000793457Z" fill="#5DFF65"/>
 <rect x="913.16" width="284.839" height="284.839" fill="#5DFF65"/>
+</g>
 </svg>

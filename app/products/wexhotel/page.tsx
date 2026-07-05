@@ -1,6 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import WexonFooter from "@/components/marketing/WexonFooter";
 import WexonNavbar from "@/components/marketing/WexonNavbar";
+
+export const metadata: Metadata = {
+  title: "WexHotel - Otel Yönetimi Wexon Ekosisteminde",
+  description:
+    "WexHotel; otel ve konaklama işletmeleri için oda, rezervasyon, misafir, ödeme, fatura ve personel süreçlerini tek panelde yönetmeyi hedefleyen Wexon ürünüdür.",
+  alternates: { canonical: "/products/wexhotel" },
+  openGraph: {
+    title: "WexHotel - Otel Yönetimi Wexon Ekosisteminde",
+    description:
+      "Oda, rezervasyon, misafir, ödeme ve personel süreçleri için planlanan Wexon otel yönetimi ürünü.",
+    url: "/products/wexhotel",
+  },
+};
 
 const plannedModules = [
   "Oda yönetimi",

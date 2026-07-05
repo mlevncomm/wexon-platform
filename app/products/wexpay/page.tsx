@@ -1,6 +1,20 @@
+import type { Metadata } from "next";
 import WexonFooter from "@/components/marketing/WexonFooter";
 import WexonNavbar from "@/components/marketing/WexonNavbar";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "WexPay - QR Menü, Sipariş ve Ödeme Sistemi",
+  description:
+    "WexPay; restoranlar için QR menü, masa yönetimi, sipariş, ödeme, fiş talebi ve raporlama süreçlerini tek panelde birleştiren Wexon ürünüdür.",
+  alternates: { canonical: "/products/wexpay" },
+  openGraph: {
+    title: "WexPay - QR Menü, Sipariş ve Ödeme Sistemi",
+    description:
+      "Restoran operasyonları için QR menü, sipariş, ödeme ve masa yönetimi WexPay ile tek Wexon panelinde.",
+    url: "/products/wexpay",
+  },
+};
 
 type TableStatus = "empty" | "occupied" | "payment_pending" | "partially_paid" | "paid";
 

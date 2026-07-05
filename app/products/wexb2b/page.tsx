@@ -1,6 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import WexonFooter from "@/components/marketing/WexonFooter";
 import WexonNavbar from "@/components/marketing/WexonNavbar";
+
+export const metadata: Metadata = {
+  title: "WexB2B - Bayi ve Toptan Satış Yönetimi",
+  description:
+    "WexB2B; bayi, toptan satış, teklif, sipariş, cari ve ödeme süreçlerini dijitalleştirmek için planlanan Wexon ürünüdür.",
+  alternates: { canonical: "/products/wexb2b" },
+  openGraph: {
+    title: "WexB2B - Bayi ve Toptan Satış Yönetimi",
+    description:
+      "Bayi, teklif, sipariş, cari ve ödeme takibi için Wexon ekosisteminde planlanan B2B satış ürünü.",
+    url: "/products/wexb2b",
+  },
+};
 
 const plannedModules = [
   "Bayi yönetimi",
