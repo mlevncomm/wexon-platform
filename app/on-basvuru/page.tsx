@@ -74,12 +74,8 @@ export default function PreApplicationPage() {
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(140deg,rgba(16,185,129,0.24)_0%,rgba(3,21,15,0)_34%),linear-gradient(180deg,#05291d_0%,#03150f_100%)]" />
 
         <div className="relative mx-auto max-w-[1440px] px-5 pb-12 pt-7 sm:px-8 lg:px-12 lg:pb-16 xl:px-16 2xl:px-20">
-          <header className="flex flex-wrap items-center justify-between gap-3">
+          <header>
             <WexonBrandLogo variant="hero" priority className="h-9 md:h-10" />
-            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] px-3 py-1.5 text-[10px] font-black text-emerald-100 backdrop-blur sm:px-4 sm:py-2 sm:text-xs">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-              <span className="truncate">Sistemler geçici erişim modunda</span>
-            </div>
           </header>
 
           <div className="grid gap-8 pt-10 sm:pt-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,0.72fr)] lg:items-start lg:gap-10 lg:pt-16">
