@@ -31,8 +31,8 @@ function SubmitButton({
     <button
       type="submit"
       disabled={pending}
-      className={`inline-flex w-full items-center justify-center rounded-full bg-emerald-500 px-6 py-4 text-sm font-bold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70 ${
-        minimal ? "shadow-lg shadow-emerald-500/25" : "shadow-sm shadow-emerald-500/20"
+      className={`inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-6 py-4 text-sm font-bold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70 ${
+        minimal ? "" : "shadow-sm shadow-emerald-500/20"
       }`}
     >
       {pending ? "Gönderiliyor..." : mode === "application" ? "Ön Başvuru Gönder" : "Demo Talebi Gönder"}
@@ -104,8 +104,7 @@ type DemoRequestFormProps = {
 
 const SURFACE_CLASS = {
   default: "rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8",
-  minimal:
-    "rounded-[28px] border border-slate-200/90 bg-white p-5 shadow-[0_24px_80px_-24px_rgba(0,0,0,0.45)] sm:rounded-[32px] sm:p-8",
+  minimal: "rounded-[32px] border border-white/15 bg-white p-6 shadow-sm shadow-black/10 sm:p-8",
 } as const;
 
 export default function DemoRequestForm({
@@ -124,15 +123,9 @@ export default function DemoRequestForm({
   return (
     <section className={SURFACE_CLASS[appearance]}>
       <div className="mb-6">
-        {!(minimal && mode === "application") ? (
-          <span className="mb-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-700">
-            Form
-          </span>
-        ) : (
-          <span className="mb-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-700">
-            Ön başvuru formu
-          </span>
-        )}
+        <span className="mb-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-700">
+          Form
+        </span>
         <h2 className="text-2xl font-black tracking-[-0.02em] text-slate-950">
           {mode === "application" ? "Ön başvuru bilgileri" : "Demo talebinizi oluşturun"}
         </h2>
