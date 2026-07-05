@@ -5,6 +5,7 @@ import {
   isAdminHost,
   isMaintenanceExemptRoute,
   publicPanelCanonicalTarget,
+  resolveUnauthenticatedLoginRedirect,
   resolvePostLoginDestination,
   subdomainPrefixedCanonicalPath,
 } from "./wexon-canonical-host";
@@ -147,5 +148,14 @@ describe("isAdminHost", () => {
     assert.equal(isAdminHost("admin.wexon.dev"), true);
     assert.equal(isAdminHost("www.wexon.dev"), false);
     assert.equal(isAdminHost("wexon.dev"), false);
+  });
+});
+
+describe("resolveUnauthenticatedLoginRedirect", () => {
+  it("sends local admin paths to local admin login", () => {
+    assert.equal(
+      resolveUnauthenticatedLoginRedirect("localhost", "public", "/admin", ""),
+      "/admin/login?next=%2Fadmin",
+    );
   });
 });

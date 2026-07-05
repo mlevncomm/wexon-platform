@@ -179,9 +179,10 @@ export function resolveUnauthenticatedLoginRedirect(
   search: string,
 ) {
   const next = `${nextInternalPath}${search}`;
+  const isAdminPath = nextInternalPath === ADMIN_PREFIX || nextInternalPath.startsWith(`${ADMIN_PREFIX}/`);
 
   if (isProductionWexonHost(host)) {
-    if (surface === "admin") {
+    if (surface === "admin" || isAdminPath) {
       const params = new URLSearchParams();
       if (next) params.set("next", next);
       const query = params.toString();
@@ -190,7 +191,7 @@ export function resolveUnauthenticatedLoginRedirect(
     return buildProductionUnifiedLoginUrl(next);
   }
 
-  if (surface === "admin") {
+  if (surface === "admin" || isAdminPath) {
     return `/admin/login?next=${encodeURIComponent(next)}`;
   }
 
