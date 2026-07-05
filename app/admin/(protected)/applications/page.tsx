@@ -18,14 +18,14 @@ export default async function AdminApplicationsPage({
   });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
       <AdminSectionTitle
         badge="Ön Başvurular"
         title="Bakım modu başvuruları"
         description="Wexon ön başvuru sayfasından gelen işletme ve ürün taleplerini buradan takip edin."
       />
 
-      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
         <AdminSummaryCard label="Toplam ön başvuru" value={applicationRequests.length} />
         <AdminSummaryCard label="Yeni kayıt" value={applicationRequests.filter((request) => request.leadStatus === "new").length} />
         <AdminSummaryCard label="İletişimde" value={applicationRequests.filter((request) => request.leadStatus === "contacted").length} />

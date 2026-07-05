@@ -16,8 +16,8 @@ export default async function WexonAdminShell({ children }: { children: ReactNod
         </div>
       </header>
 
-      <main className="px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto grid w-full max-w-[1680px] min-w-0 items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <div className="mx-auto grid w-full max-w-[1680px] min-w-0 items-start gap-4 sm:gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="min-w-0 lg:self-start">
             <div className="w-full min-w-0 rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/70 lg:sticky lg:top-24 lg:rounded-[28px] lg:p-3.5">
               <div className="mb-3 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 lg:mb-4">

@@ -10,9 +10,9 @@ export function AdminSummaryCard({
   helper?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 sm:rounded-3xl sm:p-6">
       <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">{label}</p>
-      <p className="mt-4 break-words text-3xl font-black tracking-tight text-slate-950">{value}</p>
+      <p className="mt-3 break-words text-2xl font-black tracking-tight text-slate-950 sm:mt-4 sm:text-3xl">{value}</p>
       {helper && <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-500">{helper}</p>}
     </div>
   );
@@ -76,7 +76,7 @@ export function AdminSectionTitle({
       <span className="mb-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
         {badge}
       </span>
-      <h2 className="break-words text-2xl font-black tracking-[-0.02em] text-slate-950 sm:text-3xl">{title}</h2>
+      <h2 className="break-words text-xl font-black tracking-[-0.02em] text-slate-950 sm:text-2xl lg:text-3xl">{title}</h2>
       {description && <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">{description}</p>}
     </div>
   );

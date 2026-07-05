@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   AdminEmptyState,
   AdminPanel,
@@ -147,6 +148,9 @@ function FollowUpSummary({ followUp, compact = false }: { followUp: DemoLeadFoll
   );
 }
 
+const mobileFieldClassName =
+  "mt-1.5 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base font-semibold text-slate-950 outline-none transition focus:border-emerald-300 sm:py-2 sm:text-xs";
+
 function LeadFollowUpUpdateForm({
   requestId,
   followUp,
@@ -171,7 +175,7 @@ function LeadFollowUpUpdateForm({
           rows={compact ? 2 : 3}
           defaultValue={followUp.note ?? ""}
           placeholder="Kısa takip notu..."
-          className="mt-1.5 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-950 outline-none transition focus:border-emerald-300"
+          className={mobileFieldClassName}
         />
       </label>
       <label className="block min-w-0">
@@ -180,7 +184,7 @@ function LeadFollowUpUpdateForm({
           name="followUpAt"
           type="date"
           defaultValue={defaultDate}
-          className="mt-1.5 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-950 outline-none transition focus:border-emerald-300"
+          className={mobileFieldClassName}
         />
       </label>
       <AdminSubmitButton>Kaydet</AdminSubmitButton>
@@ -209,14 +213,20 @@ function QuickActionLink({
   href,
   label,
   disabled,
+  fullWidth = false,
 }: {
   href: string;
   label: string;
   disabled?: boolean;
+  fullWidth?: boolean;
 }) {
+  const className = `${
+    fullWidth ? "flex min-h-11 flex-1 items-center justify-center" : "inline-flex"
+  } rounded-xl border px-3 py-2.5 text-sm font-bold touch-manipulation sm:py-1.5 sm:text-xs`;
+
   if (disabled) {
     return (
-      <span className="inline-flex rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-300">
+      <span className={`${className} border-slate-200 bg-slate-50 text-slate-300`}>
         {label}
       </span>
     );
@@ -225,7 +235,7 @@ function QuickActionLink({
   return (
     <Link
       href={href}
-      className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+      className={`${className} border-slate-200 bg-white text-slate-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700`}
     >
       {label}
     </Link>
@@ -252,7 +262,7 @@ function LeadStatusUpdateForm({
         name="leadStatus"
         defaultValue={leadStatus}
         aria-label="Lead durumu"
-        className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-950 outline-none transition focus:border-emerald-300"
+        className={`w-full min-w-0 ${mobileFieldClassName}`}
       >
         {demoLeadStatuses.map((status) => (
           <option key={status} value={status}>
@@ -262,6 +272,29 @@ function LeadStatusUpdateForm({
       </select>
       <AdminSubmitButton>Güncelle</AdminSubmitButton>
     </form>
+  );
+}
+
+function MobileCollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details
+      className="group rounded-2xl border border-slate-200 bg-slate-50 open:bg-white"
+      open={defaultOpen}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-black text-slate-950 touch-manipulation [&::-webkit-details-marker]:hidden">
+        {title}
+        <span className="text-xs font-bold text-slate-400 transition-transform group-open:rotate-180">↓</span>
+      </summary>
+      <div className="border-t border-slate-200 px-4 pb-4 pt-3">{children}</div>
+    </details>
   );
 }
 
@@ -278,47 +311,53 @@ function DemoRequestCard({
   const phone = meta.phone?.trim();
 
   return (
-    <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="break-words text-lg font-black text-slate-950">{meta.fullName ?? "—"}</p>
-          <p className="mt-1 break-words text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
-          <p className="mt-2 text-xs font-semibold text-slate-500">{formatAdminDate(request.createdAt)}</p>
+    <article className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm shadow-slate-200/50 sm:rounded-[24px]">
+      <div className="border-b border-slate-100 bg-slate-50/70 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-lg font-black leading-snug text-slate-950 sm:text-xl">{meta.fullName ?? "—"}</p>
+            <p className="mt-1 break-words text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
+            <p className="mt-2 text-xs font-semibold text-slate-500">{formatAdminDate(request.createdAt)}</p>
+          </div>
+          <LeadStatusBadge status={request.leadStatus} />
         </div>
-        <LeadStatusBadge status={request.leadStatus} />
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
+          <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <QuickActionLink href={email ? `mailto:${email}` : "#"} label="E-posta gönder" disabled={!email} fullWidth />
+          <QuickActionLink href={phone ? `tel:${phone.replace(/\s/g, "")}` : "#"} label="Ara" disabled={!phone} fullWidth />
+        </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
-        <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
-      </div>
+      <div className="space-y-3 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">E-posta</p>
+            <p className="mt-1 break-all text-sm font-semibold text-slate-700">{email ?? "—"}</p>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Telefon</p>
+            <p className="mt-1 break-words text-sm font-semibold text-slate-700">{phone ?? "—"}</p>
+          </div>
+        </div>
 
-      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">E-posta</p>
-          <p className="mt-1 break-all font-semibold text-slate-700">{email ?? "—"}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Telefon</p>
-          <p className="mt-1 break-words font-semibold text-slate-700">{phone ?? "—"}</p>
-        </div>
-        <div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
           <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Talep notu</p>
-          <p className="mt-1 break-words leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
+          <p className="mt-2 break-words text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
         </div>
-      </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <QuickActionLink href={email ? `mailto:${email}` : "#"} label="E-posta" disabled={!email} />
-        <QuickActionLink href={phone ? `tel:${phone.replace(/\s/g, "")}` : "#"} label="Telefon" disabled={!phone} />
-      </div>
+        <MobileCollapsibleSection title="Durum güncelle">
+          <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} compact />
+        </MobileCollapsibleSection>
 
-      <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} />
-
-      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Son takip</p>
-        <FollowUpSummary followUp={request.followUp} />
-        <LeadFollowUpUpdateForm requestId={request.id} followUp={request.followUp} returnTo={returnTo} compact />
+        <MobileCollapsibleSection title="Takip notu ve tarih" defaultOpen={Boolean(request.followUp.note || request.followUp.followUpAt)}>
+          <FollowUpSummary followUp={request.followUp} />
+          <LeadFollowUpUpdateForm requestId={request.id} followUp={request.followUp} returnTo={returnTo} compact />
+        </MobileCollapsibleSection>
       </div>
     </article>
   );
@@ -453,7 +492,7 @@ export default function AdminDemoRequestsPanel({
 
   return (
     <AdminPanel className="overflow-hidden p-0">
-      <div className="p-5 sm:p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
       <AdminSectionTitle
         badge="Demo"
         title={title}
@@ -469,13 +508,13 @@ export default function AdminDemoRequestsPanel({
       </section>
       ) : null}
 
-      <form method="get" className="mb-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
-        <label className="grid gap-1.5 text-sm">
+      <form method="get" className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
+        <label className="grid min-w-0 gap-1.5 text-sm">
           <span className="text-xs font-semibold text-slate-500">Ürün</span>
           <select
             name="demoProduct"
             defaultValue={filters.product ?? "all"}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-300"
+            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-base font-semibold text-slate-800 outline-none focus:border-emerald-300 sm:h-10 sm:text-sm"
           >
             <option value="all">Tümü</option>
             {demoProducts.map((product) => (
@@ -486,12 +525,12 @@ export default function AdminDemoRequestsPanel({
           </select>
         </label>
 
-        <label className="grid gap-1.5 text-sm">
+        <label className="grid min-w-0 gap-1.5 text-sm">
           <span className="text-xs font-semibold text-slate-500">Kaynak</span>
           <select
             name="demoSource"
             defaultValue={filters.source ?? "all"}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-300"
+            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-base font-semibold text-slate-800 outline-none focus:border-emerald-300 sm:h-10 sm:text-sm"
           >
             <option value="all">Tümü</option>
             {demoSourceOptions.map((option) => (
@@ -504,7 +543,7 @@ export default function AdminDemoRequestsPanel({
 
         <button
           type="submit"
-          className="h-10 rounded-xl bg-slate-900 px-5 text-sm font-black text-white transition-colors hover:bg-emerald-700"
+          className="h-11 w-full rounded-xl bg-slate-900 px-5 text-sm font-black text-white transition-colors hover:bg-emerald-700 sm:h-10 lg:w-auto"
         >
           Filtrele
         </button>
@@ -512,7 +551,7 @@ export default function AdminDemoRequestsPanel({
         {hasActiveFilter ? (
           <Link
             href={basePath}
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 sm:h-10 lg:w-auto"
           >
             Sıfırla
           </Link>
@@ -530,7 +569,7 @@ export default function AdminDemoRequestsPanel({
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
             <AdminStatusPill active>{`${filteredRequests.length} kayıt gösteriliyor`}</AdminStatusPill>
             {hasActiveFilter ? <span>Filtrelenmiş görünüm</span> : null}
-            <span className="hidden md:inline">Geniş tablo için yatay kaydırma kullanılabilir.</span>
+            <span className="hidden lg:inline">Geniş tablo için yatay kaydırma kullanılabilir.</span>
           </div>
         </>
       )}
@@ -538,11 +577,11 @@ export default function AdminDemoRequestsPanel({
 
       {filteredRequests.length > 0 ? (
         <>
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             <DemoRequestTable requests={filteredRequests} returnTo={returnTo} />
           </div>
 
-          <div className="space-y-4 p-5 md:hidden sm:p-8">
+          <div className="space-y-4 p-4 lg:hidden sm:p-6">
             {filteredRequests.map((request) => (
               <DemoRequestCard key={request.id} request={request} returnTo={returnTo} />
             ))}
