@@ -1908,6 +1908,7 @@ export async function updateAdminDemoRequestStatusAction(demoRequestId: string, 
     }
 
     revalidatePath("/admin/support");
+    revalidatePath("/admin/applications");
     revalidatePath("/admin");
     redirect(returnTo);
   } catch (error) {
@@ -1941,6 +1942,7 @@ export async function updateAdminDemoRequestFollowUpAction(demoRequestId: string
     });
 
     revalidatePath("/admin/support");
+    revalidatePath("/admin/applications");
     revalidatePath("/admin");
     redirect(returnTo);
   } catch (error) {

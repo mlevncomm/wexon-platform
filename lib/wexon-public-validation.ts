@@ -38,6 +38,18 @@ function readString(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readAllowedProducts(formData: FormData): readonly string[] | undefined {
+  const raw = readString(formData, "_allowedProducts");
+  if (!raw) return undefined;
+
+  const products = raw
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return products.length > 0 ? products : undefined;
+}
+
 function requiredString(formData: FormData, key: string, label: string) {
   const value = readString(formData, key);
   if (!value) {
@@ -47,6 +59,8 @@ function requiredString(formData: FormData, key: string, label: string) {
 }
 
 export function parseDemoRequestPayload(formData: FormData) {
+  const allowedProducts = readAllowedProducts(formData) ?? demoProducts;
+
   const fullName = requiredString(formData, "fullName", "Ad soyad");
   if (fullName.length < 2) {
     throw new PublicValidationError("Ad soyad en az 2 karakter olmalıdır.");
@@ -64,7 +78,7 @@ export function parseDemoRequestPayload(formData: FormData) {
   }
 
   const product = requiredString(formData, "product", "İlgilendiğiniz ürün");
-  if (!demoProducts.includes(product as (typeof demoProducts)[number])) {
+  if (!allowedProducts.includes(product)) {
     throw new PublicValidationError("Geçerli bir ürün seçin.");
   }
 

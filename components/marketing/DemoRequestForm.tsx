@@ -145,6 +145,9 @@ export default function DemoRequestForm({
       {!state.submitted ? (
         <form action={formAction} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="source" value={sourceValue} />
+          {productOptions.length > 0 ? (
+            <input type="hidden" name="_allowedProducts" value={productOptions.join("|")} />
+          ) : null}
           <WexonInput name="fullName" label="Ad soyad" required />
           <WexonInput name="company" label="Firma adı" required />
           <WexonInput name="email" type="email" label="E-posta" required />
@@ -155,6 +158,7 @@ export default function DemoRequestForm({
               label="İlgilendiğiniz ürün"
               options={productOptions}
               defaultValue={selectedProduct ?? ""}
+              required
             />
           </div>
           <div className="sm:col-span-2">
