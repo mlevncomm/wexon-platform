@@ -12,28 +12,56 @@ import WexonInput from "@/components/marketing/WexonInput";
 import WexonSelect from "@/components/marketing/WexonSelect";
 import WexonTextarea from "@/components/marketing/WexonTextarea";
 
-const productOptions = ["WexPay", "WexHotel", "WexB2B", "Wexon Core"];
+const DEFAULT_PRODUCT_OPTIONS = ["WexPay", "WexHotel", "WexB2B", "Wexon Core"];
 
 type DemoRequestMode = "demo" | "application";
 
-function SubmitButton({ pending, mode }: { pending: boolean; mode: DemoRequestMode }) {
+function SubmitButton({
+  pending,
+  mode,
+  minimal,
+}: {
+  pending: boolean;
+  mode: DemoRequestMode;
+  minimal?: boolean;
+}) {
   return (
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-6 py-4 text-sm font-bold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
+      className={`inline-flex w-full items-center justify-center rounded-full bg-[#10b981] px-6 py-4 text-sm font-bold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70 ${
+        minimal ? "" : "shadow-sm shadow-emerald-500/20"
+      }`}
     >
       {pending ? "Gönderiliyor..." : mode === "application" ? "Ön Başvuru Gönder" : "Demo Talebi Gönder"}
     </button>
   );
 }
 
-function SuccessPanel({ state, mode }: { state: DemoRequestFormState; mode: DemoRequestMode }) {
+function SuccessPanel({
+  state,
+  mode,
+  minimal,
+}: {
+  state: DemoRequestFormState;
+  mode: DemoRequestMode;
+  minimal?: boolean;
+}) {
   if (!state.submitted) return null;
 
   return (
-    <div className="mb-6 rounded-[24px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-sm shadow-emerald-100/60">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
+    <div
+      className={
+        minimal
+          ? "mb-6 rounded-[24px] border border-emerald-200 bg-emerald-50 p-6"
+          : "mb-6 rounded-[24px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-sm shadow-emerald-100/60"
+      }
+    >
+      <div
+        className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white ${
+          minimal ? "" : "shadow-lg shadow-emerald-500/25"
+        }`}
+      >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
           <path d="M5 12l5 5L19 7" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -68,16 +96,30 @@ type DemoRequestFormProps = {
   defaultProduct?: string;
   defaultSource?: string;
   mode?: DemoRequestMode;
+  productOptions?: string[];
+  appearance?: "default" | "minimal";
 };
 
-export default function DemoRequestForm({ defaultProduct, defaultSource, mode = "demo" }: DemoRequestFormProps) {
+const SURFACE_CLASS = {
+  default: "rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8",
+  minimal: "rounded-[32px] border border-white/15 bg-white p-6 shadow-sm shadow-black/10 sm:p-8",
+} as const;
+
+export default function DemoRequestForm({
+  defaultProduct,
+  defaultSource,
+  mode = "demo",
+  productOptions = DEFAULT_PRODUCT_OPTIONS,
+  appearance = "default",
+}: DemoRequestFormProps) {
   const [state, formAction, pending] = useActionState(createDemoRequestAction, initialDemoRequestState);
   const sourceValue = normalizeDemoRequestSource(defaultSource);
   const selectedProduct =
     defaultProduct && productOptions.includes(defaultProduct) ? defaultProduct : undefined;
+  const minimal = appearance === "minimal";
 
   return (
-    <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
+    <section className={SURFACE_CLASS[appearance]}>
       <div className="mb-6">
         <span className="mb-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-700">
           Form
@@ -92,7 +134,7 @@ export default function DemoRequestForm({ defaultProduct, defaultSource, mode = 
         </p>
       </div>
 
-      <SuccessPanel state={state} mode={mode} />
+      <SuccessPanel state={state} mode={mode} minimal={minimal} />
 
       {state.error ? (
         <p className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
@@ -122,7 +164,7 @@ export default function DemoRequestForm({ defaultProduct, defaultSource, mode = 
             Talepler güvenli şekilde Wexon admin paneline kaydedilir. Gerçek ödeme veya hesap oluşturma yapılmaz.
           </p>
           <div className="sm:col-span-2">
-            <SubmitButton pending={pending} mode={mode} />
+            <SubmitButton pending={pending} mode={mode} minimal={minimal} />
           </div>
         </form>
       ) : null}
