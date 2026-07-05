@@ -4,9 +4,11 @@ import { useActionState } from "react";
 import Link from "next/link";
 import {
   createDemoRequestAction,
+} from "@/lib/wexon-public-actions";
+import {
   initialDemoRequestState,
   type DemoRequestFormState,
-} from "@/lib/wexon-public-actions";
+} from "@/lib/wexon-demo-request-form-state";
 import { normalizeDemoRequestSource } from "@/lib/wexon-public-validation";
 import WexonInput from "@/components/marketing/WexonInput";
 import WexonSelect from "@/components/marketing/WexonSelect";
@@ -136,9 +138,9 @@ export default function DemoRequestForm({
 
       <SuccessPanel state={state} mode={mode} minimal={minimal} />
 
-      {state.error ? (
+      {state.error || state.message ? (
         <p className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-          {state.error}
+          {state.message ?? state.error}
         </p>
       ) : null}
 

@@ -1,15 +1,4 @@
-import { prisma } from "@/lib/prisma";
-import { headers } from "next/headers";
-
-/**
- * Minimal Prisma-compatible client surface so audit writes can run either on
- * the root `prisma` client or inside a `$transaction` (tx) callback.
- */
-export type AuditClient = {
-  auditLog: {
-    create: (args: Parameters<typeof prisma.auditLog.create>[0]) => ReturnType<typeof prisma.auditLog.create>;
-  };
-};
+import type { PrismaClient } from ".prisma/client";
 
 export type AuditLogLevel = "INFO" | "WARN" | "ERROR";
 export type AuditLogStatus = "SUCCESS" | "FAILURE";
@@ -29,11 +18,28 @@ export type AuditLogInput = {
 };
 
 /**
+ * Minimal Prisma-compatible client surface so audit writes can run either on
+ * the root `prisma` client or inside a `$transaction` (tx) callback.
+ */
+export type AuditClient = {
+  auditLog: {
+    create: PrismaClient["auditLog"]["create"];
+  };
+};
+
+async function resolveAuditClient(client?: AuditClient): Promise<AuditClient> {
+  if (client) return client;
+  const { prisma } = await import("@/lib/prisma");
+  return prisma;
+}
+
+/**
  * Shared AuditLog writer. Use for every meaningful create/update/delete/reset
  * mutation across products and surfaces so the audit trail stays complete.
  */
-export async function writeAuditLog(input: AuditLogInput, client: AuditClient = prisma) {
-  return client.auditLog.create({
+export async function writeAuditLog(input: AuditLogInput, client?: AuditClient) {
+  const db = await resolveAuditClient(client);
+  return db.auditLog.create({
     data: {
       organizationId: input.organizationId ?? null,
       userId: input.userId ?? null,
@@ -65,27 +71,8 @@ export function writeAuditFailure(input: AuditLogInput) {
   });
 }
 
-/**
- * Best-effort client IP extraction from a Fetch `Request` for audit context.
- */
-export function getRequestIpAddress(request: Request): string | null {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const [first] = forwardedFor.split(",");
-    if (first?.trim()) return first.trim();
-  }
-
-  return request.headers.get("x-real-ip");
-}
-
-/** Best-effort IP extraction for Server Actions (login, etc.). */
-export async function getServerActionIpAddress(): Promise<string> {
-  const headerList = await headers();
-  const forwardedFor = headerList.get("x-forwarded-for");
-  if (forwardedFor) {
-    const [first] = forwardedFor.split(",");
-    if (first?.trim()) return first.trim();
-  }
-
-  return headerList.get("x-real-ip") ?? "unknown";
-}
+export {
+  getRequestIpAddress,
+  getServerActionIpAddress,
+  getServerActionIpAddressSafe,
+} from "@/lib/wexon-server-request";
