@@ -64,6 +64,8 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 | `API_KEY_HASH_SECRET` | Evet | API key hashleme icin HMAC secret/pepper. |
 | `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` | Sanal POS baglantisi kullanilacaksa | Organization sanal POS API bilgilerinin sifrelenmesi (AES-256-GCM). Manuel tahsilat icin zorunlu degil. |
 | `NEXT_PUBLIC_APP_URL` | Evet | Public canonical app URL (redirect/link uretimi). |
+| `MAINTENANCE_MODE` | Evet | Canli hizmette `false`; yalnizca on basvuru moduna almak icin `true`. |
+| `WEXPAY_PAYTR_ENABLE_API` | Evet | Ilk production acilisinda `false`; PayTR sadece pilot dogrulamadan sonra acilir. |
 
 **Local / smoke (opsiyonel):** `.env.example` dosyasina bakin — `SMOKE_PORT`, `SMOKE_BASE_URL`, `SMOKE_CUSTOMER_PASSWORD`, `SMOKE_SKIP_WEB_SERVER`, `SMOKE_REUSE_SERVER`.
 
@@ -99,8 +101,12 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 - [ ] `npm run staging:validate` exit 0 (seed:real + unit + smoke:build; staging DB gerekir — DB yoksa skip, sahte pass yok).
 - [ ] `npm run production:check:psp` exit 0 **yalnizca** PayTR/sanal POS acilacaksa.
 - [ ] `CUSTOMER_DEV_LOGIN_PASSWORD` production'da **tanimli degil** veya bos (dev fallback kapali).
+- [ ] `MAINTENANCE_MODE=false` (site ve paneller canli; on basvuru modu kapali).
+- [ ] `WEXPAY_PAYTR_ENABLE_API=false` (ilk acilista manual tahsilat aktif; PayTR genel kullanima kapali).
 - [ ] Secret degerler repoda, commit mesajlarinda veya loglarda gorunmuyor.
 - [ ] **Supabase DB password** production oncesi rotate edildi; eski credential devre disi (Dashboard → Database → Reset password; sonra `DATABASE_URL` + `DIRECT_URL` guncelle).
+- [ ] `admin.wexon.dev` Cloudflare Access arkasinda; sadece gercek admin e-postalari girebiliyor.
+- [ ] Cloudflare WAF/rate limit aktif: `/login`, `/admin/*`, `/dashboard/login`, `/api/wexpay/public/*`, `/api/wexpay/webhooks/paytr`.
 - [ ] `npm audit --omit=dev` calistirildi; kalan advisory'ler degerlendirildi ve kabul edilen riskler not edildi.
 - [ ] `npm audit fix --force` kullanilmadi; Next/Prisma major downgrade onerileri manuel review olmadan uygulanmadi.
 - [ ] Multi-instance production icin rate limit storage Redis/Upstash/edge WAF'a tasindi veya tek-instance siniri bilincli kabul edildi.
@@ -121,6 +127,8 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 - `ADMIN_SESSION_SECRET`
 - `CUSTOMER_SESSION_SECRET`
 - `API_KEY_HASH_SECRET`
+- `MAINTENANCE_MODE`
+- `WEXPAY_PAYTR_ENABLE_API`
 - `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` (sanal POS baglantisi / inbound webhook acilacaksa)
 - `NEXT_PUBLIC_APP_URL`
 

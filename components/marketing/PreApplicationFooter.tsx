@@ -79,7 +79,7 @@ export default function PreApplicationFooter() {
                 </li>
                 <li>
                   <Link
-                    href="/legal/privacy"
+                    href="/gizlilik-politikasi"
                     className="text-sm font-semibold text-slate-400 transition-colors hover:text-white"
                   >
                     Gizlilik

@@ -124,6 +124,7 @@ export const PUBLIC_MARKETING_PATHS = [
   "/careers",
   "/changelog",
   "/contact",
+  "/iletisim",
   "/demo-request",
   "/docs",
   "/api-reference",
@@ -137,6 +138,10 @@ export const PUBLIC_MARKETING_PATHS = [
   "/start",
   "/products",
   "/legal",
+  "/kvkk",
+  "/gizlilik-politikasi",
+  "/kullanim-sartlari",
+  "/cerez-politikasi",
   "/demo/wexpay",
 ] as const;
 

@@ -20,6 +20,10 @@ function loadLocalEnvFile(fileName, { override = false } = {}) {
 loadLocalEnvFile(".env");
 loadLocalEnvFile(".env.local", { override: true });
 
+if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") {
+  throw new Error("seed-real-tenant production ortaminda calistirilamaz.");
+}
+
 const scryptAsync = promisify(scrypt);
 const adapter = new PrismaPg(process.env.DIRECT_URL);
 const prisma = new PrismaClient({ adapter });

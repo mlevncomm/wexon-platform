@@ -171,11 +171,12 @@ Repoda yalnizca [`.env.example`](.env.example) (placeholder) bulunur; gercek deg
 | `CUSTOMER_SESSION_SECRET` | min 32 karakter |
 | `API_KEY_HASH_SECRET` | min 32 karakter |
 | `NEXT_PUBLIC_APP_URL` | Canonical public URL (PayTR webhook/redirect) |
+| `MAINTENANCE_MODE` | Canli hizmette `false`; sadece on basvuru modunda `true` |
 | `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` | Sanal POS credential sifreleme (PSP acilacaksa zorunlu) |
 
 **Opsiyonel / dev-only:** `CUSTOMER_DEV_LOGIN_PASSWORD` — yalnizca local dev; production'da tanimli olmamali.
 
-**PSP (env'e credential yazilmaz):** `WEXPAY_PAYTR_ENABLE_API`, `WEXPAY_PROVIDER_MODE`. PayTR/iyzico/Param API bilgileri DB'de sifreli (`WexPayProviderCredential`).
+**PSP (env'e credential yazilmaz):** `WEXPAY_PAYTR_ENABLE_API=false` ilk canli acilista onerilen degerdir; manual provider ile baslanir. PayTR pilot musteriyle dogrulaninca `true` yapilir. PayTR/iyzico/Param API bilgileri DB'de sifreli (`WexPayProviderCredential`).
 
 Dogrulama: `npm run production:check` (local: `.env` + `.env.local`).
 
@@ -193,7 +194,7 @@ Eger database password daha once paylasildiysa veya production oncesi guvenlik g
 Vercel build migration **calistirmaz**. `prisma migrate deploy` yalnizca deploy oncesi local/staging'de `npm run production:preflight` ile kosulur. `vercel.json` gerekmez; `package.json` build = `prisma generate && next build`. Node **>= 20**.
 
 1. GitHub repo'yu Vercel'e bagla
-2. Production environment'a zorunlu env var'lari gir (yukaridaki tablo; PSP acilacaksa `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` + `WEXPAY_PAYTR_ENABLE_API`)
+2. Production environment'a zorunlu env var'lari gir (yukaridaki tablo; ilk acilis icin `MAINTENANCE_MODE=false`, `WEXPAY_PAYTR_ENABLE_API=false`)
 3. Supabase DB password production oncesi rotate edildiginden emin ol
 4. Local/staging (deploy oncesi):
    ```bash

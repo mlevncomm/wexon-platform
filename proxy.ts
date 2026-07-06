@@ -24,7 +24,7 @@ import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
 const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
 const INTERNAL_PREFIXES = [APP_PREFIX, CORE_PREFIX, ADMIN_PREFIX, "/demo", "/wexpay", "/checkout", "/signup", "/start", "/contact"];
-const MAINTENANCE_MODE_ENABLED = true;
+const MAINTENANCE_MODE_ENABLED = process.env.MAINTENANCE_MODE === "true";
 
 function adminProxyDebug(label: string, data?: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "production") {

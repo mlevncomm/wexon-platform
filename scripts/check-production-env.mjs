@@ -20,9 +20,11 @@ const REQUIRED = [
   "CUSTOMER_SESSION_SECRET",
   "API_KEY_HASH_SECRET",
   "NEXT_PUBLIC_APP_URL",
+  "MAINTENANCE_MODE",
+  "WEXPAY_PAYTR_ENABLE_API",
 ];
 
-const PSP_OPTIONAL = ["WEXPAY_CREDENTIAL_ENCRYPTION_KEY", "WEXPAY_PAYTR_ENABLE_API"];
+const PSP_OPTIONAL = ["WEXPAY_CREDENTIAL_ENCRYPTION_KEY"];
 const SECRET_MIN_LENGTH = 32;
 const LONG_SECRET_NAMES = ["ADMIN_SESSION_SECRET", "CUSTOMER_SESSION_SECRET", "API_KEY_HASH_SECRET"];
 const PLACEHOLDER_PATTERNS = [/change-me/i, /change-before-production/i, /placeholder/i, /example/i, /secret-here/i, /your-/i];
@@ -97,6 +99,15 @@ function validateCredentialEncryptionKey() {
   return null;
 }
 
+function validateBooleanFlag(name) {
+  const value = getValue(name);
+  if (!value) return null;
+  if (value !== "true" && value !== "false") {
+    return `${name} must be explicitly set to true or false.`;
+  }
+  return null;
+}
+
 loadLocalEnvFiles();
 
 const strictPsp = process.argv.includes("--strict-psp");
@@ -105,6 +116,8 @@ const pspMissing = PSP_OPTIONAL.filter((name) => !isSet(name));
 const weak = [
   ...LONG_SECRET_NAMES.map(validateLongSecret),
   validatePassword("ADMIN_LOGIN_PASSWORD"),
+  validateBooleanFlag("MAINTENANCE_MODE"),
+  validateBooleanFlag("WEXPAY_PAYTR_ENABLE_API"),
   validateCredentialEncryptionKey(),
 ].filter(Boolean);
 

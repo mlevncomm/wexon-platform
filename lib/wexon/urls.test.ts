@@ -28,6 +28,9 @@ describe("isPublicMarketingPath", () => {
   it("matches legal and contact routes", () => {
     assert.equal(isPublicMarketingPath("/legal/cookies"), true);
     assert.equal(isPublicMarketingPath("/contact"), true);
+    assert.equal(isPublicMarketingPath("/iletisim"), true);
+    assert.equal(isPublicMarketingPath("/kvkk"), true);
+    assert.equal(isPublicMarketingPath("/gizlilik-politikasi"), true);
     assert.equal(isPublicMarketingPath("/dashboard"), false);
     assert.equal(isPublicMarketingPath("/apps/wexpay"), false);
   });
@@ -42,6 +45,7 @@ describe("resolveNavigationHref", () => {
   it("maps public paths through publicUrl locally", () => {
     assert.equal(resolveNavigationHref("/contact"), "/contact");
     assert.equal(resolveNavigationHref("/legal/privacy"), "/legal/privacy");
+    assert.equal(resolveNavigationHref("/kvkk"), "/kvkk");
     assert.equal(resolveNavigationHref("/#pricing"), "/#pricing");
   });
 });

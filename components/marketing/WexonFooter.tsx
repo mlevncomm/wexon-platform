@@ -28,10 +28,10 @@ const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
     { label: "Değişiklik Günlüğü", href: "/changelog" },
   ],
   Yasal: [
-    { label: "Gizlilik", href: "/legal/privacy" },
-    { label: "Kullanım Şartları", href: "/legal/terms" },
-    { label: "Çerez Politikası", href: "/legal/cookies" },
-    { label: "Güvenlik", href: "/legal/security" },
+    { label: "KVKK", href: "/kvkk" },
+    { label: "Gizlilik", href: "/gizlilik-politikasi" },
+    { label: "Kullanım Şartları", href: "/kullanim-sartlari" },
+    { label: "Çerez Politikası", href: "/cerez-politikasi" },
   ],
 };
 

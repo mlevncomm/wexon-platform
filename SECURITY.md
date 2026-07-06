@@ -9,10 +9,16 @@ monitoring, backups, and fast incident response.
 - Rotate the Supabase database password before public launch if it was ever
   pasted into chat, issue trackers, logs, or shared documents.
 - Keep `CUSTOMER_DEV_LOGIN_PASSWORD` unset in production.
+- Keep `MAINTENANCE_MODE=false` for live service; use `true` only for controlled
+  pre-application mode.
+- Keep `WEXPAY_PAYTR_ENABLE_API=false` for the first public launch unless a
+  pilot PayTR merchant has been verified end-to-end.
 - Run `npm run production:check` and `npm run production:preflight` before each
   deploy.
 - Run `npm audit --omit=dev` before release and review any remaining advisories.
 - Enable PayTR only after TEST merchant verification and webhook confirmation.
+- Put `admin.wexon.dev` behind Cloudflare Access and add Cloudflare WAF/rate
+  limits for login, admin, public WexPay API, and PayTR webhook paths.
 
 ## Dependency audit policy
 

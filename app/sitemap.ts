@@ -13,6 +13,7 @@ const routes: Array<{ path: string; priority: number; changeFrequency: MetadataR
   { path: "/products/wexb2b", priority: 0.65, changeFrequency: "monthly" },
   { path: "/about", priority: 0.6, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.6, changeFrequency: "monthly" },
+  { path: "/iletisim", priority: 0.6, changeFrequency: "monthly" },
   { path: "/book-demo", priority: 0.6, changeFrequency: "monthly" },
   { path: "/demo-request", priority: 0.6, changeFrequency: "monthly" },
   { path: "/start", priority: 0.55, changeFrequency: "monthly" },
@@ -28,6 +29,10 @@ const routes: Array<{ path: string; priority: number; changeFrequency: MetadataR
   { path: "/legal/terms", priority: 0.25, changeFrequency: "yearly" },
   { path: "/legal/cookies", priority: 0.25, changeFrequency: "yearly" },
   { path: "/legal/security", priority: 0.25, changeFrequency: "yearly" },
+  { path: "/kvkk", priority: 0.25, changeFrequency: "yearly" },
+  { path: "/gizlilik-politikasi", priority: 0.25, changeFrequency: "yearly" },
+  { path: "/kullanim-sartlari", priority: 0.25, changeFrequency: "yearly" },
+  { path: "/cerez-politikasi", priority: 0.25, changeFrequency: "yearly" },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
