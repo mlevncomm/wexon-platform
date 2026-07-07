@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import WexonHeroRotatingWord from "@/components/marketing/WexonHeroRotatingWord";
-import { resolveNavigationHref } from "@/lib/wexon/urls";
+import { resolveNavigationHref, shouldDisableLinkPrefetch } from "@/lib/wexon/urls";
 
 const WORDS = ["Core", "WexPay", "lisans", "ödeme"];
 
@@ -264,11 +264,13 @@ function ServiceMarquee() {
         <div className="wx-hero-marquee-track flex w-max gap-3 px-3 py-1 sm:gap-4 sm:px-4">
           {rows.map((card, index) => {
             const tone = MARQUEE_TONE_STYLES[card.tone];
+            const href = resolveNavigationHref(card.href);
 
             return (
               <Link
                 key={`${card.title}-${index}`}
-                href={resolveNavigationHref(card.href)}
+                href={href}
+                prefetch={shouldDisableLinkPrefetch(href) ? false : undefined}
                 className={`wx-hero-marquee-card group flex w-[min(19rem,calc(100vw-2.5rem))] shrink-0 items-center gap-3.5 rounded-[22px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.11)_0%,rgba(255,255,255,0.04)_100%)] p-3.5 text-left backdrop-blur-xl sm:w-[20.5rem] sm:gap-4 sm:p-4 ${tone.glow}`}
               >
                 <span

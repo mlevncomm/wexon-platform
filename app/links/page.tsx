@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WexPayDarkPanelHeaderBackdrop } from "@/components/wexpay/WexPayBusinessUI";
+import { shouldDisableLinkPrefetch } from "@/lib/wexon/urls";
 
 type LinkIcon = "play" | "sparkles" | "credit-card" | "qr" | "home" | "hotel" | "building" | "user" | "shield" | "mail" | "instagram" | "linkedin";
 
@@ -217,7 +218,7 @@ function FeaturedLinkCard({ item }: { item: WexonLinkItem }) {
   }
 
   return (
-    <Link href={item.href} className={isHero ? heroClass : normalClass}>
+    <Link href={item.href} prefetch={shouldDisableLinkPrefetch(item.href) ? false : undefined} className={isHero ? heroClass : normalClass}>
       {inner}
     </Link>
   );
@@ -248,7 +249,7 @@ function CompactLinkCard({ item }: { item: WexonLinkItem }) {
   }
 
   return (
-    <Link href={item.href} className={className}>
+    <Link href={item.href} prefetch={shouldDisableLinkPrefetch(item.href) ? false : undefined} className={className}>
       {content}
     </Link>
   );

@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildAdminEdgeBasicAuthHeaders,
   isAdminEdgeBasicAuthorized,
+  isAdminEdgePrefetchRequest,
   isAdminEdgeProtectedSurface,
   isProductionAdminEdgeAuthEnabled,
   parseBasicAuthorizationHeader,
@@ -85,5 +87,54 @@ describe("isAdminEdgeProtectedSurface", () => {
   it("does not protect normal public paths", () => {
     assert.equal(isAdminEdgeProtectedSurface("www.wexon.dev", "/"), false);
     assert.equal(isAdminEdgeProtectedSurface("www.wexon.dev", "/login"), false);
+  });
+});
+
+describe("isAdminEdgePrefetchRequest", () => {
+  function headers(values: Record<string, string>) {
+    return {
+      get(name: string) {
+        const direct = values[name];
+        if (direct !== undefined) return direct;
+        const lower = values[name.toLowerCase()];
+        return lower ?? null;
+      },
+    };
+  }
+
+  it("detects Next.js and browser prefetch headers", () => {
+    assert.equal(isAdminEdgePrefetchRequest(headers({ "next-router-prefetch": "1" })), true);
+    assert.equal(isAdminEdgePrefetchRequest(headers({ purpose: "prefetch" })), true);
+    assert.equal(isAdminEdgePrefetchRequest(headers({ "sec-purpose": "prefetch" })), true);
+    assert.equal(isAdminEdgePrefetchRequest(headers({ "x-middleware-prefetch": "1" })), true);
+  });
+
+  it("does not treat normal navigation as prefetch", () => {
+    assert.equal(isAdminEdgePrefetchRequest(headers({})), false);
+    assert.equal(isAdminEdgePrefetchRequest(headers({ purpose: "navigate" })), false);
+  });
+});
+
+describe("buildAdminEdgeBasicAuthHeaders", () => {
+  it("includes WWW-Authenticate for normal admin requests", () => {
+    const headers = buildAdminEdgeBasicAuthHeaders(false);
+    assert.ok(headers["WWW-Authenticate"]?.includes("Wexon Admin"));
+  });
+
+  it("omits WWW-Authenticate for prefetch requests", () => {
+    const headers = buildAdminEdgeBasicAuthHeaders(true);
+    assert.equal(headers["WWW-Authenticate"], undefined);
+  });
+});
+
+describe("admin edge basic auth surface behavior", () => {
+  it("public homepage is not protected", () => {
+    assert.equal(isAdminEdgeProtectedSurface("www.wexon.dev", "/"), false);
+  });
+
+  it("admin protected surface gets challenge headers only on normal requests", () => {
+    assert.equal(isAdminEdgeProtectedSurface("www.wexon.dev", "/admin"), true);
+    assert.ok(buildAdminEdgeBasicAuthHeaders(false)["WWW-Authenticate"]);
+    assert.equal(buildAdminEdgeBasicAuthHeaders(true)["WWW-Authenticate"], undefined);
   });
 });
