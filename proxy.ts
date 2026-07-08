@@ -23,8 +23,6 @@ import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
 import {
   isAdminEdgeBasicAuthorized,
   isAdminEdgeProtectedSurface,
-  isAdminEdgePrefetchRequest,
-  buildAdminEdgeBasicAuthHeaders,
   isProductionAdminEdgeAuthEnabled,
 } from "@/lib/wexon-admin-edge-basic-auth";
 
@@ -230,11 +228,12 @@ function maintenanceModeRedirect(request: NextRequest, surface: HostSurface) {
   return redirectTo(request, targetUrl);
 }
 
-function adminEdgeBasicAuthChallenge(request: NextRequest) {
-  const prefetch = isAdminEdgePrefetchRequest(request.headers);
-  return new NextResponse(prefetch ? null : "Admin authentication required.", {
+function adminEdgeBasicAuthChallenge() {
+  return new NextResponse("Admin authentication required.", {
     status: 401,
-    headers: buildAdminEdgeBasicAuthHeaders(prefetch),
+    headers: {
+      "WWW-Authenticate": 'Basic realm="Wexon Admin"',
+    },
   });
 }
 
@@ -251,7 +250,7 @@ export function proxy(request: NextRequest) {
       process.env.ADMIN_LOGIN_PASSWORD,
     )
   ) {
-    return adminEdgeBasicAuthChallenge(request);
+    return adminEdgeBasicAuthChallenge();
   }
 
   if (isAdminHost(host)) {

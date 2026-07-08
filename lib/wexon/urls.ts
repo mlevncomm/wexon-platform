@@ -158,38 +158,3 @@ export function resolveNavigationHref(path: string) {
   if (isPublicMarketingPath(path)) return publicUrl(path);
   return path;
 }
-
-const PROTECTED_PREFETCH_PREFIXES = ["/admin", "/dashboard", "/apps/wexpay"] as const;
-
-function normalizeLinkPath(href: string) {
-  if (href.startsWith("http://") || href.startsWith("https://")) {
-    try {
-      return new URL(href).pathname;
-    } catch {
-      return href;
-    }
-  }
-  return href.split("?")[0]?.split("#")[0] ?? href;
-}
-
-/** Disable Next.js prefetch for routes that trigger edge Basic Auth or auth redirects. */
-export function shouldDisableLinkPrefetch(href: string) {
-  if (href.startsWith("http://") || href.startsWith("https://")) {
-    try {
-      const url = new URL(href);
-      const hostname = url.hostname.split(":")[0]?.toLowerCase() ?? "";
-      if (hostname.startsWith("admin.")) return true;
-      const pathname = url.pathname;
-      return PROTECTED_PREFETCH_PREFIXES.some(
-        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  const path = normalizeLinkPath(href);
-  return PROTECTED_PREFETCH_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  );
-}

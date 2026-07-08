@@ -86,23 +86,3 @@ export function isAdminEdgeBasicAuthorized(
   if (!allowedEmails.has(parsed.username.trim().toLowerCase())) return false;
   return constantTimeEqual(parsed.password, expectedPassword);
 }
-
-type HeaderReader = {
-  get(name: string): string | null;
-};
-
-export function isAdminEdgePrefetchRequest(headers: HeaderReader) {
-  const purpose = headers.get("purpose")?.toLowerCase();
-  const secPurpose = headers.get("sec-purpose")?.toLowerCase();
-  if (purpose === "prefetch" || secPurpose === "prefetch") return true;
-  if (headers.get("next-router-prefetch") === "1") return true;
-  if (headers.get("x-middleware-prefetch")) return true;
-  return false;
-}
-
-export const ADMIN_EDGE_BASIC_AUTH_REALM = 'Basic realm="Wexon Admin"';
-
-export function buildAdminEdgeBasicAuthHeaders(prefetch: boolean): Record<string, string> {
-  if (prefetch) return {};
-  return { "WWW-Authenticate": ADMIN_EDGE_BASIC_AUTH_REALM };
-}

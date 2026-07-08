@@ -4,7 +4,6 @@ import {
   isPublicMarketingPath,
   publicUrl,
   resolveNavigationHref,
-  shouldDisableLinkPrefetch,
   unifiedLoginUrl,
 } from "./urls";
 
@@ -48,23 +47,5 @@ describe("resolveNavigationHref", () => {
     assert.equal(resolveNavigationHref("/legal/privacy"), "/legal/privacy");
     assert.equal(resolveNavigationHref("/kvkk"), "/kvkk");
     assert.equal(resolveNavigationHref("/#pricing"), "/#pricing");
-  });
-});
-
-describe("shouldDisableLinkPrefetch", () => {
-  it("disables prefetch for protected panel routes", () => {
-    assert.equal(shouldDisableLinkPrefetch("/admin"), true);
-    assert.equal(shouldDisableLinkPrefetch("/admin/login"), true);
-    assert.equal(shouldDisableLinkPrefetch("/dashboard"), true);
-    assert.equal(shouldDisableLinkPrefetch("/dashboard/login"), true);
-    assert.equal(shouldDisableLinkPrefetch("/apps/wexpay"), true);
-    assert.equal(shouldDisableLinkPrefetch("https://admin.wexon.dev/login"), true);
-  });
-
-  it("allows prefetch for public marketing routes", () => {
-    assert.equal(shouldDisableLinkPrefetch("/"), false);
-    assert.equal(shouldDisableLinkPrefetch("/products/wexpay"), false);
-    assert.equal(shouldDisableLinkPrefetch("/demo-request"), false);
-    assert.equal(shouldDisableLinkPrefetch("/login"), false);
   });
 });
