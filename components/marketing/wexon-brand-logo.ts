@@ -1,10 +1,7 @@
 import type { CSSProperties } from "react";
-import type { StaticImageData } from "next/image";
-import heroHeaderLogo from "@/wexon.dev/Ana-Logo/wexon-dev.png";
-import subHeaderLogo from "@/wexon.dev/Ana-Logo/wexon-siyah.png";
 
 /** Hero header logo asset ratio (wexon-dev.png). */
-const HERO_LOGO_ASPECT = heroHeaderLogo.width / heroHeaderLogo.height;
+const HERO_LOGO_ASPECT = 6747 / 1547;
 
 /** Rendered hero logo width at h-8 / md:h-9 — sub-header and footer match this footprint. */
 export const WEXON_BRAND_LOGO_BOX_CLASS =
@@ -17,6 +14,6 @@ export const WEXON_BRAND_LOGO_STYLE = {
 export const WEXON_BRAND_LOGO_SIZES = "157px";
 
 export const WEXON_BRAND_LOGOS = {
-  hero: heroHeaderLogo,
-  dark: subHeaderLogo,
-} satisfies Record<"hero" | "dark", StaticImageData>;
+  hero: "/brand/wexon-dev.png",
+  dark: "/brand/wexon-siyah.png",
+} satisfies Record<"hero" | "dark", string>;
