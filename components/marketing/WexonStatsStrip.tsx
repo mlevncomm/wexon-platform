@@ -1,7 +1,7 @@
 const STATS: { value: string; label: string; emphasized?: boolean }[] = [
   { value: "3 ürün", label: "Tek ekosistem" },
   { value: "1 Core", label: "Merkezi lisans altyapısı" },
-  { value: "Canlı demo", label: "WexPay hazır", emphasized: true },
+  { value: "Pilot", label: "WexPay aktif", emphasized: true },
   { value: "3 lisans modeli", label: "Aylık / yıllık / tek seferlik" },
 ];
 
@@ -27,7 +27,7 @@ export default function WexonStatsStrip() {
               >
                 <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-400/30 blur-2xl" />
                 <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-100">
-                  Aktif
+                  Pilot
                 </p>
                 <p className="relative mt-3 text-3xl font-black tracking-tight sm:text-4xl">
                   {stat.value}

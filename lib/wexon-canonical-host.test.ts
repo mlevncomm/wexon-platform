@@ -5,10 +5,23 @@ import {
   isAdminHost,
   isMaintenanceExemptRoute,
   publicPanelCanonicalTarget,
+  publicWwwCanonicalRedirect,
   resolveUnauthenticatedLoginRedirect,
   resolvePostLoginDestination,
   subdomainPrefixedCanonicalPath,
 } from "./wexon-canonical-host";
+
+describe("publicWwwCanonicalRedirect", () => {
+  it("redirects apex host to www", () => {
+    assert.equal(publicWwwCanonicalRedirect("wexon.dev", "/contact", ""), "https://www.wexon.dev/contact");
+    assert.equal(publicWwwCanonicalRedirect("wexon.dev", "/products/wexpay", "?ref=ig"), "https://www.wexon.dev/products/wexpay?ref=ig");
+  });
+
+  it("does not redirect www or subdomains", () => {
+    assert.equal(publicWwwCanonicalRedirect("www.wexon.dev", "/contact", ""), null);
+    assert.equal(publicWwwCanonicalRedirect("app.wexon.dev", "/tables", ""), null);
+  });
+});
 
 describe("publicPanelCanonicalTarget", () => {
   it("redirects public /admin to admin host", () => {

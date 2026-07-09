@@ -37,9 +37,10 @@ describe("isPublicMarketingPath", () => {
 });
 
 describe("resolveNavigationHref", () => {
-  it("keeps panel paths relative locally", () => {
-    assert.equal(resolveNavigationHref("/dashboard/billing"), "/dashboard/billing");
-    assert.equal(resolveNavigationHref("/admin/organizations"), "/admin/organizations");
+  it("routes panel paths through unified login locally", () => {
+    assert.equal(resolveNavigationHref("/dashboard/billing"), "/login?next=%2Fdashboard%2Fbilling");
+    assert.equal(resolveNavigationHref("/admin/organizations"), "/login?next=%2Fadmin%2Forganizations");
+    assert.equal(resolveNavigationHref("/apps/wexpay/tables"), "/login?next=%2Fapps%2Fwexpay%2Ftables");
   });
 
   it("maps public paths through publicUrl locally", () => {

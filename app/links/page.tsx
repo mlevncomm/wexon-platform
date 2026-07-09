@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WexPayDarkPanelHeaderBackdrop } from "@/components/wexpay/WexPayBusinessUI";
+import { customerLoginUrl, publicUrl } from "@/lib/wexon/urls";
 
 type LinkIcon = "play" | "sparkles" | "credit-card" | "qr" | "home" | "hotel" | "building" | "user" | "shield" | "mail" | "instagram" | "linkedin";
 
@@ -41,11 +42,10 @@ const WEXON_LINKS = {
     },
   ],
   secondary: [
-    { id: "platform", label: "Wexon Platform", description: "Ana site", href: "/", icon: "home" as const, compact: true },
-    { id: "wexhotel", label: "WexHotel", description: "Otel operasyonları", href: "/products/wexhotel", icon: "hotel" as const, compact: true },
-    { id: "wexb2b", label: "WexB2B", description: "B2B satış", href: "/products/wexb2b", icon: "building" as const, compact: true },
-    { id: "customer-portal", label: "Customer Portal", description: "Müşteri girişi", href: "/dashboard/login", icon: "user" as const, compact: true },
-    { id: "admin-portal", label: "Admin Portal", description: "Yönetim girişi", href: "/admin/login", icon: "shield" as const, compact: true },
+    { id: "platform", label: "Wexon Platform", description: "Ana site", href: publicUrl("/"), icon: "home" as const, compact: true },
+    { id: "wexhotel", label: "WexHotel", description: "Yakında — otel operasyonları", href: "/products/wexhotel", icon: "hotel" as const, compact: true },
+    { id: "wexb2b", label: "WexB2B", description: "Yakında — B2B satış", href: "/products/wexb2b", icon: "building" as const, compact: true },
+    { id: "customer-portal", label: "Müşteri Girişi", description: "Lisanslı müşteri paneli", href: customerLoginUrl(), icon: "user" as const, compact: true },
     { id: "contact", label: "İletişim", description: "Bizimle iletişime geçin", href: "/contact", icon: "mail" as const, compact: true },
     {
       id: "instagram",
@@ -217,7 +217,7 @@ function FeaturedLinkCard({ item }: { item: WexonLinkItem }) {
   }
 
   return (
-    <Link href={item.href} className={isHero ? heroClass : normalClass}>
+    <Link href={item.href} prefetch={false} className={isHero ? heroClass : normalClass}>
       {inner}
     </Link>
   );
@@ -248,7 +248,7 @@ function CompactLinkCard({ item }: { item: WexonLinkItem }) {
   }
 
   return (
-    <Link href={item.href} className={className}>
+    <Link href={item.href} prefetch={false} className={className}>
       {content}
     </Link>
   );

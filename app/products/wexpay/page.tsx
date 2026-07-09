@@ -685,8 +685,9 @@ export default function WexPayPage() {
                 Sanal POS ve ödeme altyapısı
               </h2>
               <p className="text-lg leading-relaxed text-slate-600">
-                Gerçek production sürümünde işletmeye ait sanal POS bağlantısı API entegrasyonu ile
-                WexPay&apos;e bağlanacaktır. Demo ortamında ödeme akışı mock olarak gösterilir.
+                İlk production sürümünde operasyonel tahsilat <strong>manuel ödeme</strong> ile yapılır.
+                PayTR sanal POS, pilot merchant doğrulaması ve <code className="text-sm">WEXPAY_PAYTR_ENABLE_API=true</code> sonrası
+                tenant bazlı açılır. Demo ortamında ödeme akışı simüle edilir.
               </p>
             </div>
             <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm sm:p-10">

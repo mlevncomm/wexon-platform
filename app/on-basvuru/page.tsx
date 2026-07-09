@@ -6,8 +6,9 @@ import PreApplicationHeader from "@/components/marketing/PreApplicationHeader";
 export const metadata: Metadata = {
   title: "Ön Başvuru",
   description:
-    "Wexon sistemleri hazırlık modundayken WexPay, WexHotel ve WexB2B için ön başvuru alınır.",
+    "MAINTENANCE_MODE=true iken WexPay, WexHotel ve WexB2B için ön başvuru alınır. Canlı hizmette ana site wexon.dev üzerinden açıktır.",
   alternates: { canonical: "/on-basvuru" },
+  robots: { index: false, follow: true },
 };
 
 const products = [
@@ -55,7 +56,7 @@ const steps = [
 ];
 
 const highlights = [
-  { label: "Durum", value: "Hazırlık modu" },
+  { label: "Mod", value: "Bakım / ön başvuru" },
   { label: "Odak", value: "Ön başvuru" },
   { label: "Kapsam", value: "3 ürün" },
 ];

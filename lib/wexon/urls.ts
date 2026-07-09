@@ -1,4 +1,5 @@
 export const PRODUCTION_ROOT_HOST = "wexon.dev";
+export const PUBLIC_CANONICAL_HOST = `www.${PRODUCTION_ROOT_HOST}`;
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
@@ -34,7 +35,7 @@ export function resolveWexonPublicOrigin() {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() ?? "";
   if (isWexonProductionDeployment() || appUrl.includes(PRODUCTION_ROOT_HOST)) {
-    return `https://${PRODUCTION_ROOT_HOST}`;
+    return `https://${PUBLIC_CANONICAL_HOST}`;
   }
 
   return "";
@@ -137,6 +138,9 @@ export const PUBLIC_MARKETING_PATHS = [
   "/on-basvuru",
   "/start",
   "/products",
+  "/products/wexpay",
+  "/products/wexhotel",
+  "/products/wexb2b",
   "/legal",
   "/kvkk",
   "/gizlilik-politikasi",
@@ -152,9 +156,34 @@ export function isPublicMarketingPath(path: string) {
   );
 }
 
+const PANEL_LOGIN_PATHS = ["/admin", "/dashboard", "/apps/wexpay"] as const;
+
+export function isPanelPath(path: string) {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return PANEL_LOGIN_PATHS.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+  );
+}
+
+/** Public marketing links to panels should route through unified login (no admin prefetch). */
+export function publicPanelLoginHref(path: string) {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (normalized === "/admin" || normalized.startsWith("/admin/")) {
+    return unifiedLoginUrl(normalized);
+  }
+  if (normalized === "/dashboard" || normalized.startsWith("/dashboard/")) {
+    return unifiedLoginUrl(normalized);
+  }
+  if (normalized === "/apps/wexpay" || normalized.startsWith("/apps/wexpay/")) {
+    return unifiedLoginUrl(normalized);
+  }
+  return unifiedLoginUrl();
+}
+
 export function resolveNavigationHref(path: string) {
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   if (path.startsWith("/#")) return publicUrl(path);
   if (isPublicMarketingPath(path)) return publicUrl(path);
+  if (isPanelPath(path)) return publicPanelLoginHref(path);
   return path;
 }

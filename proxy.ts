@@ -13,6 +13,7 @@ import {
   MAINTENANCE_ENTRY_PATH,
   normalizeHost,
   publicPanelCanonicalTarget,
+  publicWwwCanonicalRedirect,
   resolveHostSurface,
   resolveUnauthenticatedLoginRedirect,
   stripPathPrefix,
@@ -231,6 +232,13 @@ export function proxy(request: NextRequest) {
   }
 
   const surface = resolveHostSurface(host);
+
+  if (request.method === "GET" && surface === "public") {
+    const wwwTarget = publicWwwCanonicalRedirect(host, request.nextUrl.pathname, request.nextUrl.search);
+    if (wwwTarget) {
+      return redirectTo(request, wwwTarget);
+    }
+  }
 
   const canonicalRedirect = productionCanonicalRedirect(request, host, surface);
   if (canonicalRedirect) return canonicalRedirect;

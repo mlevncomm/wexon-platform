@@ -15,10 +15,10 @@ const FLOATING_PROOFS: Array<{
 }> = [
   {
     initials: "QR",
-    title: "WexPay aktif",
-    body: "Restoran, masa, sipariş ve ödeme akışı tek operasyon ekranında.",
+    title: "WexPay Pilot",
+    body: "Restoran, masa, sipariş ve manuel tahsilat akışı pilot müşterilerle aktif.",
     side: "left",
-    badge: "Canlı",
+    badge: "Pilot",
     tone: "emerald",
   },
   {
@@ -31,10 +31,10 @@ const FLOATING_PROOFS: Array<{
   },
   {
     initials: "PS",
-    title: "Sanal POS hazır",
-    body: "PayTR temeli, webhook doğrulama ve idempotency altyapısı kurulu.",
+    title: "Manuel tahsilat",
+    body: "İlk production path manuel ödeme; PayTR pilot doğrulama sonrası açılır.",
     side: "right",
-    badge: "POS",
+    badge: "Ödeme",
     tone: "cyan",
   },
   {
@@ -83,13 +83,13 @@ const SERVICE_CARDS = [
     body: "QR menü, masa, sipariş ve ödeme",
     href: "/products/wexpay",
     initials: "WP",
-    badge: "Canlı",
+    badge: "Pilot",
     tone: "emerald",
   },
   {
     title: "Wexon Core",
     body: "Lisans, abonelik, kota ve entitlement",
-    href: "/docs",
+    href: "/#core",
     initials: "CO",
     badge: "Core",
     tone: "sky",
@@ -97,25 +97,17 @@ const SERVICE_CARDS = [
   {
     title: "Customer Portal",
     body: "Müşteri ürün, fatura ve destek paneli",
-    href: "/dashboard",
+    href: "/login?next=%2Fdashboard",
     initials: "CP",
-    badge: "Panel",
+    badge: "Giriş",
     tone: "violet",
   },
   {
-    title: "Admin Portal",
-    body: "Organizasyon, lisans ve audit yönetimi",
-    href: "/admin",
-    initials: "AP",
-    badge: "İç",
-    tone: "amber",
-  },
-  {
     title: "PayTR",
-    body: "Sanal POS bağlantı altyapısı",
+    body: "Sanal POS — pilot doğrulama sonrası",
     href: "/demo-request",
     initials: "PT",
-    badge: "POS",
+    badge: "Yakında",
     tone: "cyan",
   },
   {
@@ -155,11 +147,6 @@ const MARQUEE_TONE_STYLES: Record<
     badge: "border-violet-400/20 bg-violet-500/10 text-violet-200",
     glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(167,139,250,0.4)]",
   },
-  amber: {
-    icon: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
-    badge: "border-amber-400/20 bg-amber-500/10 text-amber-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(251,191,36,0.35)]",
-  },
   cyan: {
     icon: "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25",
     badge: "border-cyan-400/20 bg-cyan-500/10 text-cyan-200",
@@ -177,7 +164,7 @@ const MARQUEE_TONE_STYLES: Record<
   },
 };
 
-const TRUST_BADGES = ["3 ürün", "Tek Core", "Canlı demo", "Türkçe arayüz", "Tenant isolation"];
+const TRUST_BADGES = ["WexPay Pilot", "Tek Core", "Manuel tahsilat", "Türkçe arayüz", "Tenant isolation"];
 
 function FloatingProof({
   initials,
@@ -269,6 +256,7 @@ function ServiceMarquee() {
               <Link
                 key={`${card.title}-${index}`}
                 href={resolveNavigationHref(card.href)}
+                prefetch={false}
                 className={`wx-hero-marquee-card group flex w-[min(19rem,calc(100vw-2.5rem))] shrink-0 items-center gap-3.5 rounded-[22px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.11)_0%,rgba(255,255,255,0.04)_100%)] p-3.5 text-left backdrop-blur-xl sm:w-[20.5rem] sm:gap-4 sm:p-4 ${tone.glow}`}
               >
                 <span
@@ -325,7 +313,7 @@ export default function WexonHero() {
         <div className="mx-auto max-w-4xl text-center">
           <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-[11px] font-black text-slate-200 shadow-[0_18px_60px_-30px_rgba(16,185,129,0.45)] backdrop-blur-xl sm:text-xs">
             <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />
-            WexPay aktif · WexHotel ve WexB2B roadmap
+            WexPay Pilot Launch · WexHotel ve WexB2B roadmap
           </span>
 
           <h1 className="wx-hero-headline mx-auto mt-6 max-w-[980px] text-[clamp(2rem,6.4vw,5.1rem)] font-black leading-[1.04] tracking-[-0.02em] text-white sm:mt-8 sm:leading-[1.02]">

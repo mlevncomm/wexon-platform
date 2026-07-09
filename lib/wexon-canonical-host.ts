@@ -26,9 +26,18 @@ export function isProductionWexonHost(host: string) {
   return host === PRODUCTION_ROOT_HOST || host.endsWith(`.${PRODUCTION_ROOT_HOST}`);
 }
 
+export const PUBLIC_CANONICAL_HOST = `www.${PRODUCTION_ROOT_HOST}`;
+
 export function isPublicRootHost(host: string) {
   const normalized = normalizeHost(host);
-  return normalized === PRODUCTION_ROOT_HOST || normalized === `www.${PRODUCTION_ROOT_HOST}`;
+  return normalized === PRODUCTION_ROOT_HOST || normalized === PUBLIC_CANONICAL_HOST;
+}
+
+/** Redirect apex marketing host to www for consistent canonical URLs. */
+export function publicWwwCanonicalRedirect(host: string, pathname: string, search: string) {
+  const normalized = normalizeHost(host);
+  if (normalized !== PRODUCTION_ROOT_HOST) return null;
+  return `https://${PUBLIC_CANONICAL_HOST}${pathname}${search}`;
 }
 
 export function isWexonProductionDeployment() {

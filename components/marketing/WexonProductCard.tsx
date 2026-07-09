@@ -115,7 +115,7 @@ export default function WexonProductCard({ product, highlighted = false }: Props
         </div>
         {highlighted && (
           <span className="rounded-full bg-slate-950 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-300">
-            Aktif ürün
+            Pilot ürün
           </span>
         )}
       </div>
@@ -128,7 +128,7 @@ export default function WexonProductCard({ product, highlighted = false }: Props
 
       {isWexPay && (
         <div className="relative mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
-          {["Canlı demo", "QR müşteri", "İşletme paneli", "Demo reset"].map((item) => (
+          {["Pilot demo", "QR müşteri", "İşletme paneli", "Manuel tahsilat"].map((item) => (
             <span key={item} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               {item}
