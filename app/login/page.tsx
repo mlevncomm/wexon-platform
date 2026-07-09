@@ -34,7 +34,8 @@ export default async function LoginPage({
             Wexon hesabınıza güvenli şekilde giriş yapın.
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-            Wexon Core müşteri paneli veya yetkili yönetim erişiminiz için hesabınızla devam edin.
+            Tek girişten Wexon Core, WexPay veya yetkili admin erişiminize devam edin. Giriş sonrası hesabınıza uygun
+            panele yönlendirilirsiniz.
           </p>
           <div className="mt-8 grid gap-3 sm:grid-cols-2">
             {["Tek giriş paneli", "Güvenli oturum", "Otomatik erişim yönlendirmesi", "Wexon Core bağlantısı"].map((item) => (

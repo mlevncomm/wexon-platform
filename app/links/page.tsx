@@ -29,7 +29,7 @@ const WEXON_LINKS = {
     {
       id: "demo-request",
       label: "Demo Talep Et",
-      description: "İşletmeniz için canlı demo planlayın",
+      description: "İşletmeniz için pilot demo planlayın",
       href: "/demo-request",
       icon: "sparkles" as const,
     },
@@ -270,7 +270,7 @@ export default function WexonLinksPage() {
               </p>
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-200">
                 <LinkIconGlyph icon="qr" className="h-3 w-3" />
-                Masa QR · Demo hazır
+                Masa QR · Pilot demo
               </span>
             </div>
           </div>
