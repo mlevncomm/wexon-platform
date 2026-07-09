@@ -57,6 +57,19 @@ WEXPAY_PAYTR_ENABLE_API=false
 2. App-level `ADMIN_LOGIN_PASSWORD` + `ADMIN_EMAILS` remains MVP; rotate to per-admin credentials + MFA before broad use.
 3. In-memory rate limiting is not sufficient for multi-instance production — use Cloudflare WAF/Access.
 
+Automate Access with API token env vars (never commit tokens):
+
+```powershell
+$env:CLOUDFLARE_API_TOKEN="..."
+$env:CLOUDFLARE_ACCESS_ADMIN_EMAILS="you@company.com"
+npm run cloudflare:access:plan
+$env:CONFIRM_CLOUDFLARE_ACCESS_APPLY="true"
+npm run cloudflare:access:apply
+npm run cloudflare:access:verify
+```
+
+Only `admin.wexon.dev/*` is protected. Public hosts (`www`, apex, `core`, `app`) and `*.wexon.dev` wildcards are rejected by the scripts.
+
 ## Legal pages
 
 Canonical + Turkish aliases:
