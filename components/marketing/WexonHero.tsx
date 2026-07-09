@@ -309,30 +309,40 @@ export default function WexonHero() {
         <FloatingProof key={proof.title} {...proof} index={index} />
       ))}
 
-      <div className="relative mx-auto flex min-h-[min(100svh,820px)] max-w-[1500px] flex-col px-5 pb-14 pt-[6.75rem] sm:min-h-[860px] sm:px-8 sm:pb-16 sm:pt-[8.5rem] lg:min-h-[900px] lg:px-12 xl:px-16 2xl:px-20">
-        <div className="mx-auto max-w-4xl text-center">
-          <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-[11px] font-black text-slate-200 shadow-[0_18px_60px_-30px_rgba(16,185,129,0.45)] backdrop-blur-xl sm:text-xs">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />
-            WexPay Pilot Launch · WexHotel ve WexB2B roadmap
+      <div className="relative mx-auto flex min-h-[min(100svh,820px)] max-w-[1500px] flex-col px-5 pb-14 pt-[7.75rem] sm:min-h-[860px] sm:px-8 sm:pb-16 sm:pt-[9.25rem] lg:min-h-[900px] lg:px-12 lg:pt-[9.75rem] xl:px-16 2xl:px-20">
+        <div className="wx-hero-copy mx-auto w-full max-w-[min(1120px,100%)]">
+          <span className="wx-hero-eyebrow">
+            <span className="wx-hero-eyebrow-dot" aria-hidden />
+            <span>WexPay Pilot Launch</span>
+            <span className="wx-hero-eyebrow-sep" aria-hidden>
+              ·
+            </span>
+            <span>WexHotel ve WexB2B roadmap</span>
           </span>
 
-          <h1 className="wx-hero-headline mx-auto mt-6 max-w-[980px] text-[clamp(2rem,6.4vw,5.1rem)] font-black leading-[1.04] tracking-[-0.02em] text-white sm:mt-8 sm:leading-[1.02]">
-            <span className="wx-hero-headline-line">
-              <span>Sistemlerinizi tek</span>
+          <h1 className="wx-hero-headline">
+            <span className="wx-hero-headline-band wx-hero-headline-enter">
+              <span className="wx-hero-headline-band-line" aria-hidden />
+              <span className="wx-hero-headline-lead">Sistemlerinizi</span>
+              <span className="wx-hero-headline-band-line" aria-hidden />
+            </span>
+            <span className="wx-hero-headline-track wx-hero-headline-enter wx-hero-headline-enter-delay-1">
+              <span className="wx-hero-headline-soft">tek</span>
               <WexonHeroRotatingWord words={WORDS} />
-              <span>altyapısında büyütün</span>
+              <span className="wx-hero-headline-soft">altyapısında</span>
+              <span className="wx-hero-headline-em">büyütün</span>
             </span>
           </h1>
 
-          <p className="mx-auto mt-7 max-w-3xl text-base font-semibold leading-8 text-slate-300 sm:text-lg">
+          <p className="wx-hero-subcopy">
             Wexon, restoran operasyonundan lisans ve abonelik kararlarına kadar tüm ürünlerinizi merkezi Core
             katmanında birleştiren çok ürünlü SaaS platformudur.
           </p>
 
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="wx-hero-actions">
             <Link
               href="/demo/wexpay/business"
-              className="wx-tactile wx-hero-primary-cta inline-flex w-full items-center justify-center rounded-full border border-emerald-400/35 bg-emerald-500 px-7 py-4 text-sm font-black text-white shadow-[0_22px_54px_-18px_rgba(16,185,129,0.55)] hover:bg-emerald-400 sm:w-auto"
+              className="wx-tactile wx-hero-primary-cta wx-hero-cta-primary"
             >
               WexPay demosunu aç
               <span className="ml-2" aria-hidden>
@@ -341,23 +351,23 @@ export default function WexonHero() {
             </Link>
             <Link
               href="/demo-request"
-              className="wx-tactile inline-flex w-full items-center justify-center rounded-full border border-white/15 bg-white/[0.06] px-7 py-4 text-sm font-black text-white backdrop-blur-xl hover:border-emerald-400/40 hover:bg-white/[0.1] sm:w-auto"
+              className="wx-tactile wx-hero-cta-secondary"
             >
               Demo talep et
             </Link>
           </div>
 
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
+          <div className="wx-hero-trust">
             {TRUST_BADGES.map((badge) => (
-              <span key={badge} className="rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 text-xs font-black text-slate-300 backdrop-blur">
+              <span key={badge} className="wx-hero-trust-pill">
                 {badge}
               </span>
             ))}
           </div>
 
-          <div className="mx-auto mt-8 flex max-w-xs items-center justify-center gap-5 text-xs font-black text-slate-300">
+          <div className="wx-hero-footnote">
             <span className="text-white">Wexon Core</span>
-            <span className="h-1 w-1 rounded-full bg-emerald-400" />
+            <span className="wx-hero-footnote-dot" aria-hidden />
             <span>Çözüm ortağı altyapısı</span>
           </div>
         </div>

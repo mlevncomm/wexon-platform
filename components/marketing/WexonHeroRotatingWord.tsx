@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-const ROTATE_MS = 2600;
-const FADE_MS = 220;
+const ROTATE_MS = 2800;
+const FADE_MS = 260;
 
 export default function WexonHeroRotatingWord({ words }: { words: readonly string[] }) {
   const [index, setIndex] = useState(0);
@@ -45,15 +45,18 @@ export default function WexonHeroRotatingWord({ words }: { words: readonly strin
   const activeWord = reducedMotion ? words[0] : words[index];
 
   return (
-    <span className="wx-hero-word-slot text-emerald-300">
-      <span aria-hidden className="invisible col-start-1 row-start-1 whitespace-nowrap">
-        {longestWord}
-      </span>
-      <span
-        aria-live={reducedMotion ? "off" : "polite"}
-        className={`col-start-1 row-start-1 whitespace-nowrap ${reducedMotion || visible ? "wx-hero-word-active" : "wx-hero-word-leaving"}`}
-      >
-        {activeWord}
+    <span className="wx-hero-word-chip" aria-label={activeWord}>
+      <span className="wx-hero-word-chip-surface">
+        <span className="wx-hero-word-chip-ring" aria-hidden />
+        <span aria-hidden className="wx-hero-word-chip-measure">
+          {longestWord}
+        </span>
+        <span
+          aria-live={reducedMotion ? "off" : "polite"}
+          className={`wx-hero-word-chip-label ${reducedMotion || visible ? "wx-hero-word-active" : "wx-hero-word-leaving"}`}
+        >
+          {activeWord}
+        </span>
       </span>
     </span>
   );
