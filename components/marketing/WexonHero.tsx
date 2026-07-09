@@ -309,7 +309,7 @@ export default function WexonHero() {
         <FloatingProof key={proof.title} {...proof} index={index} />
       ))}
 
-      <div className="relative mx-auto flex min-h-[min(100svh,820px)] max-w-[1500px] flex-col px-5 pb-14 pt-24 sm:min-h-[860px] sm:px-8 sm:pb-16 sm:pt-32 lg:min-h-[900px] lg:px-12 xl:px-16 2xl:px-20">
+      <div className="relative mx-auto flex min-h-[min(100svh,820px)] max-w-[1500px] flex-col px-5 pb-14 pt-[6.75rem] sm:min-h-[860px] sm:px-8 sm:pb-16 sm:pt-[8.5rem] lg:min-h-[900px] lg:px-12 xl:px-16 2xl:px-20">
         <div className="mx-auto max-w-4xl text-center">
           <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-[11px] font-black text-slate-200 shadow-[0_18px_60px_-30px_rgba(16,185,129,0.45)] backdrop-blur-xl sm:text-xs">
             <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />

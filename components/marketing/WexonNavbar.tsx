@@ -16,11 +16,83 @@ function WexonBrand({ overDark }: { overDark: boolean }) {
   );
 }
 
-interface WexonNavbarProps {
-  transparent?: boolean;
+function PreApplicationTopBar({ overDark }: { overDark: boolean }) {
+  return (
+    <div
+      className={`relative overflow-hidden border-b transition-colors duration-500 ${
+        overDark
+          ? "border-white/[0.04] bg-[linear-gradient(90deg,rgba(3,21,15,0.92)_0%,rgba(6,35,24,0.88)_50%,rgba(3,21,15,0.92)_100%)]"
+          : "border-slate-200/60 bg-[linear-gradient(90deg,rgba(255,255,255,0.92)_0%,rgba(236,253,245,0.72)_50%,rgba(255,255,255,0.92)_100%)]"
+      }`}
+    >
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/20 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+      <div className="mx-auto flex h-9 max-w-[1500px] items-center justify-center px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
+        <p className="text-center text-[11px] font-medium leading-relaxed tracking-[0.01em] sm:text-xs">
+          <span
+            className={`mr-2 inline-flex h-1.5 w-1.5 translate-y-[-1px] rounded-full align-middle ${
+              overDark ? "bg-emerald-400/75 shadow-[0_0_10px_rgba(52,211,153,0.45)]" : "bg-emerald-500/85"
+            }`}
+            aria-hidden
+          />
+          <span className={overDark ? "text-slate-500" : "text-slate-400"}>Ön başvuru dönemi</span>
+          <span className={`mx-2.5 ${overDark ? "text-white/12" : "text-slate-300"}`} aria-hidden>
+            |
+          </span>
+          <span className={overDark ? "text-slate-400" : "text-slate-500"}>Erişim planı için </span>
+          <Link
+            href={publicUrl("/on-basvuru")}
+            className={`group inline-flex items-center gap-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent ${
+              overDark ? "text-emerald-100/95 hover:text-white" : "text-emerald-700 hover:text-emerald-800"
+            }`}
+          >
+            <span className="underline decoration-emerald-400/25 underline-offset-[5px] transition-[text-decoration-color,color] group-hover:decoration-emerald-400/60">
+              ön başvuru yapın
+            </span>
+            <span className="text-[10px] opacity-75 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden>
+              →
+            </span>
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
 }
 
-export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
+function PreApplicationNavLink({
+  overDark,
+  className = "",
+}: {
+  overDark: boolean;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={publicUrl("/on-basvuru")}
+      className={`group inline-flex h-11 items-center gap-1 px-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
+        overDark
+          ? "text-emerald-100/85 hover:text-emerald-50"
+          : "text-emerald-700/90 hover:text-emerald-800"
+      } ${className}`}
+    >
+      <span className="underline decoration-emerald-400/25 underline-offset-[6px] transition-[text-decoration-color] group-hover:decoration-emerald-500/55">
+        Ön başvuru
+      </span>
+      <span className="text-xs opacity-70 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden>
+        →
+      </span>
+    </Link>
+  );
+}
+
+interface WexonNavbarProps {
+  transparent?: boolean;
+  /** Ana sayfada ince üst bar ile ön başvuru CTA gösterir. */
+  preApplicationBar?: boolean;
+}
+
+export default function WexonNavbar({ transparent = false, preApplicationBar = false }: WexonNavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -60,6 +132,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
 
   const overDark = transparent && !scrolled;
   const lightMobileChrome = menuOpen;
+  const showInlinePreApplication = !preApplicationBar;
 
   const headerSurfaceClass =
     scrolled || lightMobileChrome
@@ -87,6 +160,8 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
     <header
       className={`fixed inset-x-0 top-0 z-50 overflow-hidden transition-all duration-300 ease-out ${headerSurfaceClass} ${headerShapeClass}`}
     >
+      {preApplicationBar && <PreApplicationTopBar overDark={overDark && !lightMobileChrome} />}
+
       <div className="mx-auto max-w-[1500px] px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
         <div className="flex h-16 items-center justify-between gap-3 md:grid md:h-20 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
           <Link href={publicUrl("/")} className="flex h-11 min-w-0 shrink-0 items-center md:justify-self-start">
@@ -108,6 +183,7 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
           </nav>
 
           <div className="hidden h-11 items-center gap-2 justify-self-end md:col-start-3 md:row-start-1 md:flex">
+            {showInlinePreApplication && <PreApplicationNavLink overDark={overDark} />}
             <Link
               href={publicUrl("/login")}
               className={`wx-tactile inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 ${
@@ -165,6 +241,17 @@ export default function WexonNavbar({ transparent = false }: WexonNavbarProps) {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 border-t border-slate-200 pt-3">
+                {(preApplicationBar || showInlinePreApplication) && (
+                  <Link
+                    href={publicUrl("/on-basvuru")}
+                    onClick={() => setMenuOpen(false)}
+                    tabIndex={menuOpen ? 0 : -1}
+                    aria-hidden={!menuOpen}
+                    className="wx-tactile inline-flex w-full items-center justify-center gap-1 px-5 py-3 text-sm font-medium text-emerald-700 underline decoration-emerald-300/50 underline-offset-[6px] hover:text-emerald-800 hover:decoration-emerald-500/60"
+                  >
+                    Ön başvuru <span aria-hidden>→</span>
+                  </Link>
+                )}
                 <Link
                   href={publicUrl("/login")}
                   onClick={() => setMenuOpen(false)}

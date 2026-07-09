@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import WexonInfoCard from "@/components/marketing/WexonInfoCard";
 import WexonStaticPageShell, { WexonPageCTA } from "@/components/marketing/WexonStaticPageShell";
+
+export const metadata: Metadata = {
+  title: "Hakkımızda",
+  description:
+    "Wexon; restoran, otel ve B2B operasyonlarını tek lisans, abonelik, fatura ve müşteri yönetim altyapısında birleştiren modern SaaS ekosistemidir.",
+  alternates: { canonical: "/about" },
+};
 
 const reasons = [
   "Tek ekosistem",
