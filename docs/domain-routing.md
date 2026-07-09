@@ -7,7 +7,7 @@ Production host map and expected behavior for the WexPay Pilot Launch.
 | Host | Surface | Internal prefix | Notes |
 |------|---------|-----------------|-------|
 | `www.wexon.dev` | Public marketing | `/` | Canonical public origin (SEO, sitemap) |
-| `wexon.dev` | Public marketing | `/` | 302 → `www.wexon.dev` (same path/query) |
+| `wexon.dev` | Public marketing | `/` | redirect → `www.wexon.dev` (same path/query) |
 | `core.wexon.dev` | Customer portal (Wexon Core) | `/dashboard` | Also `portal.wexon.dev`, `customer.wexon.dev` |
 | `app.wexon.dev` | WexPay operator app | `/apps/wexpay` | QR callbacks use `NEXT_PUBLIC_APP_URL` |
 | `admin.wexon.dev` | Internal admin | `/admin` | **Cloudflare Access required** in production |

@@ -8,8 +8,29 @@ import {
   publicWwwCanonicalRedirect,
   resolveUnauthenticatedLoginRedirect,
   resolvePostLoginDestination,
+  sessionCookieClearOptions,
+  sessionCookieOptions,
   subdomainPrefixedCanonicalPath,
 } from "./wexon-canonical-host";
+
+function withEnv(snapshot: Record<string, string | undefined>, fn: () => void) {
+  const previous = new Map<string, string | undefined>();
+  for (const key of Object.keys(snapshot)) {
+    previous.set(key, process.env[key]);
+    const value = snapshot[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+
+  try {
+    fn();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
 
 describe("publicWwwCanonicalRedirect", () => {
   it("redirects apex host to www", () => {
@@ -169,6 +190,66 @@ describe("resolveUnauthenticatedLoginRedirect", () => {
     assert.equal(
       resolveUnauthenticatedLoginRedirect("localhost", "public", "/admin", ""),
       "/admin/login?next=%2Fadmin",
+    );
+  });
+});
+
+describe("sessionCookieOptions", () => {
+  it("sets shared domain in production Wexon deployment", () => {
+    withEnv(
+      {
+        NODE_ENV: "production",
+        NEXT_PUBLIC_APP_URL: "https://app.wexon.dev",
+      },
+      () => {
+        const expires = new Date("2030-01-01T00:00:00.000Z");
+        assert.deepEqual(sessionCookieOptions(expires), {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: true,
+          path: "/",
+          expires,
+          domain: ".wexon.dev",
+        });
+      },
+    );
+  });
+
+  it("sets shared domain on session clear in production Wexon deployment", () => {
+    withEnv(
+      {
+        NODE_ENV: "production",
+        NEXT_PUBLIC_APP_URL: "https://app.wexon.dev",
+      },
+      () => {
+        const options = sessionCookieClearOptions();
+        assert.equal(options.domain, ".wexon.dev");
+        assert.equal(options.path, "/");
+        assert.equal(options.httpOnly, true);
+        assert.equal(options.sameSite, "lax");
+        assert.equal(options.secure, true);
+        assert.equal(options.expires.getTime(), 0);
+      },
+    );
+  });
+
+  it("omits domain in local development", () => {
+    withEnv(
+      {
+        NODE_ENV: "development",
+        NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      },
+      () => {
+        const expires = new Date("2030-01-01T00:00:00.000Z");
+        const options = sessionCookieOptions(expires);
+        assert.equal("domain" in options, false);
+        assert.equal(options.secure, false);
+        assert.equal(options.path, "/");
+
+        const clearOptions = sessionCookieClearOptions();
+        assert.equal("domain" in clearOptions, false);
+        assert.equal(clearOptions.path, "/");
+      },
     );
   });
 });

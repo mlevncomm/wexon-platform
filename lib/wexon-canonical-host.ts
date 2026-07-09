@@ -207,22 +207,30 @@ export function resolveUnauthenticatedLoginRedirect(
   return `/dashboard/login?next=${encodeURIComponent(next)}`;
 }
 
+export function sessionCookieDomain() {
+  return isWexonProductionDeployment() ? `.${PRODUCTION_ROOT_HOST}` : undefined;
+}
+
 export function sessionCookieOptions(expires: Date) {
+  const domain = sessionCookieDomain();
   return {
     httpOnly: true as const,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     expires,
+    ...(domain ? { domain } : {}),
   };
 }
 
 export function sessionCookieClearOptions() {
+  const domain = sessionCookieDomain();
   return {
     httpOnly: true as const,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     expires: new Date(0),
+    ...(domain ? { domain } : {}),
   };
 }
