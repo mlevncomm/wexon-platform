@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Plan" ADD COLUMN "priceMonthly" DECIMAL(10,2);
+ALTER TABLE "Plan" ADD COLUMN "priceYearly" DECIMAL(10,2);
+ALTER TABLE "Plan" ADD COLUMN "currency" TEXT NOT NULL DEFAULT 'TRY';

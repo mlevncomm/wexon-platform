@@ -3,6 +3,7 @@ import { resolve } from "path";
 import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { WEXPAY_PLAN_CATALOG } from "../lib/wexon-plan-catalog.mjs";
 
 function loadLocalEnvFile(fileName, { override = false } = {}) {
   const fullPath = resolve(process.cwd(), fileName);
@@ -46,56 +47,18 @@ const wexonProducts = [
   },
 ];
 
-const wexPayPlans = [
-  {
-    key: "wexpay_basic",
-    name: "Basic",
-    description: "Starter package for single-branch cafes.",
-    sortOrder: 1,
-    entitlements: {
-      branch_limit: 1,
-      table_limit: 20,
-      product_limit: 50,
-      staff_limit: 3,
-      reporting_level: "basic",
-      integration_level: "standard",
-      support_level: "standard",
-      role_level: "basic",
-    },
-  },
-  {
-    key: "wexpay_standard",
-    name: "Standard",
-    description: "Standard operations package for growing restaurants.",
-    sortOrder: 2,
-    entitlements: {
-      branch_limit: 2,
-      table_limit: 75,
-      product_limit: 250,
-      staff_limit: 10,
-      reporting_level: "standard",
-      integration_level: "standard",
-      support_level: "priority",
-      role_level: "standard",
-    },
-  },
-  {
-    key: "wexpay_pro",
-    name: "Pro",
-    description: "Advanced package for multi-branch restaurant operations.",
-    sortOrder: 3,
-    entitlements: {
-      branch_limit: 10,
-      table_limit: 300,
-      product_limit: 1000,
-      staff_limit: 50,
-      reporting_level: "advanced",
-      integration_level: "advanced",
-      support_level: "priority",
-      role_level: "advanced",
-    },
-  },
-];
+// WexPay plans are derived from the canonical catalog so seeded prices,
+// entitlement limits and the runtime checkout/marketing values never diverge.
+const wexPayPlans = WEXPAY_PLAN_CATALOG.map((plan) => ({
+  key: plan.dbKey,
+  name: plan.name,
+  description: plan.description,
+  sortOrder: plan.sortOrder,
+  priceMonthly: plan.priceMonthly,
+  priceYearly: plan.priceYearly,
+  currency: plan.currency,
+  entitlements: plan.entitlements,
+}));
 
 function entitlementValue(key, value) {
   if (typeof value === "boolean") {
@@ -144,6 +107,9 @@ async function seedProductsAndPlans() {
         name: plan.name,
         description: plan.description,
         billingInterval: "MONTHLY",
+        priceMonthly: plan.priceMonthly,
+        priceYearly: plan.priceYearly,
+        currency: plan.currency,
         isPublic: true,
         isActive: true,
         sortOrder: plan.sortOrder,
@@ -154,6 +120,9 @@ async function seedProductsAndPlans() {
         name: plan.name,
         description: plan.description,
         billingInterval: "MONTHLY",
+        priceMonthly: plan.priceMonthly,
+        priceYearly: plan.priceYearly,
+        currency: plan.currency,
         isPublic: true,
         isActive: true,
         sortOrder: plan.sortOrder,

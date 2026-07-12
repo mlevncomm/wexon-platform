@@ -5,6 +5,7 @@ import { randomBytes, scrypt } from "crypto";
 import { promisify } from "util";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { getWexPayPlan, withTax } from "../lib/wexon-plan-catalog.mjs";
 
 function loadLocalEnvFile(fileName, { override = false } = {}) {
   const fullPath = resolve(process.cwd(), fileName);
@@ -79,16 +80,12 @@ const REAL_OPS = {
   ],
 };
 
-const wexPayEntitlements = {
-  branch_limit: 2,
-  table_limit: 75,
-  product_limit: 250,
-  staff_limit: 10,
-  reporting_level: "standard",
-  integration_level: "standard",
-  support_level: "priority",
-  role_level: "standard",
-};
+// Fixture tenant uses the canonical Standard package straight from the catalog
+// so its entitlements, prices and invoice amounts stay consistent with seed.mjs
+// and the checkout flow.
+const standardPlan = getWexPayPlan("standard");
+const wexPayEntitlements = standardPlan.entitlements;
+const standardPricing = withTax(standardPlan.priceMonthly);
 
 async function hashPassword(password) {
   const salt = randomBytes(16);
@@ -136,22 +133,28 @@ async function ensureWexPayPlan() {
     where: { key: "wexpay_standard" },
     update: {
       productId: product.id,
-      name: "Standard",
-      description: "Standard operations package for growing restaurants.",
+      name: standardPlan.name,
+      description: standardPlan.description,
       billingInterval: "MONTHLY",
+      priceMonthly: standardPlan.priceMonthly,
+      priceYearly: standardPlan.priceYearly,
+      currency: standardPlan.currency,
       isPublic: true,
       isActive: true,
-      sortOrder: 2,
+      sortOrder: standardPlan.sortOrder,
     },
     create: {
       productId: product.id,
       key: "wexpay_standard",
-      name: "Standard",
-      description: "Standard operations package for growing restaurants.",
+      name: standardPlan.name,
+      description: standardPlan.description,
       billingInterval: "MONTHLY",
+      priceMonthly: standardPlan.priceMonthly,
+      priceYearly: standardPlan.priceYearly,
+      currency: standardPlan.currency,
       isPublic: true,
       isActive: true,
-      sortOrder: 2,
+      sortOrder: standardPlan.sortOrder,
     },
   });
 
@@ -494,16 +497,20 @@ async function main() {
     },
   });
 
+  const invoiceSubtotal = standardPricing.subtotal.toFixed(2);
+  const invoiceTax = standardPricing.tax.toFixed(2);
+  const invoiceTotal = standardPricing.total.toFixed(2);
+
   const invoice = await prisma.invoice.upsert({
     where: { invoiceNo: "INV-REAL-WEXPAY-0001" },
     update: {
       organizationId: organization.id,
       subscriptionId: subscription.id,
       status: "PAID",
-      subtotal: "999.00",
-      tax: "199.80",
-      total: "1198.80",
-      currency: "TRY",
+      subtotal: invoiceSubtotal,
+      tax: invoiceTax,
+      total: invoiceTotal,
+      currency: standardPricing.currency,
       issuedAt: now,
       paidAt: now,
     },
@@ -512,10 +519,10 @@ async function main() {
       subscriptionId: subscription.id,
       invoiceNo: "INV-REAL-WEXPAY-0001",
       status: "PAID",
-      subtotal: "999.00",
-      tax: "199.80",
-      total: "1198.80",
-      currency: "TRY",
+      subtotal: invoiceSubtotal,
+      tax: invoiceTax,
+      total: invoiceTotal,
+      currency: standardPricing.currency,
       issuedAt: now,
       paidAt: now,
     },
@@ -534,8 +541,8 @@ async function main() {
       organizationId: organization.id,
       subscriptionId: subscription.id,
       invoiceId: invoice.id,
-      amount: "1198.80",
-      currency: "TRY",
+      amount: invoiceTotal,
+      currency: standardPricing.currency,
       status: "PAID",
       provider: "manual",
       providerRef: "seed-real-tenant-payment",
