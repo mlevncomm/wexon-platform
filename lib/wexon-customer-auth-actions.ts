@@ -4,11 +4,14 @@ import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { clearCustomerSessionCookie, createCustomerSessionCookie } from "@/lib/wexon-customer-auth";
 import { buildProductionSubdomainUrl, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath, isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
+import { clearActiveOrganizationCookie } from "@/lib/wexon-organization-context";
 import { customerLoginUrl, unifiedLoginUrl } from "@/lib/wexon/urls";
+import { isCustomerDevLoginAllowed } from "@/lib/wexon-production-guards";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { isDatabaseUnavailableError, resolveAuthDatabaseErrorMessage } from "@/lib/wexon-pre-application-errors";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/wexon-passwords";
+import { clearAdminSessionCookie } from "@/lib/wexon-admin-auth";
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -58,8 +61,6 @@ export async function loginCustomerAction(formData: FormData) {
     }
   }
 
-  const expectedPassword = process.env.CUSTOMER_DEV_LOGIN_PASSWORD;
-
   if (!email || !password) {
     redirectLoginError("E-posta ve şifre zorunludur.", nextPath);
   }
@@ -94,9 +95,10 @@ export async function loginCustomerAction(formData: FormData) {
     redirectLoginError("E-posta veya şifre hatalı.", nextPath, { email, userId: user.id });
   }
 
+  const expectedPassword = process.env.CUSTOMER_DEV_LOGIN_PASSWORD?.trim() ?? "";
   const passwordValid = user.passwordHash
     ? await verifyPassword(password, user.passwordHash)
-    : process.env.NODE_ENV !== "production" && Boolean(expectedPassword) && password === expectedPassword;
+    : isCustomerDevLoginAllowed() && Boolean(expectedPassword) && password === expectedPassword;
 
   if (!passwordValid) {
     redirectLoginError("E-posta veya şifre hatalı.", nextPath, { email, userId: user.id });
@@ -122,5 +124,7 @@ export async function loginCustomerAction(formData: FormData) {
 
 export async function logoutCustomerAction() {
   await clearCustomerSessionCookie();
+  await clearAdminSessionCookie();
+  await clearActiveOrganizationCookie();
   redirect(unifiedLoginUrl());
 }

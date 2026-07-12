@@ -11,6 +11,7 @@ import {
   safeNextPath,
 } from "@/lib/wexon-canonical-host";
 import { publicUrl } from "@/lib/wexon/urls";
+import { isCustomerDevLoginAllowed } from "@/lib/wexon-production-guards";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { isDatabaseUnavailableError, resolveAuthDatabaseErrorMessage } from "@/lib/wexon-pre-application-errors";
 import { prisma } from "@/lib/prisma";
@@ -98,10 +99,10 @@ export async function loginUnifiedAction(formData: FormData) {
     redirectUnifiedError(undefined, { email });
   }
 
-  const devPassword = process.env.CUSTOMER_DEV_LOGIN_PASSWORD;
+  const devPassword = process.env.CUSTOMER_DEV_LOGIN_PASSWORD?.trim() ?? "";
   const passwordValid = user.passwordHash
     ? await verifyPassword(password, user.passwordHash)
-    : process.env.NODE_ENV !== "production" && Boolean(devPassword) && password === devPassword;
+    : isCustomerDevLoginAllowed() && Boolean(devPassword) && password === devPassword;
 
   if (!passwordValid || user.memberships.length === 0) {
     redirectUnifiedError(undefined, { email });

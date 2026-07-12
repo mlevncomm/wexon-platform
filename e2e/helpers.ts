@@ -43,6 +43,23 @@ export function adminPassword() {
 export function customerPassword() {
   const fromEnv =
     process.env.E2E_CUSTOMER_PASSWORD?.trim() || process.env.SMOKE_CUSTOMER_PASSWORD?.trim() || "";
+  const target = (process.env.WEXON_E2E_TARGET ?? "local").trim().toLowerCase();
+  const looksProduction =
+    target === "production" ||
+    /https?:\/\/([a-z0-9-]+\.)?wexon\.dev\b/i.test(
+      process.env.E2E_BASE_URL || process.env.SMOKE_BASE_URL || process.env.E2E_PUBLIC_ORIGIN || "",
+    );
+
+  // Never fall back to seeded local fixture password against production targets.
+  if (looksProduction) {
+    if (!fromEnv || fromEnv === "change-me") {
+      throw new Error(
+        "Production E2E requires E2E_CUSTOMER_PASSWORD or SMOKE_CUSTOMER_PASSWORD (seed fixture password is not allowed).",
+      );
+    }
+    return fromEnv;
+  }
+
   // Seeded fixture password is Wexon-Customer-2026; ignore placeholder values from .env.example.
   if (!fromEnv || fromEnv === "change-me") {
     return "Wexon-Customer-2026";

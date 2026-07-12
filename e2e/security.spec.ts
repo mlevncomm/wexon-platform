@@ -45,4 +45,21 @@ test.describe.serial("security journey", () => {
     await page.goto(`/dashboard?organizationId=${fixtures.customerOrgId}`);
     await expect(page).toHaveURL(new RegExp(`organizationId=${fixtures.customerOrgId}`));
   });
+
+  test("unknown demo credential login fails", async ({ page }) => {
+    await page.goto("/login");
+    await page.locator('input[name="email"]').fill("demo-shutdown@example.invalid");
+    await page.locator('input[name="password"]').fill("Definitely-Not-A-Real-Password-999");
+    await page.getByRole("button", { name: /giriş/i }).click();
+    await expect(page.getByText(/e-posta veya şifre hatalı/i)).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("public demo login credentials are not advertised", async ({ page }) => {
+    for (const path of ["/", "/demo-request", "/products/wexpay", "/links"]) {
+      await page.goto(path);
+      const body = await page.locator("body").innerText();
+      expect(body.toLowerCase()).not.toContain("wexon-customer-2026");
+      expect(body.toLowerCase()).not.toMatch(/demo@wexon\.dev\s*[|/].*password/i);
+    }
+  });
 });

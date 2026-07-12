@@ -155,9 +155,18 @@ if (strictPsp && pspMissing.length > 0) {
 const isProduction =
   process.env.NODE_ENV === "production" ||
   process.env.VERCEL_ENV === "production";
-if (isProduction && isSet("CUSTOMER_DEV_LOGIN_PASSWORD")) {
-  console.error("CUSTOMER_DEV_LOGIN_PASSWORD must be unset in production.");
-  process.exit(1);
+
+const FORBIDDEN_IN_PRODUCTION = ["CUSTOMER_DEV_LOGIN_PASSWORD", "WEXON_E2E_RELAX_RATE_LIMIT"];
+
+if (isProduction) {
+  const forbiddenSet = FORBIDDEN_IN_PRODUCTION.filter((name) => isSet(name));
+  if (forbiddenSet.length > 0) {
+    console.error("Forbidden environment variables must be unset in production:");
+    for (const name of forbiddenSet) {
+      console.error(`  - ${name}`);
+    }
+    process.exit(1);
+  }
 }
 
 console.log("Production environment check passed.");

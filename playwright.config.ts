@@ -46,6 +46,7 @@ export default defineConfig({
           ...process.env,
           // Relax in-memory auth rate limits for serial local E2E only.
           WEXON_E2E_RELAX_RATE_LIMIT: looksProduction ? process.env.WEXON_E2E_RELAX_RATE_LIMIT ?? "" : "true",
+          WEXON_E2E_TARGET: looksProduction ? e2eTarget : process.env.WEXON_E2E_TARGET || "local",
         },
       },
 });

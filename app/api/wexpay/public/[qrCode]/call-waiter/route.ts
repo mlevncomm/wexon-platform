@@ -3,12 +3,14 @@ import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { readJsonBody, wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 import { createPublicTableAssistNotification } from "@/lib/wexpay-service";
+import { validatePublicNote } from "@/lib/wexpay-validation";
 
 const ALLOWED_REASONS = new Set(["order_help", "payment_help", "table_clean", "other"]);
 
 /**
  * PUBLIC QR waiter call -> POST /api/wexpay/public/[qrCode]/call-waiter
  * Creates a TABLE_UPDATED notification with [GARSON ÇAĞRISI] prefix (no migration).
+ * Does not start any payment charge.
  */
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
@@ -47,7 +49,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
     const body = (parsed.body ?? {}) as { reason?: unknown; note?: unknown };
     const reasonRaw = typeof body.reason === "string" ? body.reason.trim() : "other";
     const reason = ALLOWED_REASONS.has(reasonRaw) ? reasonRaw : "other";
-    const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+    const note = validatePublicNote(body.note);
 
     const result = await createPublicTableAssistNotification({
       organizationId: resolution.organizationId,

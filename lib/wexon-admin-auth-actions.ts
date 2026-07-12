@@ -3,7 +3,9 @@
 import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { adminDebug, clearAdminSessionCookie, createAdminSessionCookie, isAdminEmailAllowed } from "@/lib/wexon-admin-auth";
+import { clearCustomerSessionCookie } from "@/lib/wexon-customer-auth";
 import { isWexonProductionDeployment, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath } from "@/lib/wexon-canonical-host";
+import { clearActiveOrganizationCookie } from "@/lib/wexon-organization-context";
 import { unifiedLoginUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 
@@ -122,6 +124,8 @@ export async function loginAdminAction(formData: FormData) {
 export async function logoutAdminAction() {
   adminDebug("logout:start");
   await clearAdminSessionCookie();
+  await clearCustomerSessionCookie();
+  await clearActiveOrganizationCookie();
   adminDebug("logout:redirect", { to: unifiedLoginUrl() });
   redirect(unifiedLoginUrl());
 }
