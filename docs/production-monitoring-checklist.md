@@ -124,12 +124,13 @@ Escalate if any item is **FAIL** or unexplained spike vs prior quiet period.
 | Checkpoint | Time (UTC+3) | Reviewer | Overall | Notes |
 |------------|--------------|----------|---------|-------|
 | T+1h | 2026-07-12 16:40 | Cursor agent | PASS | Deploy Ready; no runtime errors; Access challenge; customer/core/app/logout PASS |
-| T+6h | | Cursor agent (scheduled) | PENDING | Loop armed |
-| T+12h | | Cursor agent (scheduled) | PENDING | Loop armed |
-| T+24h | | Cursor agent (scheduled) | PENDING | Loop armed |
+| Closeout | 2026-07-12 16:46 | Cursor agent | PASS | Final probe PASS; runtime errors empty (2h); loop stopped by closeout request |
+| T+6h | — | — | SKIPPED | Closeout requested before window |
+| T+12h | — | — | SKIPPED | Closeout requested before window |
+| T+24h | — | — | SKIPPED | Closeout requested before window |
 
-**24h monitoring decision:** PENDING (await T+24h) — current trajectory STABLE
+**24h monitoring decision:** STABLE (early closeout; T+1h + final probe PASS, no runtime errors)
 
 ## Automation
 
-Scheduled agent loop will re-run the probe + Vercel error checks at approximately T+6h, T+12h, and T+24h and update this log.
+Scheduled T+6 / T+12 / T+24 loop was stopped on closeout. Re-arm only if a new production incident requires extended watch.
