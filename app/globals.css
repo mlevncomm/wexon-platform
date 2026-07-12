@@ -107,14 +107,14 @@ input[type="password"]::-webkit-password-toggle-button {
 
 /* ─── Motion & Transitions ──────────────────────────────────────────────── */
 
+/* Opacity-only: any transform on .wx-page-shell creates a containing block
+   and breaks position:fixed descendants (navbar scrolls away after client nav). */
 @keyframes wx-page-enter-keyframes {
   from {
     opacity: 0;
-    transform: translate3d(0, 5px, 0);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
   }
 }
 
