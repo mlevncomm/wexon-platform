@@ -70,13 +70,16 @@ Core customer, admin, and WexPay QR backends are real (DB-backed, server-priced,
 7. Optional `Idempotency-Key` for public orders  
 8. Ops live-event badges for assist/QR order  
 9. Docs + unit/API/E2E coverage expansion  
-10. Read-only `npm run audit:demo-accounts`
+10. Read-only `npm run audit:demo-accounts`  
+11. Production fixture disable/archive after live app proof + verify
 
 ## Remaining TODOs
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Confirm production DB has no seed fixtures; disable if found | P1 (ops) | Needs human approval before delete |
+| Production fixture disable/archive | **Done** | Non-destructive disable applied 2026-07-12 after `PRODUCTION DISABLE ONAY`; verify PASS |
+| Permanent delete of disabled fixture rows | P3 (ops) | Only with separate approval; hashes retained today |
+| Non-fixture production customer smoke credential | P1 (ops) | Blocked until a dedicated non-fixture test user is provisioned |
 | Distributed rate limits (Redis/WAF) | P2 | In-memory per process today |
 | Per-admin hashed credentials + MFA | P2 | Shared admin password MVP |
 | Signup rate limit | P2 | Open signup still unthrottled |
@@ -86,9 +89,9 @@ Core customer, admin, and WexPay QR backends are real (DB-backed, server-priced,
 
 ## Risk level
 
-**Medium → Low for pilot launch**, assuming:
+**Low for pilot launch**, assuming:
 
-- Cloudflare Access on admin  
+- Cloudflare Access on admin (verified challenge still active post-disable)  
 - Forbidden env vars unset  
 - `WEXPAY_PAYTR_ENABLE_API=false` until pilot  
-- Production DB fixture audit completed
+- Production fixture accounts disabled (completed)

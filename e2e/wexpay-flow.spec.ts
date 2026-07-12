@@ -6,7 +6,7 @@ test.describe.serial("wexpay flow journey", () => {
 
   test("licensed org opens WexPay operator surface", async ({ page }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
-    test.skip(!fixtures.licensedOrgId, "licensed org fixture required");
+    test.skip(!fixtures.fixturesReady || !fixtures.licensedOrgId, fixtures.setupError ?? "licensed org fixture required");
 
     await loginCustomer(page, fixtures.licensedCustomerEmail, customerPassword());
     await page.goto(`/apps/wexpay?organizationId=${fixtures.licensedOrgId}`);
@@ -17,6 +17,7 @@ test.describe.serial("wexpay flow journey", () => {
 
   test("inactive license shows access denial without leaking operator UI", async ({ page }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
+    test.skip(!fixtures.fixturesReady || !fixtures.customerOrgId, fixtures.setupError ?? "customer fixture required");
     const deniedOrgId = fixtures.inactiveWexPayOrgId ?? fixtures.demoOrgId;
     test.skip(!deniedOrgId, "no inactive/demo org fixture");
 
