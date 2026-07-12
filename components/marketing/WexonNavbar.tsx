@@ -103,9 +103,13 @@ export default function WexonNavbar({ transparent = false, preApplicationBar = f
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
+  // Close the mobile menu on route change. Adjusting state during render
+  // (React's documented pattern) avoids a synchronous setState-in-effect.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
+    if (menuOpen) setMenuOpen(false);
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
