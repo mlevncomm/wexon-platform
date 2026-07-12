@@ -20,16 +20,7 @@ export default function QrLanding({
   onCallWaiter: () => void;
 }) {
   return (
-    <div className={`relative flex min-h-[100dvh] flex-col overflow-hidden pb-10 pt-6 sm:pt-10 ${qrFrame}`}>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-16 top-8 h-48 w-48 rounded-full bg-emerald-200/40 blur-3xl md:h-64 md:w-64"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-10 top-40 h-40 w-40 rounded-full bg-lime-200/35 blur-3xl md:top-24 md:h-56 md:w-56"
-      />
-
+    <div className={`relative flex min-h-[100dvh] flex-col pb-10 pt-6 sm:pt-10 ${qrFrame}`}>
       <header className="relative z-10 text-center md:mx-auto md:max-w-2xl">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700/90 sm:text-[11px]">
           WexPay · Masa siparişi
