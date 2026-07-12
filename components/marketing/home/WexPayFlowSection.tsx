@@ -118,8 +118,8 @@ export default function WexPayFlowSection() {
         <div className="pb-6 lg:pb-0">
           <PhoneMockup />
           <div className="mt-10 flex justify-center lg:mt-12">
-            <Button href="/demo/wexpay/customer" variant="onDark" withArrow className="bg-slate-950 text-white hover:bg-slate-800">
-              QR müşteri demosunu aç
+            <Button href="/demo-request?product=wexpay" variant="onDark" withArrow className="bg-slate-950 text-white hover:bg-slate-800">
+              QR müşteri deneyimi için başvur
             </Button>
           </div>
         </div>

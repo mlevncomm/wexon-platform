@@ -254,11 +254,11 @@ export default function WexPayPage() {
                     <Button href="/demo-request?product=wexpay" variant="primary" withArrow>
                       Demo Talep Et
                     </Button>
-                    <Button href="/demo/wexpay/business" variant="secondary">
-                      İşletme Panelini Gör
+                    <Button href="/book-demo" variant="secondary">
+                      Randevu Al
                     </Button>
-                    <Button href="/demo/wexpay/customer" variant="ghost" className="text-emerald-700 hover:bg-emerald-50">
-                      QR Müşteri Deneyimi
+                    <Button href="/products/wexpay#pricing" variant="ghost" className="text-emerald-700 hover:bg-emerald-50">
+                      Paketleri İncele
                     </Button>
                   </div>
                 </div>
@@ -371,8 +371,8 @@ export default function WexPayPage() {
                 )}
               </div>
               <div className="mt-8">
-                <Button href="/demo/wexpay/customer" variant="primary" withArrow>
-                  QR Müşteri Demosunu Gör
+                <Button href="/demo-request?product=wexpay" variant="primary" withArrow>
+                  QR Müşteri Deneyimi İçin Başvur
                 </Button>
               </div>
             </div>
@@ -550,7 +550,7 @@ export default function WexPayPage() {
               <div className="pointer-events-none absolute inset-0 wx-grid-overlay opacity-80" />
               <div className="relative z-10 mx-auto max-w-2xl">
                 <Badge tone="onDark" dot>
-                  WexPay Demo
+                  WexPay Pilot
                 </Badge>
                 <h2 className="mt-6 text-3xl font-black tracking-[-0.02em] text-white sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
                   Restoranınız için WexPay&apos;i{" "}
@@ -569,8 +569,8 @@ export default function WexPayPage() {
                   <Button href="/book-demo" variant="onDarkGhost" size="lg" fullWidth className="lg:w-auto">
                     Randevu Al
                   </Button>
-                  <Button href="/demo/wexpay/business" variant="onDarkGhost" size="lg" fullWidth className="lg:w-auto">
-                    İşletme Panelini Gör
+                  <Button href="/login?next=%2Fapps%2Fwexpay" variant="onDarkGhost" size="lg" fullWidth className="lg:w-auto">
+                    Giriş Yap
                   </Button>
                 </div>
               </div>

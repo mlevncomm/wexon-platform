@@ -77,16 +77,16 @@ function SuccessPanel({
       {mode === "demo" ? (
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
           <Link
-            href="/demo/wexpay?source=links"
+            href="/book-demo"
             className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-600"
           >
-            WexPay Demo Dene
+            Randevu Al
           </Link>
           <Link
-            href="/links"
+            href="/products/wexpay"
             className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
           >
-            Bağlantılara Dön
+            WexPay&apos;i İncele
           </Link>
         </div>
       ) : null}

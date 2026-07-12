@@ -32,7 +32,6 @@ export const adminCommandRoutes = [
     keywords: "",
   })),
   { label: "Yeni müşteri oluştur", href: "/admin/organizations", group: "Hızlı işlem", keywords: "organizasyon ekle" },
-  { label: "WexPay demo (sandbox)", href: "/demo/wexpay/business", group: "Önizleme", keywords: "demo sandbox" },
   { label: "Müşteri paneli", href: "/dashboard", group: "Önizleme", keywords: "core müşteri organizationId" },
   { label: "WexPay operasyon", href: "/apps/wexpay", group: "Önizleme", keywords: "wexpay organizationId" },
   { label: "Ana site", href: "/", group: "Önizleme", keywords: "marketing" },

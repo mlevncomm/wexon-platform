@@ -4,11 +4,11 @@ test.describe.serial("public journey", () => {
   test("homepage renders brand and primary CTA", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText("Wexon").first()).toBeVisible();
-    await expect(page.getByRole("link", { name: /WexPay demosunu aç|Demo talep et/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /WexPay için başvur|Demo talep et|WexPay'i incele/i }).first()).toBeVisible();
   });
 
-  test("product and demo routes render without closed-site copy", async ({ page }) => {
-    for (const path of ["/products/wexpay", "/products/wexhotel", "/products/wexb2b", "/links", "/demo-request", "/demo/wexpay/business"]) {
+  test("product and lead routes render without closed-site copy", async ({ page }) => {
+    for (const path of ["/products/wexpay", "/products/wexhotel", "/products/wexb2b", "/links", "/demo-request", "/book-demo"]) {
       await page.goto(path);
       await expect(page.locator("body")).not.toContainText(/site kapalı|coming soon only/i);
       await expect(page.locator("main, body").first()).toBeVisible();
@@ -70,6 +70,6 @@ test.describe.serial("public journey", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await expect(page.getByRole("link", { name: "Wexon", exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: /Demo|WexPay demosunu aç|Ön başvuru/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Demo|WexPay için başvur|Ön başvuru|WexPay'i incele/i }).first()).toBeVisible();
   });
 });

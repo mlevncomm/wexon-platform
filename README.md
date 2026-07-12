@@ -20,7 +20,8 @@ Bu karar `lib/wexon-core-access.ts` icinde merkezilesir. Urun uygulamalari dogru
 - Wexon Core Customer Portal: `/dashboard/*`
 - Wexon Admin Portal: `/admin/*`
 - WexPay Product App: `/apps/wexpay/*`
-- WexPay Demo APIs: `/api/wexpay/demo/*`
+- WexPay Public QR: `/wexpay/t/[qrCode]`
+- Demo talebi / randevu: `/demo-request`, `/book-demo`
 - WexHotel ve WexB2B: su an katalog/roadmap seviyesinde
 
 ## Core Domain

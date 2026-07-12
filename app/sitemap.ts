@@ -5,9 +5,6 @@ const SITE_URL = "https://www.wexon.dev";
 const routes: Array<{ path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"] }> = [
   { path: "/", priority: 1, changeFrequency: "weekly" },
   { path: "/products/wexpay", priority: 0.95, changeFrequency: "weekly" },
-  { path: "/demo/wexpay", priority: 0.9, changeFrequency: "weekly" },
-  { path: "/demo/wexpay/business", priority: 0.85, changeFrequency: "weekly" },
-  { path: "/demo/wexpay/customer", priority: 0.85, changeFrequency: "weekly" },
   { path: "/products/wexhotel", priority: 0.65, changeFrequency: "monthly" },
   { path: "/products/wexb2b", priority: 0.65, changeFrequency: "monthly" },
   { path: "/about", priority: 0.6, changeFrequency: "monthly" },

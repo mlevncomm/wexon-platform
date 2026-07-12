@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { AdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { logoutAdminAction } from "@/lib/wexon-admin-auth-actions";
-import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl, publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
+import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl, publicUrl } from "@/lib/wexon/urls";
 
 type MenuSection = {
   title: string;
@@ -70,7 +70,6 @@ export default function WexonAdminProfileMenu({
     {
       title: "Hızlı geçiş",
       items: [
-        { label: "WexPay demo (sandbox)", href: resolveNavigationHref("/demo/wexpay/business") },
         { label: "Müşteri paneli", href: coreNavigationUrl("/dashboard") },
         { label: "WexPay operasyon", href: appNavigationUrl("/apps/wexpay") },
         { label: "Admin ayarları", href: adminNavigationUrl("/admin/settings") },

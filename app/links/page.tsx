@@ -19,19 +19,12 @@ type WexonLinkItem = {
 const WEXON_LINKS = {
   featured: [
     {
-      id: "wexpay-demo",
-      label: "WexPay Demo",
-      description: "QR menü · sepet · sipariş · ödeme simülasyonu",
-      href: "/demo/wexpay?source=links",
-      icon: "play" as const,
-      featured: true,
-    },
-    {
       id: "demo-request",
       label: "Demo Talep Et",
-      description: "İşletmeniz için pilot demo planlayın",
-      href: "/demo-request",
+      description: "İşletmeniz için pilot erişim planlayın",
+      href: "/demo-request?product=wexpay&source=links",
       icon: "sparkles" as const,
+      featured: true,
     },
     {
       id: "wexpay-product",
@@ -39,6 +32,13 @@ const WEXON_LINKS = {
       description: "Özellikler, akış ve paketler",
       href: "/products/wexpay",
       icon: "credit-card" as const,
+    },
+    {
+      id: "book-demo",
+      label: "Randevu Al",
+      description: "Canlı inceleme için randevu planlayın",
+      href: "/book-demo",
+      icon: "play" as const,
     },
   ],
   secondary: [

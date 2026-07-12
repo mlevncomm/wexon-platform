@@ -45,22 +45,23 @@ export default async function DemoRequestPage({
           </section>
 
           <section className="mt-16 rounded-[32px] border border-slate-900 bg-slate-950 p-8 text-center text-white shadow-2xl shadow-slate-950/20 sm:p-12">
-            <h2 className="text-3xl font-black tracking-[-0.02em] sm:text-4xl">Hemen denemek ister misiniz?</h2>
+            <h2 className="text-3xl font-black tracking-[-0.02em] sm:text-4xl">Randevu ile canlı inceleme planlayın</h2>
             <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-slate-300">
-              Beklemeden WexPay mini demosunu açın; QR sipariş ve ödeme simülasyonunu 1 dakikada test edin.
+              WexPay müşteri ve işletme akışını gerçek tenant üzerinden birlikte inceleriz. Önce demo talebi oluşturun
+              veya doğrudan randevu alın.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
-                href="/demo/wexpay?source=links"
+                href="/book-demo"
                 className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white hover:bg-emerald-400"
               >
-                WexPay Demo Aç
+                Randevu Al
               </Link>
               <Link
-                href="/book-demo"
+                href="/products/wexpay"
                 className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-white hover:bg-white/10"
               >
-                Randevu Al
+                WexPay&apos;i İncele
               </Link>
             </div>
           </section>
@@ -74,7 +75,7 @@ export default async function DemoRequestPage({
           description="WexPay başta olmak üzere Wexon ekosistemindeki ürünleri işletmenize göre nasıl kullanabileceğinizi birlikte planlayalım."
           title="Demo görüşmesinde neleri gösteriyoruz?"
           items={[
-            "Canlı WexPay demo akışı",
+            "WexPay müşteri ve işletme akışı",
             "İşletme tipine göre ürün önerisi",
             "Paket ve lisans değerlendirmesi",
             "Kurulum yol haritası",

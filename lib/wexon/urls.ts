@@ -146,7 +146,6 @@ export const PUBLIC_MARKETING_PATHS = [
   "/gizlilik-politikasi",
   "/kullanim-sartlari",
   "/cerez-politikasi",
-  "/demo/wexpay",
 ] as const;
 
 export function isPublicMarketingPath(path: string) {

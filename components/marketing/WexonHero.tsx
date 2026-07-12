@@ -253,19 +253,19 @@ export default function WexonHero() {
 
           <div className="wx-hero-actions">
             <Link
-              href="/demo/wexpay/business"
+              href="/demo-request?product=wexpay"
               className="wx-tactile wx-hero-primary-cta wx-hero-cta-primary"
             >
-              WexPay demosunu aç
+              WexPay için başvur
               <span className="ml-2" aria-hidden>
                 →
               </span>
             </Link>
             <Link
-              href="/demo-request"
+              href="/products/wexpay"
               className="wx-tactile wx-hero-cta-secondary"
             >
-              Demo talep et
+              WexPay&apos;i incele
             </Link>
           </div>
 
