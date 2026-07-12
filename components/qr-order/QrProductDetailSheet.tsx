@@ -62,12 +62,12 @@ function ProductDetailForm({
   }
 
   return (
-    <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[32px] border border-white/70 bg-white shadow-2xl sm:rounded-[32px]">
+      <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[32px] border border-white/70 bg-white shadow-2xl sm:max-w-xl sm:rounded-[32px] md:max-w-2xl">
       <div className="relative shrink-0">
         <QrProductMedia
           name={product.name}
           imageUrl={product.imageUrl}
-          className="h-48 w-full rounded-none sm:rounded-t-[32px]"
+          className="h-44 w-full rounded-none sm:h-56 sm:rounded-t-[32px] md:h-64"
           large
         />
         <button

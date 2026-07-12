@@ -1,6 +1,6 @@
 "use client";
 
-import { qrCard, qrGhostCta, qrGlass, qrPrimaryCta } from "@/components/qr-order/qr-theme";
+import { qrCard, qrGhostCta, qrGlass, qrPrimaryCta, qrFrameNarrow } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
 import type { QrOrderSuccess, QrTableContext } from "@/lib/qr-order/types";
 
@@ -20,7 +20,7 @@ export default function QrCheckoutSuccess({
   onViewBill?: () => void;
 }) {
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-lg flex-col px-4 pb-10 pt-8">
+    <div className={`${qrFrameNarrow} flex min-h-[100dvh] flex-col pb-10 pt-8`}>
       <div className={`${qrGlass} rounded-[32px] p-7 text-center`}>
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-emerald-500 text-3xl font-black text-white shadow-[0_12px_28px_rgba(16,185,129,0.4)]">
           ✓

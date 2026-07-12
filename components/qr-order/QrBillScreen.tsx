@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import QrStatusBadge from "@/components/qr-order/QrStatusBadge";
-import { qrCard, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
+import { qrCard, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta, qrFrameNarrow } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
 import type { QrBillSnapshot, QrTableContext } from "@/lib/qr-order/types";
 
@@ -77,7 +77,7 @@ export default function QrBillScreen({
   }
 
   return (
-    <div className="mx-auto min-h-[100dvh] w-full max-w-lg px-4 pb-10 pt-4">
+    <div className={`${qrFrameNarrow} min-h-[100dvh] pb-10 pt-4`}>
       <header className="flex items-center gap-3">
         <button type="button" onClick={onBack} className={qrIconBtn} aria-label="Geri">
           ←

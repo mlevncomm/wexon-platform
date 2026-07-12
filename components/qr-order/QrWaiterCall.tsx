@@ -53,7 +53,7 @@ export default function QrWaiterCall({
       aria-modal="true"
       aria-labelledby="qr-waiter-title"
     >
-      <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur-md">
+      <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur-md sm:max-w-lg sm:p-6">
         {success ? (
           <div className="text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-2xl font-black text-white">
