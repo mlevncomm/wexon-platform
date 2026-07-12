@@ -729,29 +729,9 @@ input[type="password"]::-webkit-password-toggle-button {
   animation: wx-hero-proof-pulse 2.4s var(--wx-ease-soft) infinite;
 }
 
-.wx-hero-proof-icon {
-  animation: wx-hero-proof-icon 6s var(--wx-ease-soft) infinite;
-}
-
-.wx-hero-proof-shimmer {
-  background: linear-gradient(
-    110deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.06) 45%,
-    rgba(255, 255, 255, 0.14) 50%,
-    rgba(255, 255, 255, 0.06) 55%,
-    transparent 100%
-  );
-  animation: wx-hero-proof-shimmer 5.5s linear infinite;
-}
-
 @media (hover: hover) and (pointer: fine) {
   .wx-hero-proof:hover {
     animation-play-state: paused, paused;
-  }
-
-  .wx-hero-proof:hover .wx-hero-proof-shimmer {
-    animation-play-state: running;
   }
 }
 
@@ -761,22 +741,6 @@ input[type="password"]::-webkit-password-toggle-button {
 
 .wx-hero-marquee-track:hover {
   animation-play-state: paused;
-}
-
-.wx-hero-marquee-card {
-  transition:
-    border-color var(--wx-motion-normal) var(--wx-ease-out),
-    background-color var(--wx-motion-normal) var(--wx-ease-out),
-    box-shadow var(--wx-motion-normal) var(--wx-ease-out),
-    transform var(--wx-motion-normal) var(--wx-ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .wx-hero-marquee-card:hover {
-    transform: translate3d(0, -2px, 0);
-    border-color: rgba(52, 211, 153, 0.28);
-    background-color: rgba(255, 255, 255, 0.1);
-  }
 }
 
 .wx-card-enter:nth-child(2) {

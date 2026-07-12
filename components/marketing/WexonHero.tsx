@@ -11,7 +11,6 @@ const FLOATING_PROOFS: Array<{
   body: string;
   side: "left" | "right";
   badge: string;
-  tone: "emerald" | "sky" | "cyan" | "violet";
 }> = [
   {
     initials: "QR",
@@ -19,7 +18,6 @@ const FLOATING_PROOFS: Array<{
     body: "Restoran, masa, sipariş ve manuel tahsilat akışı pilot müşterilerle aktif.",
     side: "left",
     badge: "Pilot",
-    tone: "emerald",
   },
   {
     initials: "CO",
@@ -27,7 +25,6 @@ const FLOATING_PROOFS: Array<{
     body: "Ürün erişimi ödeme durumundan değil, lisans ve entitlement sisteminden gelir.",
     side: "left",
     badge: "Core",
-    tone: "sky",
   },
   {
     initials: "PS",
@@ -35,7 +32,6 @@ const FLOATING_PROOFS: Array<{
     body: "İlk production path manuel ödeme; PayTR pilot doğrulama sonrası açılır.",
     side: "right",
     badge: "Ödeme",
-    tone: "cyan",
   },
   {
     initials: "AU",
@@ -43,39 +39,8 @@ const FLOATING_PROOFS: Array<{
     body: "Kritik erişim, ödeme ve admin işlemleri izlenebilir şekilde kayıtlanır.",
     side: "right",
     badge: "Güvenli",
-    tone: "violet",
   },
 ];
-
-const PROOF_TONE_STYLES: Record<
-  (typeof FLOATING_PROOFS)[number]["tone"],
-  { icon: string; badge: string; glow: string; ring: string }
-> = {
-  emerald: {
-    icon: "bg-emerald-500/20 text-emerald-100 ring-emerald-400/30",
-    badge: "border-emerald-400/25 bg-emerald-500/12 text-emerald-200",
-    glow: "from-emerald-400/20 via-emerald-500/5 to-transparent",
-    ring: "shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_24px_60px_-28px_rgba(16,185,129,0.45)]",
-  },
-  sky: {
-    icon: "bg-sky-500/20 text-sky-100 ring-sky-400/30",
-    badge: "border-sky-400/25 bg-sky-500/12 text-sky-200",
-    glow: "from-sky-400/20 via-sky-500/5 to-transparent",
-    ring: "shadow-[0_0_0_1px_rgba(56,189,248,0.12),0_24px_60px_-28px_rgba(56,189,248,0.35)]",
-  },
-  cyan: {
-    icon: "bg-cyan-500/20 text-cyan-100 ring-cyan-400/30",
-    badge: "border-cyan-400/25 bg-cyan-500/12 text-cyan-200",
-    glow: "from-cyan-400/20 via-cyan-500/5 to-transparent",
-    ring: "shadow-[0_0_0_1px_rgba(34,211,238,0.12),0_24px_60px_-28px_rgba(34,211,238,0.35)]",
-  },
-  violet: {
-    icon: "bg-violet-500/20 text-violet-100 ring-violet-400/30",
-    badge: "border-violet-400/25 bg-violet-500/12 text-violet-200",
-    glow: "from-violet-400/20 via-violet-500/5 to-transparent",
-    ring: "shadow-[0_0_0_1px_rgba(167,139,250,0.12),0_24px_60px_-28px_rgba(167,139,250,0.35)]",
-  },
-};
 
 const SERVICE_CARDS = [
   {
@@ -84,7 +49,6 @@ const SERVICE_CARDS = [
     href: "/products/wexpay",
     initials: "WP",
     badge: "Pilot",
-    tone: "emerald",
   },
   {
     title: "Wexon Core",
@@ -92,7 +56,6 @@ const SERVICE_CARDS = [
     href: "/#core",
     initials: "CO",
     badge: "Core",
-    tone: "sky",
   },
   {
     title: "Customer Portal",
@@ -100,7 +63,6 @@ const SERVICE_CARDS = [
     href: "/login?next=%2Fdashboard",
     initials: "CP",
     badge: "Giriş",
-    tone: "violet",
   },
   {
     title: "PayTR",
@@ -108,7 +70,6 @@ const SERVICE_CARDS = [
     href: "/demo-request",
     initials: "PT",
     badge: "Yakında",
-    tone: "cyan",
   },
   {
     title: "WexHotel",
@@ -116,7 +77,6 @@ const SERVICE_CARDS = [
     href: "/products/wexhotel",
     initials: "WH",
     badge: "Roadmap",
-    tone: "indigo",
   },
   {
     title: "WexB2B",
@@ -124,45 +84,8 @@ const SERVICE_CARDS = [
     href: "/products/wexb2b",
     initials: "B2",
     badge: "Roadmap",
-    tone: "rose",
   },
 ] as const;
-
-const MARQUEE_TONE_STYLES: Record<
-  (typeof SERVICE_CARDS)[number]["tone"],
-  { icon: string; badge: string; glow: string }
-> = {
-  emerald: {
-    icon: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
-    badge: "border-emerald-400/20 bg-emerald-500/10 text-emerald-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(16,185,129,0.55)]",
-  },
-  sky: {
-    icon: "bg-sky-500/15 text-sky-200 ring-sky-400/25",
-    badge: "border-sky-400/20 bg-sky-500/10 text-sky-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(56,189,248,0.45)]",
-  },
-  violet: {
-    icon: "bg-violet-500/15 text-violet-200 ring-violet-400/25",
-    badge: "border-violet-400/20 bg-violet-500/10 text-violet-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(167,139,250,0.4)]",
-  },
-  cyan: {
-    icon: "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25",
-    badge: "border-cyan-400/20 bg-cyan-500/10 text-cyan-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(34,211,238,0.35)]",
-  },
-  indigo: {
-    icon: "bg-indigo-500/15 text-indigo-200 ring-indigo-400/25",
-    badge: "border-indigo-400/20 bg-indigo-500/10 text-indigo-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(129,140,248,0.35)]",
-  },
-  rose: {
-    icon: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
-    badge: "border-rose-400/20 bg-rose-500/10 text-rose-200",
-    glow: "group-hover:shadow-[0_18px_50px_-28px_rgba(251,113,133,0.35)]",
-  },
-};
 
 const TRUST_BADGES = ["WexPay Pilot", "Tek Core", "Manuel tahsilat", "Türkçe arayüz", "Tenant isolation"];
 
@@ -173,7 +96,6 @@ function FloatingProof({
   side,
   index,
   badge,
-  tone,
 }: {
   initials: string;
   title: string;
@@ -181,7 +103,6 @@ function FloatingProof({
   side: "left" | "right";
   index: number;
   badge: string;
-  tone: (typeof FLOATING_PROOFS)[number]["tone"];
 }) {
   const position =
     side === "left"
@@ -192,12 +113,11 @@ function FloatingProof({
         ? "right-[2%] top-[30%] 2xl:right-[4%]"
         : "right-[3%] top-[52%] 2xl:right-[6%]";
 
-  const styles = PROOF_TONE_STYLES[tone];
   const driftX = side === "left" ? "-8px" : "8px";
 
   return (
     <div
-      className={`wx-hero-proof group absolute hidden w-[15.5rem] 2xl:block ${position}`}
+      className={`wx-hero-proof group absolute hidden w-[16.5rem] 2xl:block ${position}`}
       style={
         {
           "--wx-proof-drift-x": driftX,
@@ -205,33 +125,21 @@ function FloatingProof({
         } as CSSProperties
       }
     >
-      <div
-        className={`relative overflow-hidden rounded-[22px] border border-white/12 bg-[linear-gradient(145deg,rgba(255,255,255,0.14)_0%,rgba(255,255,255,0.04)_52%,rgba(255,255,255,0.02)_100%)] p-4 backdrop-blur-2xl transition-transform duration-500 group-hover:-translate-y-1 ${styles.ring}`}
-      >
-        <div
-          className={`pointer-events-none absolute inset-0 bg-gradient-to-br opacity-80 ${styles.glow}`}
-          aria-hidden
-        />
-        <div className="wx-hero-proof-shimmer pointer-events-none absolute inset-0 opacity-40" aria-hidden />
-
-        <div className="relative flex items-start gap-3">
-          <span
-            className={`wx-hero-proof-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[11px] font-black ring-1 ${styles.icon}`}
-          >
+      <article className="relative overflow-hidden rounded-[18px] border border-white/10 bg-[#0b2819] p-[18px] shadow-[0_16px_40px_-20px_rgba(0,0,0,0.7)] transition duration-300 group-hover:-translate-y-1 group-hover:border-emerald-400/30">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.07] to-transparent" />
+        <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-emerald-400/10 blur-2xl transition-opacity duration-300 group-hover:bg-emerald-400/20" />
+        <div className="relative flex items-start justify-between gap-2">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-[11px] font-black text-white shadow-lg shadow-emerald-500/25 ring-1 ring-white/20">
             {initials}
           </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-white">{title}</p>
-              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${styles.badge}`}>
-                <span className="wx-hero-proof-pulse h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-                {badge}
-              </span>
-            </div>
-            <p className="mt-2 text-xs font-medium leading-relaxed text-slate-300/95">{body}</p>
-          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-emerald-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" aria-hidden />
+            {badge}
+          </span>
         </div>
-      </div>
+        <h3 className="relative mt-3.5 text-[13px] font-bold leading-snug tracking-tight text-white">{title}</h3>
+        <p className="relative mt-1.5 text-[11px] font-medium leading-relaxed text-slate-400/90">{body}</p>
+      </article>
     </div>
   );
 }
@@ -242,48 +150,44 @@ function ServiceMarquee() {
   return (
     <div className="relative mt-10 w-full sm:mt-12 lg:mt-14">
       <div className="mb-5 flex items-center justify-center gap-3">
-        <span className="h-px w-10 bg-gradient-to-r from-transparent to-emerald-400/40" aria-hidden />
-        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-200/80">Platform katmanları</span>
-        <span className="h-px w-10 bg-gradient-to-l from-transparent to-emerald-400/40" aria-hidden />
+        <span className="h-px w-8 bg-gradient-to-r from-transparent to-white/15" aria-hidden />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          Platform katmanları
+        </span>
+        <span className="h-px w-8 bg-gradient-to-l from-transparent to-white/15" aria-hidden />
       </div>
 
-      <div className="relative left-1/2 w-screen max-w-none -translate-x-1/2 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
-        <div className="wx-hero-marquee-track flex w-max gap-3 px-3 py-1 sm:gap-4 sm:px-4">
-          {rows.map((card, index) => {
-            const tone = MARQUEE_TONE_STYLES[card.tone];
+      <div className="relative left-1/2 w-screen max-w-none -translate-x-1/2 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_8%,black_92%,transparent)]">
+        <div className="wx-hero-marquee-track flex w-max gap-3 px-3 py-1 sm:gap-3 sm:px-4">
+          {rows.map((card, index) => (
+            <Link
+              key={`${card.title}-${index}`}
+              href={resolveNavigationHref(card.href)}
+              prefetch={false}
+              className="wx-hero-marquee-card group relative flex w-[min(18rem,calc(100vw-2.5rem))] shrink-0 items-center gap-3 overflow-hidden rounded-[18px] border border-white/10 bg-[#0b2819] px-4 py-3.5 text-left shadow-[0_16px_40px_-20px_rgba(0,0,0,0.7)] transition duration-300 hover:-translate-y-1 hover:border-emerald-400/30 sm:w-[19rem]"
+            >
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.07] to-transparent" />
+              <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-emerald-400/10 blur-2xl transition-opacity duration-300 group-hover:bg-emerald-400/20" />
 
-            return (
-              <Link
-                key={`${card.title}-${index}`}
-                href={resolveNavigationHref(card.href)}
-                prefetch={false}
-                className={`wx-hero-marquee-card group flex w-[min(19rem,calc(100vw-2.5rem))] shrink-0 items-center gap-3.5 rounded-[22px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.11)_0%,rgba(255,255,255,0.04)_100%)] p-3.5 text-left backdrop-blur-xl sm:w-[20.5rem] sm:gap-4 sm:p-4 ${tone.glow}`}
-              >
-                <span
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-[11px] font-black ring-1 ${tone.icon}`}
-                >
-                  {card.initials}
-                </span>
+              <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-[11px] font-black text-white shadow-lg shadow-emerald-500/25 ring-1 ring-white/20">
+                {card.initials}
+              </span>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-black text-white sm:text-[15px]">{card.title}</p>
-                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${tone.badge}`}>
-                      {card.badge}
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs font-medium leading-relaxed text-slate-400">{card.body}</p>
+              <div className="relative min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-[13px] font-bold tracking-tight text-white">{card.title}</p>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200">
+                    {card.badge}
+                  </span>
                 </div>
+                <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400/90">{card.body}</p>
+              </div>
 
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-sm text-emerald-200 opacity-0 transition-all duration-300 group-hover:translate-x-0.5 group-hover:border-emerald-400/30 group-hover:bg-emerald-500/10 group-hover:opacity-100"
-                  aria-hidden
-                >
-                  →
-                </span>
-              </Link>
-            );
-          })}
+              <span className="relative shrink-0 text-[13px] text-slate-500 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-emerald-300" aria-hidden>
+                →
+              </span>
+            </Link>
+          ))}
         </div>
       </div>
     </div>
@@ -306,7 +210,15 @@ export default function WexonHero() {
       <div className="pointer-events-none absolute bottom-0 left-1/2 h-48 w-[760px] -translate-x-1/2 rounded-full bg-emerald-500/15 blur-[90px]" />
 
       {FLOATING_PROOFS.map((proof, index) => (
-        <FloatingProof key={proof.title} {...proof} index={index} />
+        <FloatingProof
+          key={proof.title}
+          initials={proof.initials}
+          title={proof.title}
+          body={proof.body}
+          side={proof.side}
+          badge={proof.badge}
+          index={index}
+        />
       ))}
 
       <div className="wx-hero-shell relative mx-auto flex w-full max-w-[1500px] flex-col">
