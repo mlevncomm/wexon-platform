@@ -24,6 +24,23 @@ const notificationTypeLabels: Record<string, string> = {
   MENU_UPDATED: "Menü",
 };
 
+function resolveNotificationBadge(notification: OperationsNotification) {
+  const title = notification.title ?? "";
+  if (title.includes("[ÖDEME TALEBİ]")) {
+    return { label: "Ödeme talebi", className: "border-amber-200 bg-amber-50 text-amber-900" };
+  }
+  if (title.includes("[GARSON ÇAĞRISI]")) {
+    return { label: "Garson", className: "border-sky-200 bg-sky-50 text-sky-900" };
+  }
+  if (notification.type === "ORDER_CREATED" || title.toLowerCase().includes("qr sipariş")) {
+    return { label: "QR sipariş", className: "border-emerald-200 bg-emerald-50 text-emerald-900" };
+  }
+  return {
+    label: notificationTypeLabels[notification.type] ?? "Olay",
+    className: "border-emerald-100 bg-white text-emerald-800",
+  };
+}
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
 }
@@ -258,7 +275,9 @@ function LiveEvents({ notifications }: { notifications: OperationsNotification[]
             <WexPayEmptyNotice>Henüz canlı olay bulunmuyor.</WexPayEmptyNotice>
           </div>
         )}
-        {notifications.map((notification) => (
+        {notifications.map((notification) => {
+          const badge = resolveNotificationBadge(notification);
+          return (
           <div
             key={notification.id}
             className={`min-w-0 rounded-[16px] border p-4 ${
@@ -269,8 +288,8 @@ function LiveEvents({ notifications }: { notifications: OperationsNotification[]
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="rounded-full border border-emerald-100 bg-white px-2.5 py-1 text-[11px] font-black text-emerald-800">
-                  {notificationTypeLabels[notification.type] ?? "Olay"}
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${badge.className}`}>
+                  {badge.label}
                 </span>
                 {!notification.isRead && (
                   <span className="rounded-full border border-emerald-200 bg-emerald-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white">
@@ -283,7 +302,8 @@ function LiveEvents({ notifications }: { notifications: OperationsNotification[]
             <p className="truncate text-sm font-black text-slate-900">{notification.title}</p>
             <p className="mt-1 line-clamp-2 text-sm font-medium leading-relaxed text-slate-600">{notification.message}</p>
           </div>
-        ))}
+          );
+        })}
       </div>
     </WexPayPanel>
   );

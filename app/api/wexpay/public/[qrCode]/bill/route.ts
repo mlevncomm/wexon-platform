@@ -7,6 +7,7 @@ import { getPublicTableBill } from "@/lib/wexpay-service";
 /**
  * PUBLIC QR table bill -> GET /api/wexpay/public/[qrCode]/bill
  * Session-scoped account snapshot for the diner payment screen.
+ * paymentAvailability reports staff-request vs online checkout (never charges here).
  */
 export async function GET(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
@@ -45,11 +46,28 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
       tableId: resolution.table.id,
     });
 
+    const onlineCheckoutEnabled = process.env.WEXPAY_PAYTR_ENABLE_API === "true";
+
     return Response.json({
       restaurant: { name: resolution.restaurant.name },
       branch: { id: resolution.branch.id, name: resolution.branch.name },
       table: { id: resolution.table.id, label: resolution.table.label, status: resolution.table.status },
-      bill,
+      session: {
+        open: !bill.empty,
+        tableStatus: resolution.table.status,
+      },
+      bill: {
+        ...bill,
+        subtotal: bill.totalAmount,
+        paid: bill.paidAmount,
+        remaining: bill.remainingAmount,
+      },
+      paymentAvailability: {
+        staffPaymentRequest: true,
+        onlineCheckout: onlineCheckoutEnabled,
+        /** Public bill UI still uses staff request; online charge requires /checkout + credentials. */
+        liveChargeFromThisEndpoint: false,
+      },
     });
   } catch (error) {
     return wexpayApiErrorResponse(error, {

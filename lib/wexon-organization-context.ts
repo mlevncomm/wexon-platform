@@ -5,6 +5,16 @@ import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl } from "@/lib/w
 export const ACTIVE_ORGANIZATION_COOKIE = "wexon_active_organization_id";
 export const ACTIVE_ORGANIZATION_HEADER = "x-wexon-active-organization-id";
 
+export async function clearActiveOrganizationCookie() {
+  const cookieStore = await cookies();
+  cookieStore.set(ACTIVE_ORGANIZATION_COOKIE, "", {
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    expires: new Date(0),
+  });
+}
+
 export type PlatformOrganizationSelector = DashboardOrganizationSelector;
 
 export async function readActiveOrganizationIdFromHeader() {

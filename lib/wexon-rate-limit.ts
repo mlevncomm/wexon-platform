@@ -6,6 +6,8 @@
  * rate limiting) before running multi-instance production traffic.
  */
 
+import { isE2eRateLimitRelaxAllowed } from "@/lib/wexon-production-guards";
+
 type RateLimitEntry = {
   count: number;
   resetAt: number;
@@ -63,8 +65,8 @@ export function checkRateLimit(key: string, config: RateLimitConfig): RateLimitR
 }
 
 export function enforceRateLimit(scope: string, identifier: string, config: RateLimitConfig): RateLimitResult {
-  // Local/preview E2E only — never enable in real production without explicit flag.
-  if (process.env.WEXON_E2E_RELAX_RATE_LIMIT === "true") {
+  // Local/test E2E only — ignored when NODE_ENV/VERCEL_ENV is production.
+  if (isE2eRateLimitRelaxAllowed()) {
     return { ok: true, remaining: config.limit, resetAt: Date.now() + config.windowMs };
   }
 

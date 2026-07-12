@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { loginCustomerAction } from "@/lib/wexon-customer-auth-actions";
+import { isCustomerDevLoginAllowed } from "@/lib/wexon-production-guards";
 import { publicUrl } from "@/lib/wexon/urls";
 
 export default async function DashboardLoginPage({
@@ -8,7 +9,7 @@ export default async function DashboardLoginPage({
   searchParams: Promise<{ next?: string; customerError?: string }>;
 }) {
   const { next, customerError } = await searchParams;
-  const showDevNotice = process.env.NODE_ENV !== "production";
+  const showDevNotice = isCustomerDevLoginAllowed();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-5 py-12 text-slate-950">
@@ -55,7 +56,7 @@ export default async function DashboardLoginPage({
             </button>
             {showDevNotice && (
               <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-900">
-                Development ortamında şifresi henüz belirlenmemiş kullanıcılar için geçici ortak şifre fallback olarak kullanılabilir.
+                Development ortamında şifresi henüz belirlenmemiş kullanıcılar için geçici ortak şifre fallback olarak kullanılabilir. Production&apos;da kapalıdır.
               </p>
             )}
             <Link href={publicUrl("/")} className="text-center text-sm font-bold text-slate-500 hover:text-slate-950">

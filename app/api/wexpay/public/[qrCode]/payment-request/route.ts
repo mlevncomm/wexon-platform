@@ -3,10 +3,14 @@ import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { readJsonBody, wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 import { createPublicTableAssistNotification } from "@/lib/wexpay-service";
+import { validatePublicNote } from "@/lib/wexpay-validation";
 
 /**
  * PUBLIC QR payment request -> POST /api/wexpay/public/[qrCode]/payment-request
- * Creates a TABLE_UPDATED notification with [ÖDEME TALEBİ] prefix (no migration).
+ *
+ * Creates a staff notification only — does NOT start a live PayTR/WexPay charge.
+ * Online checkout remains behind WEXPAY_PAYTR_ENABLE_API + merchant credentials
+ * on the dedicated /checkout route.
  */
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
@@ -43,7 +47,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
 
   try {
     const body = (parsed.body ?? {}) as { note?: unknown; mode?: unknown };
-    const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+    const note = validatePublicNote(body.note);
     const mode = typeof body.mode === "string" && body.mode.trim() ? body.mode.trim() : "full_bill";
 
     const result = await createPublicTableAssistNotification({
@@ -56,7 +60,16 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       ipAddress,
     });
 
-    return Response.json({ ok: true, id: result.id, title: result.title }, { status: 201 });
+    return Response.json(
+      {
+        ok: true,
+        id: result.id,
+        title: result.title,
+        charged: false,
+        message: "Ödeme talebi işletmeye iletildi. Canlı tahsilat başlatılmadı.",
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return wexpayApiErrorResponse(error, {
       organizationId: resolution.organizationId,

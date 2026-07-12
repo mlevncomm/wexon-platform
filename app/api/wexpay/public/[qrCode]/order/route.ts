@@ -1,20 +1,21 @@
 import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { readJsonBody, wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
+import {
+  getIdempotentResponse,
+  readIdempotencyKeyFromRequest,
+  storeIdempotentResponse,
+} from "@/lib/wexpay-public-idempotency";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 import { createPublicOrder } from "@/lib/wexpay-service";
-import { validateOrderItems } from "@/lib/wexpay-validation";
+import { validateOrderItems, validatePublicNote } from "@/lib/wexpay-validation";
 
 /**
- * PUBLIC QR order creation (Phase 2B scaffold) -> /api/wexpay/public/[qrCode]/order.
+ * PUBLIC QR order creation -> POST /api/wexpay/public/[qrCode]/order
  *
- * Unauthenticated diner endpoint. Resolves the owning tenant from the table
- * qrCode, requires Core WexPay access, then creates an order with a server-side
- * computed subtotal (client totals are never trusted). Audited as
- * `wexpay.order.created` with metadata source `public_qr`. This is a scaffold,
- * NOT a full PSP checkout. Future PSP redirect must use
- * `createPublicQrCheckoutSessionBoundary` from a dedicated checkout route — see
- * docs/wexpay-payment-provider-adapters.md.
+ * Unauthenticated diner endpoint. Resolves tenant from qrCode, requires Core
+ * WexPay access, creates an order with server-side subtotal (client money
+ * fields rejected). Optional Idempotency-Key reduces double-submit duplicates.
  */
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
@@ -61,13 +62,20 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
     return Response.json({ error: "Bu işletme şu anda QR sipariş kabul etmiyor.", reason: "access_closed" }, { status: 403 });
   }
 
+  const idempotencyKey = readIdempotencyKeyFromRequest(request);
+  const idempotencyScope = `qr-order:${resolution.table.id}`;
+  const cached = getIdempotentResponse(idempotencyScope, idempotencyKey);
+  if (cached) {
+    return Response.json(cached.body, { status: cached.status });
+  }
+
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;
 
   try {
     const body = (parsed.body ?? {}) as { items?: unknown; note?: unknown; receiptRequested?: unknown };
     const items = validateOrderItems(body.items);
-    const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+    const note = validatePublicNote(body.note);
     const receiptRequested = body.receiptRequested === true;
 
     const order = await createPublicOrder({
@@ -80,7 +88,18 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       ipAddress,
     });
 
-    return Response.json({ id: order.id, orderNo: order.orderNo, subtotal: Number(order.subtotal) }, { status: 201 });
+    const payload = {
+      orderId: order.id,
+      id: order.id,
+      orderNo: order.orderNo,
+      tableName: order.table?.label ?? resolution.table.label,
+      total: Number(order.subtotal),
+      subtotal: Number(order.subtotal),
+      status: String(order.status),
+    };
+
+    storeIdempotentResponse(idempotencyScope, idempotencyKey, 201, payload);
+    return Response.json(payload, { status: 201 });
   } catch (error) {
     return wexpayApiErrorResponse(error, {
       organizationId: resolution.organizationId,

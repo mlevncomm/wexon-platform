@@ -222,6 +222,9 @@ export function parseProductUpdate(formData: FormData) {
 
 export type OrderItemInput = { productId: string; quantity: number };
 
+export const PUBLIC_NOTE_MAX_LENGTH = 500;
+export const PUBLIC_ORDER_ITEMS_MAX = 50;
+
 const ORDER_STATUS_VALUES = Object.values(OrderStatus) as string[];
 const PAYMENT_STATUS_VALUES = Object.values(PaymentStatus) as string[];
 
@@ -231,6 +234,20 @@ function toQuantity(value: unknown): number {
     throw new WexPayValidationError("Ürün adedi 1-999 arasında bir tam sayı olmalıdır.");
   }
   return quantity;
+}
+
+/** Normalize and bound optional public notes (order / assist). */
+export function validatePublicNote(raw: unknown, label = "Not"): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string") {
+    throw new WexPayValidationError(`${label} geçersiz.`);
+  }
+  const note = raw.trim();
+  if (!note) return null;
+  if (note.length > PUBLIC_NOTE_MAX_LENGTH) {
+    throw new WexPayValidationError(`${label} en fazla ${PUBLIC_NOTE_MAX_LENGTH} karakter olabilir.`);
+  }
+  return note;
 }
 
 /** Accepts an array or a JSON string of `{ productId, quantity }` items. */
@@ -246,11 +263,18 @@ export function validateOrderItems(raw: unknown): OrderItemInput[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new WexPayValidationError("Siparişe en az bir ürün eklenmelidir.");
   }
+  if (value.length > PUBLIC_ORDER_ITEMS_MAX) {
+    throw new WexPayValidationError(`Siparişte en fazla ${PUBLIC_ORDER_ITEMS_MAX} kalem olabilir.`);
+  }
   return value.map((item) => {
     if (!item || typeof item !== "object") {
       throw new WexPayValidationError("Geçersiz sipariş kalemi.");
     }
-    const candidate = item as { productId?: unknown; quantity?: unknown };
+    const candidate = item as { productId?: unknown; quantity?: unknown; unitPrice?: unknown; price?: unknown };
+    // Reject client-supplied money fields — totals are always server-computed.
+    if ("unitPrice" in candidate || "price" in candidate || "total" in candidate || "lineTotal" in candidate) {
+      throw new WexPayValidationError("Fiyat alanı gönderilemez; tutar sunucuda hesaplanır.");
+    }
     if (typeof candidate.productId !== "string" || !candidate.productId.trim()) {
       throw new WexPayValidationError("Ürün seçimi geçersiz.");
     }
@@ -295,7 +319,7 @@ export function parseOrderCreate(formData: FormData) {
   return {
     branchId: requiredString(formData, "branchId", "Şube"),
     tableId: requiredString(formData, "tableId", "Masa"),
-    note: nullableString(formData, "note"),
+    note: validatePublicNote(formData.get("note")),
     items: validateOrderItems(formData.get("items")),
   };
 }
@@ -309,7 +333,7 @@ export function parseOrderCreatePayload(body: unknown) {
   return {
     branchId,
     tableId,
-    note: typeof data.note === "string" && data.note.trim() ? data.note.trim() : null,
+    note: validatePublicNote(data.note),
     items: validateOrderItems(data.items),
   };
 }
