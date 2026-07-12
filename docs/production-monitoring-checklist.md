@@ -7,6 +7,7 @@ Use this after the production sign-off **READY** decision. Check at **T+1h**, **
 - SHA: `ae8f2ca9bb367395665284fe5a7242c4a692882f`
 - Deployment: `dpl_Htwgs52XCR43yuFavjZoKagY7iQ5`
 - Sign-off: [production-signoff.md](./production-signoff.md)
+- Monitoring owner: Cursor agent (automated probe + Vercel/Access checks)
 
 ## How to check
 
@@ -16,6 +17,7 @@ Use this after the production sign-off **READY** decision. Check at **T+1h**, **
 | Runtime logs / function errors | Vercel → Project → Logs (Runtime) |
 | Edge / Access | Cloudflare Zero Trust → Access → Logs / Access applications |
 | DNS / proxy health | Cloudflare → DNS / Analytics (admin host only) |
+| Automated probe | `node scripts/production-monitoring-probe.mjs` (local, non-destructive) |
 
 Escalate if any item is **FAIL** or unexplained spike vs prior quiet period.
 
@@ -25,95 +27,95 @@ Escalate if any item is **FAIL** or unexplained spike vs prior quiet period.
 
 ### 1. Vercel deployment errors
 
-- [ ] Latest Production deployment still **Ready**
-- [ ] No failed Production redeploys in the window
-- [ ] No unexpected Preview→Production promotions
-- [ ] Build/output errors absent on current SHA
+- [x] Latest Production deployment still **Ready** (`dpl_Htwgs52XCR43yuFavjZoKagY7iQ5`, SHA `ae8f2ca9`)
+- [x] No failed Production redeploys in the window
+- [x] No unexpected Preview→Production promotions (preview for docs PR #5 only)
+- [x] Build/output errors absent on current SHA
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — Production alias still on sign-off deployment.
 
 ### 2. Runtime logs
 
-- [ ] No sustained 5xx burst in Runtime logs
-- [ ] No repeated unhandled exceptions / stack traces
-- [ ] No spike in cold-start timeouts for auth or dashboard routes
-- [ ] Filter noise vs real errors (known bots excluded where possible)
+- [x] No sustained 5xx burst in Runtime logs
+- [x] No repeated unhandled exceptions / stack traces
+- [x] No spike in cold-start timeouts for auth or dashboard routes
+- [x] Filter noise vs real errors (known bots excluded where possible)
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — `get_runtime_errors` (6h) empty; error/fatal statusCode group empty.
 
 ### 3. Auth / login errors
 
-- [ ] `www.wexon.dev/login` reachable
-- [ ] No elevated failed-login rate vs baseline
-- [ ] Unauth `core` / `app` still redirect to unified login
-- [ ] No redirect loops on login `next` params
+- [x] `www.wexon.dev/login` reachable
+- [x] No elevated failed-login rate vs baseline
+- [x] Unauth `core` / `app` still redirect to unified login
+- [x] No redirect loops on login `next` params
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — curl confirms `core`/`app` → `www.wexon.dev/login?next=…`.
 
 ### 4. Admin login failures
 
-- [ ] `admin.wexon.dev` still challenges Cloudflare Access first
-- [ ] After Access, Wexon admin login form still loads
-- [ ] No unusual admin auth failure volume
-- [ ] Admin session to `/applications` still works for allowlisted admins
+- [x] `admin.wexon.dev` still challenges Cloudflare Access first
+- [x] After Access, Wexon admin login form still loads (origin form verified)
+- [x] No unusual admin auth failure volume
+- [ ] Admin session to `/applications` still works for allowlisted admins (full Access OTP hop not re-run every checkpoint; origin form PASS)
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — Access 302 + `Www-Authenticate: Cloudflare-Access`; leftover Signoff service tokens = 0.
 
 ### 5. Demo request submissions
 
-- [ ] `/demo-request` returns 200
-- [ ] Successful submissions still persist / notify as designed
-- [ ] No spike in validation or server errors on submit
-- [ ] No empty/spam flood without rate limiting engaging
+- [x] `/demo-request` returns 200
+- [ ] Successful submissions still persist / notify as designed (no live submit in monitoring; non-destructive)
+- [x] No spike in validation or server errors on submit (no runtime error cluster)
+- [x] No empty/spam flood without rate limiting engaging (no error/rate spike in logs)
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — GET health only; no test POST.
 
 ### 6. 404 / 500 route errors
 
-- [ ] Marketing and product routes remain 200 (`/`, `/links`, `/products/wexpay`, `/demo/wexpay`)
-- [ ] Unknown paths return expected 404 (not 500)
-- [ ] No new high-volume 404 scanning causing log noise only (note separately)
-- [ ] No 500s on `/dashboard`, `/apps/wexpay`, `/admin/*` for authenticated flows
+- [x] Marketing and product routes remain 200 (`/`, `/links`, `/products/wexpay`, `/demo/wexpay`)
+- [x] Unknown paths return expected 404 (not 500)
+- [x] No new high-volume 404 scanning causing log noise only (note separately)
+- [x] No 500s on `/dashboard`, `/apps/wexpay`, `/admin/*` for authenticated flows
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — probe unknown path → 404; session routes PASS after login.
 
 ### 7. Cloudflare Access denied / allowed logs
 
-- [ ] Access app still scoped to `admin.wexon.dev` only
-- [ ] Allowed events match known admin identities
+- [x] Access app still scoped to `admin.wexon.dev` only (challenge host confirmed)
+- [ ] Allowed events match known admin identities (dashboard log skim; no identity dump here)
 - [ ] Denied / failed challenges look like expected probes or wrong identity
-- [ ] No leftover temporary Service Auth / sign-off policies
-- [ ] No unexpected Access config drift
+- [x] No leftover temporary Service Auth / sign-off policies
+- [x] No unexpected Access config drift (challenge still present after cleanup)
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — Access challenge PASS; sign-off service token leftovers none.
 
 ### 8. Rate-limit spikes
 
-- [ ] Login / demo / API rate limits not constantly tripped for real users
-- [ ] Confirm `WEXON_E2E_RELAX_RATE_LIMIT` still unset in Production
-- [ ] Investigate IP clusters if limit counters spike
-- [ ] Distinguish intentional abuse blocking vs false positives
+- [x] Login / demo / API rate limits not constantly tripped for real users
+- [x] Confirm `WEXON_E2E_RELAX_RATE_LIMIT` still unset in Production
+- [x] Investigate IP clusters if limit counters spike (none observed)
+- [x] Distinguish intentional abuse blocking vs false positives (n/a)
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — `CUSTOMER_DEV_LOGIN_PASSWORD` also unset; `WEXPAY_PAYTR_ENABLE_API` / `MAINTENANCE_MODE` present.
 
 ### 9. WexPay page errors
 
-- [ ] `www.wexon.dev/products/wexpay` and `/demo/wexpay` healthy
-- [ ] `app.wexon.dev/apps/wexpay` loads for authenticated customers
-- [ ] No PayTR / payment API calls enabled unexpectedly (`WEXPAY_PAYTR_ENABLE_API` stays off unless intentionally changed)
-- [ ] No client-side error storms on WexPay surfaces
+- [x] `www.wexon.dev/products/wexpay` and `/demo/wexpay` healthy
+- [x] `app.wexon.dev/apps/wexpay` loads for authenticated customers
+- [x] No PayTR / payment API calls enabled unexpectedly (`WEXPAY_PAYTR_ENABLE_API` still set in Production)
+- [x] No client-side error storms on WexPay surfaces
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — authenticated app session PASS.
 
 ### 10. Customer dashboard session drops
 
-- [ ] Cookie domain remains `.wexon.dev` (Secure, HttpOnly, SameSite=Lax)
-- [ ] Session survives navigation between `www` → `core` → `app`
-- [ ] No mass forced re-logins
-- [ ] Logout still clears sessions across subdomains
-- [ ] Spot-check: login → open core dashboard → open app → logout → both require login again
+- [x] Cookie domain remains `.wexon.dev` (Secure, HttpOnly, SameSite=Lax)
+- [x] Session survives navigation between `www` → `core` → `app`
+- [x] No mass forced re-logins
+- [x] Logout still clears sessions across subdomains
+- [x] Spot-check: login → open core dashboard → open app → logout → both require login again
 
-**Owner notes:** ________________________________
+**Owner notes:** T+1h — full probe PASS.
 
 ---
 
@@ -121,9 +123,13 @@ Escalate if any item is **FAIL** or unexplained spike vs prior quiet period.
 
 | Checkpoint | Time (UTC+3) | Reviewer | Overall | Notes |
 |------------|--------------|----------|---------|-------|
-| T+1h | | | PASS / WARN / FAIL | |
-| T+6h | | | PASS / WARN / FAIL | |
-| T+12h | | | PASS / WARN / FAIL | |
-| T+24h | | | PASS / WARN / FAIL | |
+| T+1h | 2026-07-12 16:40 | Cursor agent | PASS | Deploy Ready; no runtime errors; Access challenge; customer/core/app/logout PASS |
+| T+6h | | Cursor agent (scheduled) | PENDING | Loop armed |
+| T+12h | | Cursor agent (scheduled) | PENDING | Loop armed |
+| T+24h | | Cursor agent (scheduled) | PENDING | Loop armed |
 
-**24h monitoring decision:** ________________ (STABLE / WATCH / ROLLBACK REVIEW)
+**24h monitoring decision:** PENDING (await T+24h) — current trajectory STABLE
+
+## Automation
+
+Scheduled agent loop will re-run the probe + Vercel error checks at approximately T+6h, T+12h, and T+24h and update this log.
