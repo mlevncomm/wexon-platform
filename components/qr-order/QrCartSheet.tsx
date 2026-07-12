@@ -1,5 +1,6 @@
 "use client";
 
+import { qrCard, qrFrameNarrow, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
 import { describeSelectedOptions, lineTotal } from "@/lib/qr-order/pricing";
 import type { QrCartLine, QrOptionGroup, QrTableContext } from "@/lib/qr-order/types";
@@ -35,130 +36,131 @@ export default function QrCartSheet({
   );
 
   return (
-    <div className="mx-auto min-h-[100dvh] w-full max-w-lg px-4 pb-10 pt-4">
+    <div className={`${qrFrameNarrow} min-h-[100dvh] pb-10 pt-4`}>
       <header className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-200 text-sm font-bold"
-          aria-label="Geri"
-        >
+        <button type="button" onClick={onBack} className={qrIconBtn} aria-label="Geri">
           ←
         </button>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Sepet</p>
-          <h1 className="truncate text-lg font-black text-slate-950">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Sepet</p>
+          <h1 className="truncate text-lg font-black tracking-tight text-slate-950 sm:text-xl">
             {context.restaurantName} · {context.tableLabel}
           </h1>
         </div>
       </header>
 
       {lines.length === 0 ? (
-        <div className="mt-8 rounded-[24px] border border-dashed border-slate-300 bg-white p-6 text-center">
-          <p className="text-sm font-bold text-slate-600">Sepetiniz boş.</p>
-          <button
-            type="button"
-            onClick={onBack}
-            className="mt-4 min-h-12 rounded-2xl bg-[#10b981] px-5 text-sm font-black text-white"
-          >
+        <div className={`${qrCard} mt-8 p-8 text-center sm:p-10`}>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-2xl text-emerald-700">
+            ◯
+          </div>
+          <p className="mt-4 text-base font-black text-slate-900">Sepetiniz boş</p>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Menüden ürün ekleyerek başlayın.</p>
+          <button type="button" onClick={onBack} className={`${qrPrimaryCta} mt-6`}>
             Menüye dön
           </button>
         </div>
       ) : (
-        <div className="mt-5 space-y-3">
-          {lines.map((line) => {
-            const groups = groupsByProductId[line.product.id] ?? [];
-            const optionText = describeSelectedOptions(line.selectedOptions, groups);
-            return (
-              <div key={line.key} className="rounded-[22px] border border-slate-200 bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-slate-950">{line.product.name}</p>
-                    {optionText ? (
-                      <p className="mt-1 text-xs font-semibold text-slate-500">{optionText}</p>
-                    ) : null}
-                    {line.note ? (
-                      <p className="mt-1 text-xs font-medium text-slate-400">Not: {line.note}</p>
-                    ) : null}
+        <div className="mt-5 grid gap-3 md:grid-cols-[1.2fr_0.8fr] md:items-start md:gap-6">
+          <div className="space-y-3">
+            {lines.map((line) => {
+              const groups = groupsByProductId[line.product.id] ?? [];
+              const optionText = describeSelectedOptions(line.selectedOptions, groups);
+              return (
+                <div key={line.key} className={`${qrCard} p-4 sm:p-5`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-black text-slate-950 sm:text-base">{line.product.name}</p>
+                      {optionText ? (
+                        <p className="mt-1 text-xs font-semibold text-slate-500">{optionText}</p>
+                      ) : null}
+                      {line.note ? (
+                        <p className="mt-1 text-xs font-medium text-slate-400">Not: {line.note}</p>
+                      ) : null}
+                    </div>
+                    <p className="shrink-0 text-sm font-black tabular-nums text-slate-950 sm:text-base">
+                      {formatTry(lineTotal(line, groups))}
+                    </p>
                   </div>
-                  <p className="shrink-0 text-sm font-black text-slate-950">
-                    {formatTry(lineTotal(line, groups))}
-                  </p>
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+                  <div className="mt-3.5 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/80 p-1">
+                      <button
+                        type="button"
+                        onClick={() => onQuantityChange(line.key, line.quantity - 1)}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-white font-black shadow-sm"
+                        aria-label="Azalt"
+                      >
+                        -
+                      </button>
+                      <span className="w-6 text-center text-sm font-black">{line.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => onQuantityChange(line.key, line.quantity + 1)}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-white font-black shadow-sm"
+                        aria-label="Arttır"
+                      >
+                        +
+                      </button>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => onQuantityChange(line.key, line.quantity - 1)}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 font-black"
-                      aria-label="Azalt"
+                      onClick={() => onRemove(line.key)}
+                      className="min-h-11 px-2 text-xs font-bold text-rose-600"
                     >
-                      -
-                    </button>
-                    <span className="w-6 text-center text-sm font-black">{line.quantity}</span>
-                    <button
-                      type="button"
-                      onClick={() => onQuantityChange(line.key, line.quantity + 1)}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 font-black"
-                      aria-label="Arttır"
-                    >
-                      +
+                      Sil
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(line.key)}
-                    className="text-xs font-bold text-rose-600"
-                  >
-                    Sil
-                  </button>
                 </div>
-              </div>
-            );
-          })}
-
-          <label className="block rounded-[22px] border border-slate-200 bg-white p-4">
-            <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
-              Ek notunuz var mı?
-            </span>
-            <textarea
-              data-testid="qr-order-note"
-              value={generalNote}
-              onChange={(event) => onGeneralNoteChange(event.target.value)}
-              rows={3}
-              className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
-            />
-          </label>
-
-          <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between text-sm font-bold text-slate-600">
-              <span>Ara toplam</span>
-              <span data-testid="qr-cart-subtotal">{formatTry(subtotal)}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-base font-black text-slate-950">
-              <span>Toplam</span>
-              <span>{formatTry(subtotal)}</span>
-            </div>
-            <p className="mt-2 text-xs font-medium text-slate-400">
-              Sunucu tarafında katalog fiyatı üzerinden yeniden hesaplanır. Mock ekstralar nota yazılır.
-            </p>
+              );
+            })}
           </div>
 
-          {error ? (
-            <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700">
-              {error}
-            </p>
-          ) : null}
+          <div className="space-y-3 md:sticky md:top-6">
+            <label className={`${qrCard} block p-4 sm:p-5`}>
+              <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                Ek notunuz var mı?
+              </span>
+              <textarea
+                data-testid="qr-order-note"
+                value={generalNote}
+                onChange={(event) => onGeneralNoteChange(event.target.value)}
+                rows={3}
+                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+            </label>
 
-          <button
-            type="button"
-            data-testid="qr-submit-order"
-            onClick={onSubmit}
-            disabled={pending || lines.length === 0}
-            className="flex min-h-14 w-full items-center justify-center rounded-2xl bg-[#10b981] px-4 text-sm font-black text-white disabled:bg-slate-300"
-          >
-            {pending ? "Siparişiniz restorana iletiliyor..." : "Siparişi gönder"}
-          </button>
+            <div className={`${qrCard} p-4 sm:p-5`}>
+              <div className="flex items-center justify-between text-sm font-bold text-slate-600">
+                <span>Ara toplam</span>
+                <span data-testid="qr-cart-subtotal" className="tabular-nums">
+                  {formatTry(subtotal)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-lg font-black text-slate-950">
+                <span>Toplam</span>
+                <span className="tabular-nums">{formatTry(subtotal)}</span>
+              </div>
+              <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-400">
+                Tutar sunucuda katalog fiyatı üzerinden hesaplanır. Tercihler sipariş notuna yazılır.
+              </p>
+            </div>
+
+            {error ? (
+              <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
+                {error}
+              </p>
+            ) : null}
+
+            <button
+              type="button"
+              data-testid="qr-submit-order"
+              onClick={onSubmit}
+              disabled={pending || lines.length === 0}
+              className={qrPrimaryCta}
+            >
+              {pending ? "Siparişiniz restorana iletiliyor…" : "Siparişi gönder"}
+            </button>
+          </div>
         </div>
       )}
     </div>

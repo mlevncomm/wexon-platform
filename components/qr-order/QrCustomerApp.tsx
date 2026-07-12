@@ -137,7 +137,24 @@ export default function QrCustomerApp({
   }
 
   return (
-    <main className="min-h-[100dvh] bg-[#f6f8f7] text-slate-950">
+    <main className="relative isolate w-full min-h-[100dvh] flex-1 text-slate-950">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(165deg,#F6F8F5_0%,#ECFDF5_38%,#FAFAF7_100%)]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed -left-24 top-0 -z-10 h-[28rem] w-[28rem] rounded-full bg-emerald-200/45 blur-3xl sm:h-[36rem] sm:w-[36rem]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed -right-20 top-32 -z-10 h-[24rem] w-[24rem] rounded-full bg-lime-200/40 blur-3xl sm:top-16 sm:h-[32rem] sm:w-[32rem]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed bottom-0 left-1/3 -z-10 h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-sky-100/50 blur-3xl"
+      />
+
       {view === "landing" ? (
         <QrLanding
           context={context}
@@ -185,7 +202,11 @@ export default function QrCustomerApp({
           order={success}
           onBackHome={() => {
             setSuccess(null);
-            setView("landing");
+            setView("menu");
+          }}
+          onViewBill={() => {
+            setSuccess(null);
+            setView("bill");
           }}
           onCallWaiter={() => setWaiterOpen(true)}
         />
