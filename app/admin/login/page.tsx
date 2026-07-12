@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AdminPasswordField from "@/app/admin/login/AdminPasswordField";
 import { loginAdminAction } from "@/lib/wexon-admin-auth-actions";
+import { isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
 import { publicUrl } from "@/lib/wexon/urls";
 
 export default async function AdminLoginPage({
@@ -9,6 +10,7 @@ export default async function AdminLoginPage({
   searchParams: Promise<{ next?: string; adminError?: string }>;
 }) {
   const { next, adminError } = await searchParams;
+  const defaultNext = isWexonProductionDeployment() ? "/applications" : "/admin";
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-5 py-12 text-slate-950">
@@ -22,32 +24,32 @@ export default async function AdminLoginPage({
         </div>
 
         <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 sm:p-8">
-            <p className="text-sm leading-relaxed text-slate-600">Devam etmek için yetkili admin hesabınızla giriş yapın.</p>
-            {adminError && (
-              <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
-                {adminError}
-              </div>
-            )}
-            <form action={loginAdminAction} className="mt-6 grid gap-4">
-              <input type="hidden" name="next" value={next ?? "/applications"} />
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">E-posta</span>
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                />
-              </label>
-              <AdminPasswordField />
-              <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
-                Giriş yap
-              </button>
-              <Link href={publicUrl("/")} className="text-center text-sm font-bold text-slate-500 hover:text-slate-950">
-                Ana sayfaya dön
-              </Link>
-            </form>
-          </div>
+          <p className="text-sm leading-relaxed text-slate-600">Devam etmek için yetkili admin hesabınızla giriş yapın.</p>
+          {adminError && (
+            <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
+              {adminError}
+            </div>
+          )}
+          <form action={loginAdminAction} className="mt-6 grid gap-4">
+            <input type="hidden" name="next" value={next ?? defaultNext} />
+            <label className="block">
+              <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">E-posta</span>
+              <input
+                name="email"
+                type="email"
+                required
+                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              />
+            </label>
+            <AdminPasswordField />
+            <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
+              Giriş yap
+            </button>
+            <Link href={publicUrl("/")} className="text-center text-sm font-bold text-slate-500 hover:text-slate-950">
+              Ana sayfaya dön
+            </Link>
+          </form>
+        </div>
         <p className="mt-6 text-center text-xs font-semibold leading-relaxed text-slate-500">
           Bu ekran yalnızca Wexon iç kullanıcıları içindir.
         </p>

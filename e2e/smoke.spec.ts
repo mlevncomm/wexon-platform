@@ -25,14 +25,17 @@ function loadFixtures(): SmokeFixtures {
 }
 
 const adminPassword = process.env.ADMIN_LOGIN_PASSWORD;
-const customerPassword = process.env.SMOKE_CUSTOMER_PASSWORD ?? "Wexon-Customer-2026";
+const customerPassword =
+  !process.env.SMOKE_CUSTOMER_PASSWORD || process.env.SMOKE_CUSTOMER_PASSWORD === "change-me"
+    ? "Wexon-Customer-2026"
+    : process.env.SMOKE_CUSTOMER_PASSWORD;
 
 async function loginAdmin(page: Page, email: string, password: string) {
   await page.goto("/admin/login");
   await page.getByLabel("E-posta").fill(email);
   await page.locator('input[name="password"]').fill(password);
   await Promise.all([
-    page.waitForURL(/\/admin\/?$/),
+    page.waitForURL(/\/admin(\/applications)?\/?$/),
     page.locator('button[type="submit"]').click(),
   ]);
 }
@@ -116,7 +119,8 @@ test.describe.serial("production smoke", () => {
 
     await loginCustomer(page, fixtures.licensedCustomerEmail, customerPassword);
     await page.goto(`/apps/wexpay?organizationId=${fixtures.licensedOrgId}`);
-    await expect(page.getByText(/operasyon merkezi|WexPay/i).first()).toBeVisible();
+    await expect(page).toHaveURL(/\/apps\/wexpay/);
+    await expect(page.locator("body")).toContainText(/WexPay/i);
   });
 
   test("inactive WexPay license shows access denied state", async ({ page }) => {

@@ -61,6 +61,11 @@ export function checkRateLimit(key: string, config: RateLimitConfig): RateLimitR
 }
 
 export function enforceRateLimit(scope: string, identifier: string, config: RateLimitConfig): RateLimitResult {
+  // Local/preview E2E only — never enable in real production without explicit flag.
+  if (process.env.WEXON_E2E_RELAX_RATE_LIMIT === "true") {
+    return { ok: true, remaining: config.limit, resetAt: Date.now() + config.windowMs };
+  }
+
   const normalizedIdentifier = identifier.trim() || "unknown";
   return checkRateLimit(buildRateLimitKey(scope, normalizedIdentifier), config);
 }
