@@ -186,18 +186,18 @@ function FloatingProof({
   const position =
     side === "left"
       ? index === 0
-        ? "left-[5%] top-[26%] xl:left-[7%]"
-        : "left-[7%] top-[47%] xl:left-[9%]"
+        ? "left-[2%] top-[28%] 2xl:left-[4%]"
+        : "left-[3%] top-[52%] 2xl:left-[6%]"
       : index === 2
-        ? "right-[5%] top-[28%] xl:right-[7%]"
-        : "right-[7%] top-[47%] xl:right-[9%]";
+        ? "right-[2%] top-[30%] 2xl:right-[4%]"
+        : "right-[3%] top-[52%] 2xl:right-[6%]";
 
   const styles = PROOF_TONE_STYLES[tone];
   const driftX = side === "left" ? "-8px" : "8px";
 
   return (
     <div
-      className={`wx-hero-proof group absolute hidden w-[min(17rem,calc(100vw-2rem))] xl:block xl:w-[272px] ${position}`}
+      className={`wx-hero-proof group absolute hidden w-[15.5rem] 2xl:block ${position}`}
       style={
         {
           "--wx-proof-drift-x": driftX,
@@ -240,7 +240,7 @@ function ServiceMarquee() {
   const rows = [...SERVICE_CARDS, ...SERVICE_CARDS];
 
   return (
-    <div className="relative mt-14 w-full sm:mt-16">
+    <div className="relative mt-10 w-full sm:mt-12 lg:mt-14">
       <div className="mb-5 flex items-center justify-center gap-3">
         <span className="h-px w-10 bg-gradient-to-r from-transparent to-emerald-400/40" aria-hidden />
         <span className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-200/80">Platform katmanları</span>
@@ -309,8 +309,8 @@ export default function WexonHero() {
         <FloatingProof key={proof.title} {...proof} index={index} />
       ))}
 
-      <div className="relative mx-auto flex min-h-[min(100svh,820px)] max-w-[1500px] flex-col px-5 pb-14 pt-[7.75rem] sm:min-h-[860px] sm:px-8 sm:pb-16 sm:pt-[9.25rem] lg:min-h-[900px] lg:px-12 lg:pt-[9.75rem] xl:px-16 2xl:px-20">
-        <div className="wx-hero-copy mx-auto w-full max-w-[min(1120px,100%)]">
+      <div className="wx-hero-shell relative mx-auto flex w-full max-w-[1500px] flex-col">
+        <div className="wx-hero-copy mx-auto w-full">
           <span className="wx-hero-eyebrow">
             <span className="wx-hero-eyebrow-dot" aria-hidden />
             <span>WexPay Pilot Launch</span>

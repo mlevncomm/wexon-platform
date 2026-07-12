@@ -257,12 +257,57 @@ input[type="password"]::-webkit-password-toggle-button {
   }
 }
 
+.wx-hero-shell {
+  min-height: min(100svh, 44rem);
+  padding:
+    calc(6.5rem + env(safe-area-inset-top, 0px))
+    clamp(1.15rem, 3.2vw, 4.5rem)
+    clamp(2.5rem, 5vh, 4rem);
+}
+
+@media (min-width: 640px) {
+  .wx-hero-shell {
+    min-height: min(100svh, 52rem);
+    padding-top: calc(7.75rem + env(safe-area-inset-top, 0px));
+  }
+}
+
+@media (min-width: 1024px) {
+  .wx-hero-shell {
+    min-height: min(100svh, 56rem);
+    padding-top: calc(8.5rem + env(safe-area-inset-top, 0px));
+  }
+}
+
 .wx-hero-copy {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: min(42rem, 100%);
+  margin-inline: auto;
   text-align: center;
-  padding-top: clamp(0.75rem, 2.2vh, 1.75rem);
+  padding-block: clamp(0.5rem, 2vh, 1.5rem);
+}
+
+@media (min-width: 768px) {
+  .wx-hero-copy {
+    max-width: min(52rem, 100%);
+  }
+}
+
+@media (min-width: 1280px) {
+  .wx-hero-copy {
+    max-width: min(56rem, 100%);
+  }
+}
+
+@media (min-width: 1536px) {
+  .wx-hero-copy {
+    max-width: min(44rem, 100%);
+  }
 }
 
 .wx-hero-eyebrow {
@@ -271,26 +316,20 @@ input[type="password"]::-webkit-password-toggle-button {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem 0.55rem;
-  padding: 0.15rem 0;
+  gap: 0.4rem 0.5rem;
+  padding: 0.15rem 0.25rem;
   font-family: var(--font-sans);
-  font-size: 0.75rem;
+  font-size: clamp(0.6875rem, 0.2vw + 0.64rem, 0.8125rem);
   font-weight: 600;
   font-variation-settings: "wght" 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: rgba(186, 230, 211, 0.9);
-}
-
-@media (min-width: 640px) {
-  .wx-hero-eyebrow {
-    font-size: 0.8125rem;
-    gap: 0.5rem 0.65rem;
-  }
 }
 
 .wx-hero-eyebrow-dot {
   width: 0.4rem;
   height: 0.4rem;
+  flex-shrink: 0;
   border-radius: 999px;
   background: #34d399;
   box-shadow: 0 0 12px rgba(52, 211, 153, 0.85);
@@ -303,14 +342,14 @@ input[type="password"]::-webkit-password-toggle-button {
 }
 
 .wx-hero-headline {
-  margin-top: 1.65rem;
+  margin-top: clamp(1rem, 2.4vh, 1.75rem);
   width: 100%;
   font-family: var(--font-sans);
-  font-size: clamp(1.95rem, 4.6vw + 0.25rem, 4.1rem);
+  font-size: clamp(1.7rem, 3.8vw + 0.55rem, 3.75rem);
   font-weight: 800;
   font-variation-settings: "wght" 800;
-  line-height: 1.08;
-  letter-spacing: -0.034em;
+  line-height: 1.12;
+  letter-spacing: -0.032em;
   text-wrap: balance;
   color: #fff;
   text-shadow:
@@ -320,8 +359,7 @@ input[type="password"]::-webkit-password-toggle-button {
 
 @media (min-width: 640px) {
   .wx-hero-headline {
-    margin-top: 2rem;
-    line-height: 1.05;
+    line-height: 1.08;
     letter-spacing: -0.03em;
   }
 }
@@ -330,26 +368,26 @@ input[type="password"]::-webkit-password-toggle-button {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: clamp(0.75rem, 3vw, 1.75rem);
-  margin-bottom: 0.35em;
+  gap: clamp(0.5rem, 2.5vw, 1.5rem);
+  margin-bottom: 0.28em;
 }
 
 .wx-hero-headline-band-line {
   flex: 1 1 0;
   height: 1px;
-  min-width: 1.5rem;
+  min-width: 0.75rem;
   background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.45) 50%, transparent);
 }
 
 .wx-hero-headline-lead {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  max-width: 100%;
   font-family: var(--font-sans);
-  font-size: clamp(0.78rem, 1.35vw + 0.35rem, 1rem);
+  font-size: clamp(0.7rem, 0.9vw + 0.5rem, 0.92rem);
   font-weight: 600;
   font-variation-settings: "wght" 600;
-  letter-spacing: 0.22em;
+  letter-spacing: clamp(0.12em, 0.35vw, 0.2em);
   text-transform: uppercase;
-  white-space: nowrap;
   color: rgba(209, 250, 229, 0.88);
 }
 
@@ -359,15 +397,14 @@ input[type="password"]::-webkit-password-toggle-button {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  column-gap: 0.28em;
-  row-gap: 0.14em;
+  column-gap: 0.2em;
+  row-gap: 0.12em;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 900px) {
   .wx-hero-headline-track {
     flex-wrap: nowrap;
-    justify-content: center;
-    column-gap: 0.32em;
+    column-gap: 0.28em;
   }
 }
 
@@ -375,7 +412,12 @@ input[type="password"]::-webkit-password-toggle-button {
   font-weight: 600;
   font-variation-settings: "wght" 620;
   color: rgba(255, 255, 255, 0.9);
-  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .wx-hero-headline-soft {
+    white-space: nowrap;
+  }
 }
 
 .wx-hero-headline-em {
@@ -404,55 +446,49 @@ input[type="password"]::-webkit-password-toggle-button {
 }
 
 .wx-hero-subcopy {
-  margin-top: 1.65rem;
-  max-width: 40rem;
+  margin-top: clamp(1rem, 2.2vh, 1.65rem);
+  max-width: min(36rem, 100%);
+  padding-inline: 0.25rem;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
+  font-size: clamp(0.9rem, 0.35vw + 0.82rem, 1.0625rem);
   font-weight: 500;
   font-variation-settings: "wght" 500;
-  line-height: 1.75;
+  line-height: 1.7;
   letter-spacing: -0.01em;
   color: rgba(203, 213, 225, 0.92);
   text-wrap: pretty;
 }
 
-@media (min-width: 640px) {
-  .wx-hero-subcopy {
-    margin-top: 1.85rem;
-    font-size: 1.0625rem;
-    line-height: 1.8;
-  }
-}
-
 .wx-hero-actions {
-  margin-top: 2rem;
+  margin-top: clamp(1.25rem, 2.8vh, 2rem);
   display: flex;
   width: 100%;
-  max-width: 28rem;
+  max-width: 22rem;
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.7rem;
 }
 
 @media (min-width: 640px) {
   .wx-hero-actions {
     max-width: none;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.85rem;
+    gap: 0.8rem;
   }
 }
 
 .wx-hero-cta-primary,
 .wx-hero-cta-secondary {
   display: inline-flex;
-  min-height: 3.25rem;
+  min-height: 3rem;
   width: 100%;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  padding: 0.9rem 1.65rem;
+  padding: 0.85rem 1.4rem;
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 800;
@@ -464,7 +500,9 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-hero-cta-primary,
   .wx-hero-cta-secondary {
     width: auto;
-    min-width: 12.5rem;
+    min-width: 11.5rem;
+    min-height: 3.15rem;
+    padding: 0.9rem 1.55rem;
   }
 }
 
@@ -483,22 +521,23 @@ input[type="password"]::-webkit-password-toggle-button {
 }
 
 .wx-hero-trust {
-  margin-top: 1.65rem;
+  margin-top: clamp(1rem, 2vh, 1.5rem);
   display: flex;
   width: 100%;
+  max-width: 40rem;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .wx-hero-trust-pill {
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   background: rgba(255, 255, 255, 0.05);
-  padding: 0.42rem 0.85rem;
+  padding: 0.38rem 0.75rem;
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
+  font-size: clamp(0.625rem, 0.2vw + 0.58rem, 0.75rem);
   font-weight: 700;
   font-variation-settings: "wght" 700;
   letter-spacing: 0.01em;
@@ -506,20 +545,14 @@ input[type="password"]::-webkit-password-toggle-button {
   backdrop-filter: blur(12px);
 }
 
-@media (min-width: 640px) {
-  .wx-hero-trust-pill {
-    font-size: 0.75rem;
-    padding: 0.45rem 0.95rem;
-  }
-}
-
 .wx-hero-footnote {
-  margin-top: 1.75rem;
+  margin-top: clamp(1.15rem, 2.2vh, 1.6rem);
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.85rem;
-  padding-top: 1.25rem;
+  gap: 0.65rem 0.85rem;
+  padding-top: 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-family: var(--font-sans);
   font-size: 0.6875rem;
@@ -584,8 +617,8 @@ input[type="password"]::-webkit-password-toggle-button {
   display: inline-grid;
   align-items: center;
   justify-items: center;
-  min-height: 1.42em;
-  padding: 0.08em 0.52em 0.12em;
+  min-height: 1.35em;
+  padding: 0.06em 0.4em 0.1em;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background:
@@ -596,6 +629,13 @@ input[type="password"]::-webkit-password-toggle-button {
     0 0 36px -10px rgba(16, 185, 129, 0.65);
   backdrop-filter: blur(14px);
   overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .wx-hero-word-chip-surface {
+    min-height: 1.42em;
+    padding: 0.08em 0.52em 0.12em;
+  }
 }
 
 .wx-hero-word-chip-measure,
