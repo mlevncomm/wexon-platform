@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
 import { NAV_LINKS } from "@/lib/wexon-mock-data";
 import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
+
+function readScrollY() {
+  if (typeof window === "undefined") return 0;
+  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+}
 
 function WexonBrand({ overDark }: { overDark: boolean }) {
   return (
@@ -93,8 +99,13 @@ interface WexonNavbarProps {
 }
 
 export default function WexonNavbar({ transparent = false, preApplicationBar = false }: WexonNavbarProps) {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -107,28 +118,63 @@ export default function WexonNavbar({ transparent = false, preApplicationBar = f
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let frame = 0;
-    let lastScrolled = window.scrollY > 16;
+
+    const syncScrolled = () => {
+      setScrolled(readScrollY() > 16);
+    };
 
     const onScroll = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        const nextScrolled = window.scrollY > 16;
-        if (nextScrolled !== lastScrolled) {
-          lastScrolled = nextScrolled;
-          setScrolled(nextScrolled);
-        }
+        syncScrolled();
       });
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
+    // Scroll + route restore can lag behind mount (App Router back / bfcache).
+    syncScrolled();
+    const timeoutIds = [0, 50, 150, 400].map((ms) => window.setTimeout(syncScrolled, ms));
+    const rafId = window.requestAnimationFrame(syncScrolled);
+
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    document.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    window.addEventListener("pageshow", syncScrolled);
+    window.addEventListener("popstate", syncScrolled);
+    window.visualViewport?.addEventListener("scroll", onScroll, { passive: true });
+    window.visualViewport?.addEventListener("resize", syncScrolled);
+
+    // Independent of scroll events: top sentinel leaves the viewport ⇒ scrolled.
+    const sentinel = document.createElement("div");
+    sentinel.setAttribute("data-wx-nav-scroll-sentinel", "");
+    sentinel.setAttribute("aria-hidden", "true");
+    sentinel.style.cssText =
+      "position:absolute;top:0;left:0;width:1px;height:1px;pointer-events:none;opacity:0;z-index:-1";
+    document.body.prepend(sentinel);
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+        setScrolled(!entry.isIntersecting);
+      },
+      { root: null, threshold: 0, rootMargin: "-16px 0px 0px 0px" },
+    );
+    io.observe(sentinel);
+
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", onScroll);
+      window.cancelAnimationFrame(rafId);
+      timeoutIds.forEach((id) => window.clearTimeout(id));
+      window.removeEventListener("scroll", onScroll, true);
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("pageshow", syncScrolled);
+      window.removeEventListener("popstate", syncScrolled);
+      window.visualViewport?.removeEventListener("scroll", onScroll);
+      window.visualViewport?.removeEventListener("resize", syncScrolled);
+      io.disconnect();
+      sentinel.remove();
     };
-  }, []);
+  }, [pathname]);
 
   const overDark = transparent && !scrolled;
   const lightMobileChrome = menuOpen;
@@ -158,7 +204,7 @@ export default function WexonNavbar({ transparent = false, preApplicationBar = f
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-50 overflow-hidden transition-all duration-300 ease-out ${headerSurfaceClass} ${headerShapeClass}`}
+      className={`fixed inset-x-0 top-0 z-50 overflow-x-clip transition-all duration-300 ease-out ${headerSurfaceClass} ${headerShapeClass}`}
     >
       {preApplicationBar && <PreApplicationTopBar overDark={overDark && !lightMobileChrome} />}
 
