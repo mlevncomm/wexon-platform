@@ -70,6 +70,7 @@ interface Order {
 interface Payment {
   id: string;
   amount: number;
+  tipAmount?: number;
   status: PaymentStatus;
   apiStatus: string;
   provider: string;
@@ -79,6 +80,35 @@ interface Payment {
   time: string;
   table: string;
   orderNumber: string | null;
+}
+
+interface DemoLicenseInfo {
+  plan: {
+    id: string;
+    key: string;
+    name: string;
+    description: string | null;
+    billingInterval: string;
+    billingIntervalLabel: string;
+  };
+  license: {
+    id: string;
+    status: string;
+    statusLabel: string;
+    licenseType: string;
+    startsAt: string;
+    endsAt: string | null;
+    renewalAt: string | null;
+  };
+  virtualPos: { connected: boolean; label: string };
+  usage: Array<{
+    key: string;
+    label: string;
+    used: number;
+    limit: number | null;
+    unlimited: boolean;
+    displayLimit: string;
+  }>;
 }
 
 interface RestaurantTable {
@@ -228,6 +258,7 @@ interface ApiOrder {
 interface ApiPayment {
   id: string;
   amount: number;
+  tipAmount?: number;
   status: string;
   provider: string | null;
   transactionId: string | null;
@@ -241,6 +272,18 @@ interface ApiPayment {
     id: string;
     orderNumber: string;
   } | null;
+}
+
+interface ApiSettingsResponse {
+  restaurant: { id: string; name: string; slug: string };
+  branch: { id: string; name: string; slug: string; address: string | null };
+  organization: { id: string; name: string; phone: string | null; email: string | null };
+  operations: {
+    serviceFeeRate: number;
+    qrOrderEnabled: boolean;
+    qrPaymentEnabled: boolean;
+    receiptRequestEnabled: boolean;
+  };
 }
 
 interface ApiTable {
@@ -291,20 +334,6 @@ const tabs: { label: string; value: BusinessTab }[] = [
   { label: "Ayarlar", value: "ayarlar" },
 ];
 
-const overviewMetrics = [
-  { label: "Bugünkü toplam ödeme", value: "18.740 TL", detail: "124 işlem" },
-  { label: "Aktif masalar", value: "14", detail: "75 masa limitinden" },
-  { label: "Fiş talepleri", value: "5", detail: "Panelden işlem bekliyor" },
-  { label: "Ortalama adisyon", value: "420 TL", detail: "Bugünkü ortalama" },
-];
-
-const topProducts = [
-  { name: "Izgara Tavuk", count: "32 satış", amount: "12.480 TL" },
-  { name: "Avokado Tost", count: "24 satış", amount: "7.440 TL" },
-  { name: "Türk Kahvesi", count: "41 satış", amount: "3.690 TL" },
-  { name: "San Sebastian", count: "18 satış", amount: "3.960 TL" },
-];
-
 const apiOrderStatusMap: Record<ApiOrderStatus, OrderStatus> = {
   NEW: "Yeni",
   PREPARING: "Hazırlanıyor",
@@ -347,236 +376,18 @@ function mapNotificationType(type: string) {
   return type;
 }
 
-const initialOrders: Order[] = [
-  {
-    id: "WX-1248",
-    orderNumber: "WX-1248",
-    table: "Masa 12",
-    time: "18:32",
-    status: "Yeni",
-    apiStatus: "NEW",
-    items: [
-      { name: "Izgara Tavuk", quantity: 2, price: 390 },
-      { name: "Limonata", quantity: 2, price: 95 },
-    ],
-    note: "Tavuklardan biri sossuz olsun.",
-    receiptRequested: true,
-  },
-  {
-    id: "WX-1247",
-    orderNumber: "WX-1247",
-    table: "Masa 03",
-    time: "18:28",
-    status: "Hazırlanıyor",
-    apiStatus: "PREPARING",
-    items: [
-      { name: "Mercimek Çorbası", quantity: 2, price: 120 },
-      { name: "Mevsim Salata", quantity: 1, price: 160 },
-    ],
-    note: "Çorbalar çok sıcak gelsin.",
-    receiptRequested: false,
-  },
-  {
-    id: "WX-1246",
-    orderNumber: "WX-1246",
-    table: "Masa 07",
-    time: "18:21",
-    status: "Yeni",
-    apiStatus: "NEW",
-    items: [
-      { name: "Avokado Tost", quantity: 1, price: 310 },
-      { name: "Türk Kahvesi", quantity: 2, price: 90 },
-    ],
-    note: "Kahveler az şekerli.",
-    receiptRequested: false,
-  },
-  {
-    id: "WX-1245",
-    orderNumber: "WX-1245",
-    table: "Masa 16",
-    time: "18:15",
-    status: "Servis Edildi",
-    apiStatus: "SERVED",
-    items: [
-      { name: "San Sebastian", quantity: 2, price: 220 },
-      { name: "Limonata", quantity: 1, price: 95 },
-    ],
-    note: "Tatlılar servis sonrası gelsin.",
-    receiptRequested: true,
-  },
-  {
-    id: "WX-1244",
-    orderNumber: "WX-1244",
-    table: "Masa 12",
-    time: "18:08",
-    status: "Hazırlanıyor",
-    apiStatus: "PREPARING",
-    items: [
-      { name: "Mercimek Çorbası", quantity: 1, price: 120 },
-      { name: "Izgara Tavuk", quantity: 1, price: 390 },
-    ],
-    note: "Ekmek ilave edilsin.",
-    receiptRequested: false,
-  },
-  {
-    id: "WX-1243",
-    orderNumber: "WX-1243",
-    table: "Masa 03",
-    time: "17:54",
-    status: "İptal Edildi",
-    apiStatus: "CANCELLED",
-    items: [{ name: "Türk Kahvesi", quantity: 3, price: 90 }],
-    note: "Müşteri masadan ayrıldı.",
-    receiptRequested: false,
-  },
-  {
-    id: "WX-1242",
-    orderNumber: "WX-1242",
-    table: "Masa 07",
-    time: "17:42",
-    status: "Servis Edildi",
-    apiStatus: "SERVED",
-    items: [
-      { name: "Avokado Tost", quantity: 2, price: 310 },
-      { name: "Mevsim Salata", quantity: 1, price: 160 },
-    ],
-    note: "Salata sosu ayrı gelsin.",
-    receiptRequested: true,
-  },
-  {
-    id: "WX-1241",
-    orderNumber: "WX-1241",
-    table: "Masa 16",
-    time: "17:36",
-    status: "Yeni",
-    apiStatus: "NEW",
-    items: [
-      { name: "San Sebastian", quantity: 1, price: 220 },
-      { name: "Türk Kahvesi", quantity: 2, price: 90 },
-      { name: "Limonata", quantity: 1, price: 95 },
-    ],
-    note: "Tatlı ortaya servis edilsin.",
-    receiptRequested: false,
-  },
-];
+const ADMIN_MENU_URL = "/api/wexpay/demo/menu?scope=admin";
 
-const initialCategories: MenuCategory[] = [
-  { id: "starters", name: "Başlangıçlar", active: true },
-  { id: "mains", name: "Ana Yemekler", active: true },
-  { id: "drinks", name: "İçecekler", active: true },
-  { id: "desserts", name: "Tatlılar", active: true },
-  { id: "breakfast", name: "Kahvaltı", active: true },
-];
-
-const emptyProductForm: ProductForm = {
-  name: "",
-  category: "Ana Yemekler",
-  description: "",
-  price: "",
-  imageUrl: "",
-  isPopular: false,
-};
-
-const initialProducts: Product[] = [
-  {
-    id: "soup",
-    name: "Mercimek Çorbası",
-    category: "Başlangıçlar",
-    description: "Günlük hazırlanmış sıcak başlangıç.",
-    price: 120,
-    active: true,
-    inStock: true,
+function createEmptyProductForm(categoryName = ""): ProductForm {
+  return {
+    name: "",
+    category: categoryName,
+    description: "",
+    price: "",
     imageUrl: "",
-    popular: true,
-  },
-  {
-    id: "grilled-chicken",
-    name: "Izgara Tavuk",
-    category: "Ana Yemekler",
-    description: "Mevsim garnitürü ve özel sos ile servis edilir.",
-    price: 390,
-    active: true,
-    inStock: true,
-    imageUrl: "",
-    popular: true,
-  },
-  {
-    id: "avocado-toast",
-    name: "Avokado Tost",
-    category: "Ana Yemekler",
-    description: "Ekşi mayalı ekmek, avokado ve taze yeşillikler.",
-    price: 310,
-    active: true,
-    inStock: true,
-    imageUrl: "",
-    popular: true,
-  },
-  {
-    id: "salad",
-    name: "Mevsim Salata",
-    category: "Başlangıçlar",
-    description: "Taze yeşillikler, domates, salatalık ve zeytinyağı.",
-    price: 160,
-    active: true,
-    inStock: true,
-  },
-  {
-    id: "coffee",
-    name: "Türk Kahvesi",
-    category: "İçecekler",
-    description: "Geleneksel fincanda, lokum ile servis edilir.",
-    price: 90,
-    active: true,
-    inStock: true,
-    popular: true,
-  },
-  {
-    id: "lemonade",
-    name: "Limonata",
-    category: "İçecekler",
-    description: "Ev yapımı ferah limonata.",
-    price: 95,
-    active: true,
-    inStock: true,
-  },
-  {
-    id: "san-sebastian",
-    name: "San Sebastian",
-    category: "Tatlılar",
-    description: "Kremamsı cheesecake, çikolata sos ile.",
-    price: 220,
-    active: true,
-    inStock: true,
-    popular: true,
-  },
-  {
-    id: "cheeseburger",
-    name: "Cheeseburger",
-    category: "Ana Yemekler",
-    description: "Dana köfte, cheddar ve özel burger sosu.",
-    price: 340,
-    active: true,
-    inStock: false,
-  },
-  {
-    id: "truffle-fries",
-    name: "Trüflü Patates",
-    category: "Başlangıçlar",
-    description: "Trüf aromalı çıtır patates ve parmesan.",
-    price: 210,
-    active: false,
-    inStock: true,
-  },
-  {
-    id: "iced-tea",
-    name: "Soğuk Çay",
-    category: "İçecekler",
-    description: "Şeftali aromalı soğuk çay.",
-    price: 85,
-    active: true,
-    inStock: true,
-  },
-];
+    isPopular: false,
+  };
+}
 
 function isToday(dateValue: string) {
   const date = new Date(dateValue);
@@ -646,6 +457,7 @@ function mapApiPayment(payment: ApiPayment): Payment {
   return {
     id: payment.id,
     amount: payment.amount,
+    tipAmount: Number(payment.tipAmount ?? 0),
     status: mapPaymentStatus(payment.status),
     apiStatus: payment.status,
     provider: payment.provider ?? "MOCK",
@@ -656,6 +468,28 @@ function mapApiPayment(payment: ApiPayment): Payment {
     table: payment.table.name,
     orderNumber: payment.order?.orderNumber ?? null,
   };
+}
+
+function mapApiSettings(data: ApiSettingsResponse): BusinessSettingsForm {
+  return {
+    restaurantName: data.restaurant.name,
+    branchName: data.branch.name,
+    phone: data.organization.phone ?? "",
+    address: data.branch.address ?? "",
+    serviceFeeRate: String(data.operations.serviceFeeRate),
+    qrOrderEnabled: data.operations.qrOrderEnabled,
+    qrPaymentEnabled: data.operations.qrPaymentEnabled,
+    receiptRequestEnabled: data.operations.receiptRequestEnabled,
+  };
+}
+
+function formatLicenseDate(value: string | null) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function mapApiTable(table: ApiTable): RestaurantTable {
@@ -700,40 +534,42 @@ function mapApiNotification(notification: ApiNotification): DemoNotification {
 
 export default function WexPayBusinessDemoPage() {
   const [activeTab, setActiveTab] = useState<BusinessTab>("genel");
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [selectedOrderId, setSelectedOrderId] = useState(initialOrders[0].id);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("Tümü");
-  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [paymentsError, setPaymentsError] = useState(false);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [selectedTableId, setSelectedTableId] = useState("");
   const [tableFilter, setTableFilter] = useState<TableFilter>("Tümü");
   const [tableSearch, setTableSearch] = useState("");
-  const [tablesLoading, setTablesLoading] = useState(false);
+  const [tablesLoading, setTablesLoading] = useState(true);
   const [tablesError, setTablesError] = useState(false);
   const [tableActionLoading, setTableActionLoading] = useState<"receipt" | "close" | null>(null);
-  const [categories, setCategories] = useState<MenuCategory[]>(initialCategories);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [selectedProductId, setSelectedProductId] = useState(initialProducts[0].id);
+  const [categories, setCategories] = useState<MenuCategory[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState("");
   const [productFilter, setProductFilter] = useState<ProductCategoryFilter>("Tümü");
   const [productSearch, setProductSearch] = useState("");
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
-  const [selectedCategoryId, setSelectedCategoryId] = useState(initialCategories[0].id);
-  const [menuLoading, setMenuLoading] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [menuLoading, setMenuLoading] = useState(true);
   const [menuError, setMenuError] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [notifications, setNotifications] = useState<DemoNotification[]>([]);
   const [notificationsError, setNotificationsError] = useState(false);
+  const [restaurantDisplayName, setRestaurantDisplayName] = useState("WexPay");
+  const [licenseInfo, setLicenseInfo] = useState<DemoLicenseInfo | null>(null);
   const [businessSettings, setBusinessSettings] = useState<BusinessSettingsForm>({
-    restaurantName: "Mavi Bahçe Restaurant",
-    branchName: "Merkez Şube",
-    phone: "+90 212 555 10 20",
-    address: "Bağdat Caddesi No: 128, Kadıköy / İstanbul",
-    serviceFeeRate: "10",
+    restaurantName: "",
+    branchName: "",
+    phone: "",
+    address: "",
+    serviceFeeRate: "0",
     qrOrderEnabled: true,
     qrPaymentEnabled: true,
     receiptRequestEnabled: true,
@@ -743,15 +579,19 @@ export default function WexPayBusinessDemoPage() {
     (order) => order.status === "Yeni" || order.status === "Hazırlanıyor",
   ).length;
   const successfulPayments = payments.filter((payment) => payment.status === "Başarılı");
-  const todayPaymentTotal = successfulPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const todayPaymentTotal = successfulPayments
+    .filter((payment) => isToday(payment.createdAt))
+    .reduce((sum, payment) => sum + payment.amount, 0);
   const receiptRequestCount = payments.filter((payment) => payment.receiptRequested).length;
   const activeTableCount = tables.filter((table) => table.status !== "Boş").length;
   const tableReceiptRequestCount = tables.filter((table) => table.receiptRequested).length;
 
-  async function loadOrdersData() {
+  async function loadOrdersData({ silent = false }: { silent?: boolean } = {}) {
     try {
-      setOrdersLoading(true);
-      setOrdersError(false);
+      if (!silent) {
+        setOrdersLoading(true);
+        setOrdersError(false);
+      }
 
       const response = await fetch("/api/wexpay/demo/orders");
       if (!response.ok) throw new Error("Siparişler alınamadı.");
@@ -760,10 +600,11 @@ export default function WexPayBusinessDemoPage() {
       const mappedOrders = data.orders.map(mapApiOrder);
       setOrders(mappedOrders);
       setSelectedOrderId((current) => mappedOrders.some((order) => order.id === current) ? current : mappedOrders[0]?.id ?? "");
+      if (silent) setOrdersError(false);
     } catch {
-      setOrdersError(true);
+      if (!silent) setOrdersError(true);
     } finally {
-      setOrdersLoading(false);
+      if (!silent) setOrdersLoading(false);
     }
   }
 
@@ -784,10 +625,12 @@ export default function WexPayBusinessDemoPage() {
     }
   }
 
-  async function loadTablesData({ notify = false }: { notify?: boolean } = {}) {
+  async function loadTablesData({ notify = false, silent = false }: { notify?: boolean; silent?: boolean } = {}) {
     try {
-      setTablesLoading(true);
-      setTablesError(false);
+      if (!silent) {
+        setTablesLoading(true);
+        setTablesError(false);
+      }
 
       const response = await fetch("/api/wexpay/demo/tables");
       if (!response.ok) throw new Error("Masa verileri alınamadı.");
@@ -798,12 +641,49 @@ export default function WexPayBusinessDemoPage() {
       setSelectedTableId((current) => mappedTables.some((table) => table.id === current) ? current : mappedTables[0]?.id ?? "");
 
       if (notify) showToast("success", "Masa verileri güncellendi.");
+      if (silent) setTablesError(false);
     } catch {
-      setTablesError(true);
+      if (!silent) setTablesError(true);
       if (notify) showToast("error", "İşlem sırasında bir sorun oluştu.");
     } finally {
-      setTablesLoading(false);
+      if (!silent) setTablesLoading(false);
     }
+  }
+
+  async function loadPaymentsData({
+    notify = false,
+    silent = false,
+  }: { notify?: boolean; silent?: boolean } = {}) {
+    try {
+      if (!silent) {
+        setPaymentsLoading(true);
+        setPaymentsError(false);
+      }
+
+      const response = await fetch("/api/wexpay/demo/payments");
+      if (!response.ok) throw new Error("Ödemeler alınamadı.");
+
+      const data = (await response.json()) as ApiPaymentsResponse;
+      setPayments(data.payments.map(mapApiPayment));
+      if (silent) setPaymentsError(false);
+
+      if (notify) await loadNotifications();
+      if (notify) showToast("success", "Ödemeler güncellendi.");
+    } catch {
+      if (!silent) setPaymentsError(true);
+      if (notify) showToast("error", "İşlem sırasında bir sorun oluştu.");
+    } finally {
+      if (!silent) setPaymentsLoading(false);
+    }
+  }
+
+  async function silentRefreshBoard() {
+    await Promise.all([
+      loadOrdersData({ silent: true }),
+      loadPaymentsData({ silent: true }),
+      loadTablesData({ silent: true }),
+      loadNotifications(),
+    ]);
   }
 
   function updateTableState(table: RestaurantTable) {
@@ -851,27 +731,6 @@ export default function WexPayBusinessDemoPage() {
     }
   }
 
-  async function loadPaymentsData({ notify = false }: { notify?: boolean } = {}) {
-    try {
-      setPaymentsLoading(true);
-      setPaymentsError(false);
-
-      const response = await fetch("/api/wexpay/demo/payments");
-      if (!response.ok) throw new Error("Ödemeler alınamadı.");
-
-      const data = (await response.json()) as ApiPaymentsResponse;
-      setPayments(data.payments.map(mapApiPayment));
-
-      if (notify) await loadNotifications();
-      if (notify) showToast("success", "Ödemeler güncellendi.");
-    } catch {
-      setPaymentsError(true);
-      if (notify) showToast("error", "İşlem sırasında bir sorun oluştu.");
-    } finally {
-      setPaymentsLoading(false);
-    }
-  }
-
   async function updateOrderStatus(orderId: string, status: OrderStatus) {
     const order = orders.find((item) => item.id === orderId);
     if (!order) return;
@@ -902,23 +761,57 @@ export default function WexPayBusinessDemoPage() {
     setBusinessSettings((current) => ({ ...current, [field]: value }));
   }
 
-  function saveBusinessSettings() {
-    const createdAt = new Date().toISOString();
+  async function saveBusinessSettings() {
+    try {
+      const response = await fetch("/api/wexpay/demo/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurantName: businessSettings.restaurantName,
+          branchName: businessSettings.branchName,
+          phone: businessSettings.phone,
+          address: businessSettings.address,
+          serviceFeeRate: Number(businessSettings.serviceFeeRate),
+          qrOrderEnabled: businessSettings.qrOrderEnabled,
+          qrPaymentEnabled: businessSettings.qrPaymentEnabled,
+          receiptRequestEnabled: businessSettings.receiptRequestEnabled,
+        }),
+      });
+      if (!response.ok) throw new Error("Ayarlar kaydedilemedi.");
 
-    setNotifications((current) => [
-      {
-        id: `local-settings-${Date.now()}`,
-        type: "SYSTEM",
-        typeLabel: "Sistem",
-        title: "İşletme ayarları güncellendi.",
-        message: "İşletme ayarları güncellendi.",
-        isRead: false,
-        createdAt,
-        time: formatOrderTime(createdAt),
-      },
-      ...current.slice(0, 19),
-    ]);
-    showToast("success", "İşletme ayarları kaydedildi.");
+      const data = (await response.json()) as ApiSettingsResponse;
+      setBusinessSettings(mapApiSettings(data));
+      setRestaurantDisplayName(data.restaurant.name);
+      await loadNotifications();
+      showToast("success", "İşletme ayarları kaydedildi.");
+    } catch {
+      showToast("error", "İşletme ayarları kaydedilirken bir sorun oluştu.");
+    }
+  }
+
+  async function loadSettingsData() {
+    try {
+      const response = await fetch("/api/wexpay/demo/settings");
+      if (!response.ok) throw new Error("Ayarlar alınamadı.");
+
+      const data = (await response.json()) as ApiSettingsResponse;
+      setBusinessSettings(mapApiSettings(data));
+      setRestaurantDisplayName(data.restaurant.name);
+    } catch {
+      showToast("error", "İşletme ayarları alınırken bir sorun oluştu.");
+    }
+  }
+
+  async function loadLicenseData() {
+    try {
+      const response = await fetch("/api/wexpay/demo/license");
+      if (!response.ok) throw new Error("Lisans alınamadı.");
+
+      const data = (await response.json()) as DemoLicenseInfo;
+      setLicenseInfo(data);
+    } catch {
+      showToast("error", "Lisans bilgileri alınırken bir sorun oluştu.");
+    }
   }
 
   async function resetDemoData() {
@@ -1047,8 +940,18 @@ export default function WexPayBusinessDemoPage() {
     void loadPaymentsFromApi();
     void loadTablesFromApi();
     void loadNotificationsFromApi();
+    void loadSettingsData();
+    void loadLicenseData();
+    void loadMenuData();
+
+    const pollId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void silentRefreshBoard();
+    }, 8000);
+
     return () => {
       cancelled = true;
+      window.clearInterval(pollId);
     };
   }, []);
 
@@ -1197,7 +1100,7 @@ export default function WexPayBusinessDemoPage() {
       try {
         setMenuLoading(true);
         setMenuError(false);
-        const response = await fetch("/api/wexpay/demo/menu");
+        const response = await fetch(ADMIN_MENU_URL);
         if (!response.ok) throw new Error("Menü alınamadı.");
         const data = (await response.json()) as ApiMenuResponse;
         const mapped = mapApiMenu(data);
@@ -1224,7 +1127,7 @@ export default function WexPayBusinessDemoPage() {
       setMenuLoading(true);
       setMenuError(false);
 
-      const response = await fetch("/api/wexpay/demo/menu");
+      const response = await fetch(ADMIN_MENU_URL);
       if (!response.ok) throw new Error("Menü alınamadı.");
 
       const data = (await response.json()) as ApiMenuResponse;
@@ -1250,7 +1153,7 @@ export default function WexPayBusinessDemoPage() {
         setMenuLoading(true);
         setMenuError(false);
 
-        const response = await fetch("/api/wexpay/demo/menu");
+        const response = await fetch(ADMIN_MENU_URL);
         if (!response.ok) throw new Error("Menü alınamadı.");
 
         const data = (await response.json()) as ApiMenuResponse;
@@ -1405,37 +1308,62 @@ export default function WexPayBusinessDemoPage() {
     }
   }
 
-  function updateCategory(categoryId: string, name: string) {
+  async function updateCategory(categoryId: string, name: string) {
     const trimmedName = name.trim();
     const category = categories.find((item) => item.id === categoryId);
     if (!category || !trimmedName) return;
 
-    const nextCategories = categories.map((item) =>
-      item.id === categoryId ? { ...item, name: trimmedName } : item,
-    );
-    const nextProducts = products.map((product) =>
-        product.categoryId === category.id || product.category === category.name
-          ? { ...product, category: trimmedName, categoryId: category.id }
-          : product,
-      );
-    setCategories(nextCategories);
-    setProducts(nextProducts);
-    if (productFilter === category.name) {
-      setProductFilter(trimmedName);
+    try {
+      const response = await fetch(`/api/wexpay/demo/categories/${categoryId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedName }),
+      });
+      if (!response.ok) throw new Error("Kategori güncellenemedi.");
+
+      if (productFilter === category.name) {
+        setProductFilter(trimmedName);
+      }
+      await loadNotifications();
+      showToast("success", "Kategori değişiklikleri kaydedildi.");
+      await loadMenuData();
+    } catch {
+      showToast("error", "İşlem sırasında bir sorun oluştu.");
     }
-    showToast("success", "Kategori değişiklikleri kaydedildi.");
   }
 
-  function toggleCategoryActive(categoryId: string) {
+  async function toggleCategoryActive(categoryId: string) {
     const category = categories.find((item) => item.id === categoryId);
     if (!category) return;
 
-    const nextCategories = categories.map((item) =>
-      item.id === categoryId ? { ...item, active: !item.active } : item,
-    );
-    setCategories(nextCategories);
-    showToast("success", "Kategori durumu güncellendi.");
+    try {
+      const response = await fetch(`/api/wexpay/demo/categories/${categoryId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !category.active }),
+      });
+      if (!response.ok) throw new Error("Kategori durumu güncellenemedi.");
+
+      await loadNotifications();
+      showToast("success", "Kategori durumu güncellendi.");
+      await loadMenuData();
+    } catch {
+      showToast("error", "İşlem sırasında bir sorun oluştu.");
+    }
   }
+
+  function markFirstReceiptPrinted() {
+    const table = tables.find((item) => item.receiptRequested);
+    if (!table) {
+      showToast("error", "Fiş talebi olan masa bulunamadı.");
+      return;
+    }
+    void markTableReceiptPrinted(table.id);
+  }
+
+  const packageStatusLabel = licenseInfo
+    ? `Paket durumu: ${licenseInfo.plan.name} / ${licenseInfo.plan.billingIntervalLabel} / ${licenseInfo.license.statusLabel}`
+    : "Paket durumu: yükleniyor...";
 
   return (
     <div className="min-h-screen bg-[#f6f8f7] text-slate-950">
@@ -1449,7 +1377,7 @@ export default function WexPayBusinessDemoPage() {
                 WexPay İşletme Paneli
               </span>
               <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-                Mavi Bahçe Restaurant operasyon merkezi
+                {restaurantDisplayName} operasyon merkezi
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
                 QR menü, sipariş, masa, ödeme, fiş talebi, rapor ve lisans yönetimini tek panelde
@@ -1457,7 +1385,7 @@ export default function WexPayBusinessDemoPage() {
               </p>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-              Paket durumu: WexPay Standard / Aylık / Aktif
+              {packageStatusLabel}
             </div>
           </div>
 
@@ -1483,12 +1411,14 @@ export default function WexPayBusinessDemoPage() {
       <main className="mx-auto w-full max-w-[1760px] px-4 py-5 sm:px-6 lg:px-8 2xl:px-10">
           {activeTab === "genel" && (
             <OverviewTab
+              orders={orders}
               pendingOrderCount={pendingOrderCount}
               todayPaymentTotal={todayPaymentTotal}
               activeTableCount={activeTableCount}
               receiptRequestCount={Math.max(receiptRequestCount, tableReceiptRequestCount)}
               notifications={notifications}
               notificationsError={notificationsError}
+              licenseInfo={licenseInfo}
               onRefreshNotifications={() => loadNotifications({ notify: true })}
             />
           )}
@@ -1554,7 +1484,7 @@ export default function WexPayBusinessDemoPage() {
               loading={paymentsLoading}
               hasError={paymentsError}
               onRefresh={() => loadPaymentsData({ notify: true })}
-              onReceiptPrinted={() => showToast("success", "Fiş yazdırıldı olarak işaretlendi.")}
+              onReceiptPrinted={markFirstReceiptPrinted}
             />
           )}
           {activeTab === "raporlar" && (
@@ -1568,12 +1498,7 @@ export default function WexPayBusinessDemoPage() {
               onRefresh={() => refreshReportsData({ notify: true })}
             />
           )}
-          {activeTab === "lisans" && (
-            <LicenseTab
-              usedTables={tables.length}
-              usedProducts={products.filter((product) => product.active).length}
-            />
-          )}
+          {activeTab === "lisans" && <LicenseTab licenseInfo={licenseInfo} />}
           {activeTab === "ayarlar" && (
             <SettingsTab
               settings={businessSettings}
@@ -1588,22 +1513,47 @@ export default function WexPayBusinessDemoPage() {
 }
 
 function OverviewTab({
+  orders,
   pendingOrderCount,
   todayPaymentTotal,
   activeTableCount,
   receiptRequestCount,
   notifications,
   notificationsError,
+  licenseInfo,
   onRefreshNotifications,
 }: {
+  orders: Order[];
   pendingOrderCount: number;
   todayPaymentTotal: number;
   activeTableCount: number;
   receiptRequestCount: number;
   notifications: DemoNotification[];
   notificationsError: boolean;
+  licenseInfo: DemoLicenseInfo | null;
   onRefreshNotifications: () => void;
 }) {
+  const topProducts = (() => {
+    const totals = new Map<string, { quantity: number; amount: number }>();
+    for (const order of orders) {
+      if (order.apiStatus === "CANCELLED") continue;
+      for (const item of order.items) {
+        const current = totals.get(item.name) ?? { quantity: 0, amount: 0 };
+        current.quantity += item.quantity;
+        current.amount += item.lineTotal ?? item.quantity * item.price;
+        totals.set(item.name, current);
+      }
+    }
+    return [...totals.entries()]
+      .map(([name, value]) => ({
+        name,
+        count: `${value.quantity} adet`,
+        amount: formatLira(value.amount),
+      }))
+      .sort((a, b) => Number.parseInt(b.count, 10) - Number.parseInt(a.count, 10))
+      .slice(0, 4);
+  })();
+
   const metrics = [
     {
       label: "Bugünkü toplam ödeme",
@@ -1625,12 +1575,11 @@ function OverviewTab({
       value: String(receiptRequestCount),
       detail: "Ödemelerden gelen talepler",
     },
-    overviewMetrics[3],
   ];
 
   return (
     <div className="flex flex-col gap-5">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
           <div key={metric.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold text-slate-500">{metric.label}</p>
@@ -1644,15 +1593,21 @@ function OverviewTab({
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-lg font-bold text-slate-950">En çok satılan ürünler</h2>
           <div className="space-y-3">
-            {topProducts.map((product) => (
-              <div key={product.name} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
-                <div>
-                  <p className="text-sm font-bold text-slate-950">{product.name}</p>
-                  <p className="text-xs text-slate-500">{product.count}</p>
-                </div>
-                <p className="text-sm font-bold text-slate-950">{product.amount}</p>
+            {topProducts.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600">
+                Henüz satılan ürün yok. QR siparişleri burada toplanır.
               </div>
-            ))}
+            ) : (
+              topProducts.map((product) => (
+                <div key={product.name} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                  <div>
+                    <p className="text-sm font-bold text-slate-950">{product.name}</p>
+                    <p className="text-xs text-slate-500">{product.count}</p>
+                  </div>
+                  <p className="text-sm font-bold text-slate-950">{product.amount}</p>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
@@ -1695,11 +1650,13 @@ function OverviewTab({
 
         <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
           <p className="text-xs font-semibold text-emerald-700">Paket durumu</p>
-          <h2 className="mt-3 text-2xl font-bold text-slate-950">WexPay Standard</h2>
+          <h2 className="mt-3 text-2xl font-bold text-slate-950">
+            {licenseInfo?.plan.name ?? "Yükleniyor..."}
+          </h2>
           <div className="mt-5 space-y-3 text-sm font-semibold text-slate-700">
-            <InfoRow label="Lisans tipi" value="Aylık" />
-            <InfoRow label="Durum" value="Aktif" />
-            <InfoRow label="Sanal POS" value="Bağlı" />
+            <InfoRow label="Lisans tipi" value={licenseInfo?.plan.billingIntervalLabel ?? "—"} />
+            <InfoRow label="Durum" value={licenseInfo?.license.statusLabel ?? "—"} />
+            <InfoRow label="Sanal POS" value={licenseInfo?.virtualPos.label ?? "—"} />
           </div>
         </section>
       </div>
@@ -2059,12 +2016,12 @@ function MenuProductsTab({
   onToggleAddProduct: () => void;
   onToggleAddCategory: () => void;
   onAddCategory: (name: string) => Promise<boolean>;
-  onUpdateCategory: (categoryId: string, name: string) => void;
-  onToggleCategoryActive: (categoryId: string) => void;
+  onUpdateCategory: (categoryId: string, name: string) => void | Promise<void>;
+  onToggleCategoryActive: (categoryId: string) => void | Promise<void>;
   onAddProduct: (form: ProductForm) => Promise<boolean>;
-  onUpdateProduct: (productId: string, form: ProductForm) => void;
-  onToggleActive: (productId: string) => void;
-  onToggleStock: (productId: string) => void;
+  onUpdateProduct: (productId: string, form: ProductForm) => void | Promise<void>;
+  onToggleActive: (productId: string) => void | Promise<void>;
+  onToggleStock: (productId: string) => void | Promise<void>;
 }) {
   const search = productSearch.trim().toLowerCase();
   const filteredProducts = products.filter((product) => {
@@ -2225,8 +2182,8 @@ function CategoryPanel({
   selectedCategoryId: string;
   onSelectCategory: (categoryId: string) => void;
   onToggleAddCategory: () => void;
-  onUpdateCategory: (categoryId: string, name: string) => void;
-  onToggleCategoryActive: (categoryId: string) => void;
+  onUpdateCategory: (categoryId: string, name: string) => void | Promise<void>;
+  onToggleCategoryActive: (categoryId: string) => void | Promise<void>;
 }) {
   const selectedCategory =
     categories.find((category) => category.id === selectedCategoryId) ?? categories[0];
@@ -2316,8 +2273,8 @@ function CategoryEditForm({
   onToggleCategoryActive,
 }: {
   category: MenuCategory;
-  onUpdateCategory: (categoryId: string, name: string) => void;
-  onToggleCategoryActive: (categoryId: string) => void;
+  onUpdateCategory: (categoryId: string, name: string) => void | Promise<void>;
+  onToggleCategoryActive: (categoryId: string) => void | Promise<void>;
 }) {
   const [name, setName] = useState(category.name);
 
@@ -2327,14 +2284,14 @@ function CategoryEditForm({
       <div className="mt-3 grid gap-2">
         <button
           type="button"
-          onClick={() => onUpdateCategory(category.id, name)}
+          onClick={() => void onUpdateCategory(category.id, name)}
           className="rounded-2xl bg-[#10b981] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
         >
           Kategori Değişikliklerini Kaydet
         </button>
         <button
           type="button"
-          onClick={() => onToggleCategoryActive(category.id)}
+          onClick={() => void onToggleCategoryActive(category.id)}
           className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-50"
         >
           {category.active ? "Pasife Al" : "Aktif Et"}
@@ -2351,7 +2308,9 @@ function ProductAddForm({
   categories: MenuCategory[];
   onAddProduct: (form: ProductForm) => Promise<boolean>;
 }) {
-  const [form, setForm] = useState<ProductForm>(emptyProductForm);
+  const [form, setForm] = useState<ProductForm>(() =>
+    createEmptyProductForm(categories[0]?.name ?? ""),
+  );
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -2397,7 +2356,7 @@ function ProductAddForm({
         type="button"
         onClick={async () => {
           const saved = await onAddProduct(form);
-          if (saved) setForm(emptyProductForm);
+          if (saved) setForm(createEmptyProductForm(categories[0]?.name ?? ""));
         }}
         className="mt-4 rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
       >
@@ -2999,6 +2958,9 @@ function PaymentsTab({
                 <span>Sağlayıcı: {payment.provider}</span>
                 <span>Fiş talebi: {payment.receiptRequested ? "Var" : "Yok"}</span>
                 <span>Durum: {payment.status}</span>
+                {(payment.tipAmount ?? 0) > 0 && (
+                  <span>Bahşiş: {formatLira(payment.tipAmount ?? 0)}</span>
+                )}
               </div>
             </div>
           ))}
@@ -3041,9 +3003,12 @@ function ReportsTab({
   onRefresh: () => void;
 }) {
   const successfulPayments = payments.filter((payment) => payment.status === "Başarılı");
-  const dailyRevenue = successfulPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const todaySuccessfulPayments = successfulPayments.filter((payment) => isToday(payment.createdAt));
+  const dailyRevenue = todaySuccessfulPayments.reduce((sum, payment) => sum + payment.amount, 0);
   const paymentSuccessRate = payments.length > 0 ? Math.round((successfulPayments.length / payments.length) * 100) : 0;
-  const averagePayment = successfulPayments.length > 0 ? dailyRevenue / successfulPayments.length : 0;
+  const averagePayment = successfulPayments.length > 0
+    ? successfulPayments.reduce((sum, payment) => sum + payment.amount, 0) / successfulPayments.length
+    : 0;
   const activeTables = tables.filter((table) => table.status !== "Boş").length;
   const activeProducts = products.filter((product) => product.active).length;
   const topProducts = orders
@@ -3073,7 +3038,7 @@ function ReportsTab({
     { label: "Ödendi", count: tables.filter((table) => table.status === "Ödendi").length },
   ];
   const reportCards = [
-    { title: "Günlük Ciro", value: formatLira(dailyRevenue), detail: "Başarılı ödemelerden hesaplandı" },
+    { title: "Günlük Ciro", value: formatLira(dailyRevenue), detail: "Bugünkü başarılı ödemelerden hesaplandı" },
     { title: "Toplam Sipariş", value: String(orders.length), detail: "Tüm sipariş kayıtları" },
     { title: "Ödeme Başarı Oranı", value: `%${paymentSuccessRate}`, detail: `${successfulPayments.length}/${payments.length || 0} başarılı ödeme` },
     { title: "Ortalama Ödeme", value: formatLira(Math.round(averagePayment)), detail: "Başarılı ödemeler ortalaması" },
@@ -3190,24 +3155,7 @@ function ReportBreakdown({ title, rows }: { title: string; rows: Array<{ label: 
   );
 }
 
-function LicenseTab({ usedTables, usedProducts }: { usedTables: number; usedProducts: number }) {
-  const packageRows = [
-    ["Paket", "WexPay Standard"],
-    ["Lisans tipi", "Aylık"],
-    ["Durum", "Aktif"],
-    ["Sanal POS", "Bağlı"],
-    ["Yenileme tarihi", "17 Haziran 2026"],
-  ];
-  const usageRows = [
-    ["Masa limiti", "75"],
-    ["Kullanılan masa", String(usedTables)],
-    ["Ürün limiti", "250"],
-    ["Kullanılan ürün", String(usedProducts)],
-    ["Personel limiti", "10"],
-    ["Kullanılan personel", "4"],
-    ["Şube limiti", "2"],
-    ["Kullanılan şube", "1"],
-  ];
+function LicenseTab({ licenseInfo }: { licenseInfo: DemoLicenseInfo | null }) {
   const packages = [
     ["Basic", "Küçük işletmeler için temel operasyon ve düşük limitler."],
     ["Standard", "Büyüyen işletmeler için daha yüksek limit ve gelişmiş takip."],
@@ -3215,16 +3163,35 @@ function LicenseTab({ usedTables, usedProducts }: { usedTables: number; usedProd
   ];
   const actions = ["Paketi Yükselt", "Faturaları Gör", "Sanal POS Ayarları"];
 
+  if (!licenseInfo) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-semibold text-slate-500">Lisans bilgileri yükleniyor...</p>
+      </div>
+    );
+  }
+
+  const packageRows = [
+    ["Paket", licenseInfo.plan.name],
+    ["Lisans tipi", licenseInfo.plan.billingIntervalLabel],
+    ["Durum", licenseInfo.license.statusLabel],
+    ["Sanal POS", licenseInfo.virtualPos.label],
+    ["Yenileme tarihi", formatLicenseDate(licenseInfo.license.renewalAt)],
+  ];
+
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold text-emerald-700">Aktif paket</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">WexPay Standard</h2>
+            <h2 className="mt-2 text-2xl font-bold text-slate-950">{licenseInfo.plan.name}</h2>
+            {licenseInfo.plan.description && (
+              <p className="mt-2 text-sm text-slate-500">{licenseInfo.plan.description}</p>
+            )}
           </div>
           <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-            Aktif
+            {licenseInfo.license.statusLabel}
           </span>
         </div>
         <div className="space-y-3">
@@ -3237,8 +3204,17 @@ function LicenseTab({ usedTables, usedProducts }: { usedTables: number; usedProd
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-5 text-xl font-bold text-slate-950">Kullanım limitleri</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {usageRows.map(([label, value]) => (
-            <InfoRow key={label} label={label} value={value} />
+          {licenseInfo.usage.length === 0 && (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500 sm:col-span-2">
+              Kullanım verisi bulunmuyor.
+            </p>
+          )}
+          {licenseInfo.usage.map((row) => (
+            <InfoRow
+              key={row.key}
+              label={row.label}
+              value={`${row.used} / ${row.displayLimit}`}
+            />
           ))}
         </div>
       </section>
@@ -3252,7 +3228,10 @@ function LicenseTab({ usedTables, usedProducts }: { usedTables: number; usedProd
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
-        <h2 className="mb-5 text-xl font-bold text-slate-950">Paket karşılaştırması</h2>
+        <h2 className="mb-2 text-xl font-bold text-slate-950">Paket seçenekleri (bilgi)</h2>
+        <p className="mb-5 text-sm text-slate-500">
+          Aşağıdaki metin bilgilendirme amaçlıdır; mevcut paket limitlerinizi yansıtmaz.
+        </p>
         <div className="grid gap-3 lg:grid-cols-3">
           {packages.map(([name, description]) => (
             <div key={name} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -3268,7 +3247,7 @@ function LicenseTab({ usedTables, usedProducts }: { usedTables: number; usedProd
           <div>
             <h2 className="text-xl font-bold text-slate-950">Lisans işlemleri</h2>
             <p className="mt-2 text-sm text-slate-500">
-              Bu alan Wexon Core lisans ve abonelik sistemiyle yönetilecektir.
+              Paket yükseltme ve faturalama Wexon Core üzerinden yönetilir. Bu demoda işlem yapılamaz.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -3297,7 +3276,7 @@ function SettingsTab({
 }: {
   settings: BusinessSettingsForm;
   onUpdateSettings: (field: keyof BusinessSettingsForm, value: string | boolean) => void;
-  onSaveSettings: () => void;
+  onSaveSettings: () => void | Promise<void>;
   onResetDemoData: () => void;
 }) {
   return (
@@ -3310,7 +3289,7 @@ function SettingsTab({
           </div>
           <button
             type="button"
-            onClick={onSaveSettings}
+            onClick={() => void onSaveSettings()}
             className="w-fit rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
           >
             Ayarları Kaydet

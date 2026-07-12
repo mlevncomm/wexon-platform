@@ -76,9 +76,12 @@ interface CreatedOrderResponse {
   }>;
 }
 
+const DEMO_TABLE_NAME = "Masa 12";
+
 interface CreatedPaymentResponse {
   id: string;
   amount: number;
+  tipAmount?: number;
   status: string;
   provider: string | null;
   transactionId: string | null;
@@ -94,19 +97,35 @@ interface CreatedPaymentResponse {
   } | null;
 }
 
+interface BillApiResponse {
+  table: { id: string; name: string; status: string; qrToken: string };
+  items: Array<{
+    id: string;
+    orderId: string;
+    orderNumber: string;
+    productId: string;
+    name: string;
+    quantity: number;
+    price: number;
+    lineTotal: number;
+    paid: boolean;
+    createdAt: string;
+  }>;
+  totals: {
+    billTotal: number;
+    paidTotal: number;
+    unpaidTotal: number;
+    tipPaidTotal: number;
+    paymentCount: number;
+    orderCount: number;
+  };
+}
+
 const defaultRestaurant: MenuRestaurant = {
   id: "demo",
   name: "Mavi Bahçe Restaurant",
   slug: "mavi-bahce-restaurant",
 };
-
-const initialBillItems: BillItem[] = [
-  { id: "grilled-chicken", name: "Izgara Tavuk", quantity: 2, price: 390, paid: false },
-  { id: "soup", name: "Mercimek Çorbası", quantity: 1, price: 120, paid: false },
-  { id: "salad", name: "Mevsim Salata", quantity: 1, price: 160, paid: false },
-  { id: "coffee", name: "Türk Kahvesi", quantity: 2, price: 90, paid: false },
-  { id: "water", name: "Su", quantity: 2, price: 35, paid: true },
-];
 
 const explanationCards = [
   {
@@ -140,7 +159,10 @@ export default function WexPayCustomerDemoPage() {
   const [orderError, setOrderError] = useState("");
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<CreatedOrderResponse | null>(null);
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>(["grilled-chicken", "soup"]);
+  const [billItems, setBillItems] = useState<BillItem[]>([]);
+  const [billLoading, setBillLoading] = useState(false);
+  const [billError, setBillError] = useState("");
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("selected");
   const [tip, setTip] = useState<TipOption>(0);
   const [receiptRequested, setReceiptRequested] = useState(false);
@@ -210,13 +232,59 @@ export default function WexPayCustomerDemoPage() {
     .filter((item) => item.quantity > 0);
   const cartTotal = cartItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
 
-  const unpaidItems = useMemo(() => initialBillItems.filter((item) => !item.paid), []);
+  const unpaidItems = useMemo(() => billItems.filter((item) => !item.paid), [billItems]);
   const selectedItems = unpaidItems.filter((item) => selectedItemIds.includes(item.id));
   const subtotal = selectedItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
   const fullBillTotal = unpaidItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
   const tipAmount = Math.round((subtotal * tip) / 100);
   const payableTotal = subtotal + tipAmount;
   const remainingTotal = Math.max(fullBillTotal - subtotal, 0);
+
+  function applyBillItems(items: BillItem[], preferSelectAll = true) {
+    setBillItems(items);
+    const unpaidIds = items.filter((item) => !item.paid).map((item) => item.id);
+    setSelectedItemIds(preferSelectAll ? unpaidIds : unpaidIds.slice(0, Math.min(2, unpaidIds.length)));
+    setPaymentMode(preferSelectAll ? "full" : "selected");
+  }
+
+  async function loadBill({ selectAll = true }: { selectAll?: boolean } = {}) {
+    try {
+      setBillLoading(true);
+      setBillError("");
+
+      const response = await fetch(
+        `/api/wexpay/demo/bill?tableName=${encodeURIComponent(DEMO_TABLE_NAME)}`,
+      );
+      if (!response.ok) throw new Error("Hesap alınamadı.");
+
+      const data = (await response.json()) as BillApiResponse;
+      const items: BillItem[] = data.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        paid: item.paid,
+      }));
+
+      applyBillItems(items, selectAll);
+
+      if (items.length === 0) {
+        setBillError("Bu masada ödenecek açık hesap bulunmuyor. Önce sipariş oluşturun.");
+      }
+    } catch {
+      setBillItems([]);
+      setSelectedItemIds([]);
+      setBillError("Masa hesabı yüklenirken bir sorun oluştu.");
+    } finally {
+      setBillLoading(false);
+    }
+  }
+
+  async function openPaymentScreen() {
+    setPaymentError("");
+    setScreen("payment");
+    await loadBill({ selectAll: true });
+  }
 
   function updateCart(itemId: string, change: number) {
     setOrderError("");
@@ -248,7 +316,7 @@ export default function WexPayCustomerDemoPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tableName: "Masa 12",
+          tableName: DEMO_TABLE_NAME,
           note: orderNote.trim(),
           receiptRequested: false,
           items: cartItems.map((item) => ({
@@ -262,6 +330,17 @@ export default function WexPayCustomerDemoPage() {
 
       const order = (await response.json()) as CreatedOrderResponse;
       setSubmittedOrder(order);
+      applyBillItems(
+        order.items.map((item) => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          paid: false,
+        })),
+        true,
+      );
+      setCart({});
       setScreen("orderSuccess");
     } catch {
       setOrderError("Sipariş gönderilirken bir sorun oluştu.");
@@ -316,9 +395,11 @@ export default function WexPayCustomerDemoPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tableName: "Masa 12",
+          tableName: DEMO_TABLE_NAME,
           orderId: submittedOrder?.id,
           amount: payableTotal,
+          tipAmount,
+          itemIds: selectedItemIds,
           receiptRequested,
         }),
       });
@@ -327,6 +408,11 @@ export default function WexPayCustomerDemoPage() {
 
       const payment = (await response.json()) as CreatedPaymentResponse;
       setCompletedPayment(payment);
+      setBillItems((previous) =>
+        previous.map((item) =>
+          selectedItemIds.includes(item.id) ? { ...item, paid: true } : item,
+        ),
+      );
       setScreen("paymentSuccess");
     } catch {
       setPaymentError("Ödeme işlemi sırasında bir sorun oluştu.");
@@ -343,7 +429,10 @@ export default function WexPayCustomerDemoPage() {
     setOrderError("");
     setOrderSubmitting(false);
     setSubmittedOrder(null);
-    setSelectedItemIds(["grilled-chicken", "soup"]);
+    setBillItems([]);
+    setBillLoading(false);
+    setBillError("");
+    setSelectedItemIds([]);
     setPaymentMode("selected");
     setTip(0);
     setReceiptRequested(false);
@@ -363,7 +452,7 @@ export default function WexPayCustomerDemoPage() {
               <WelcomeScreen
                 restaurantName={restaurant.name}
                 onOrder={() => setScreen("menu")}
-                onPayment={() => setScreen("payment")}
+                onPayment={() => void openPaymentScreen()}
               />
             )}
 
@@ -393,12 +482,15 @@ export default function WexPayCustomerDemoPage() {
               <OrderSuccessScreen
                 orderNumber={submittedOrder?.orderNumber}
                 onHome={resetDemo}
-                onPayment={() => setScreen("payment")}
+                onPayment={() => void openPaymentScreen()}
               />
             )}
 
             {screen === "payment" && (
               <PaymentScreen
+                billItems={billItems}
+                billLoading={billLoading}
+                billError={billError}
                 paymentMode={paymentMode}
                 selectedItemIds={selectedItemIds}
                 tip={tip}
@@ -415,6 +507,7 @@ export default function WexPayCustomerDemoPage() {
                 onTipChange={setTip}
                 onReceiptChange={() => setReceiptRequested((value) => !value)}
                 onSecurePayment={openPaymentForm}
+                onReloadBill={() => void loadBill({ selectAll: true })}
               />
             )}
 
@@ -791,6 +884,9 @@ function OrderSuccessScreen({
 }
 
 function PaymentScreen({
+  billItems,
+  billLoading,
+  billError,
   paymentMode,
   selectedItemIds,
   tip,
@@ -807,7 +903,11 @@ function PaymentScreen({
   onTipChange,
   onReceiptChange,
   onSecurePayment,
+  onReloadBill,
 }: {
+  billItems: BillItem[];
+  billLoading: boolean;
+  billError: string;
   paymentMode: PaymentMode;
   selectedItemIds: string[];
   tip: TipOption;
@@ -824,6 +924,7 @@ function PaymentScreen({
   onTipChange: (tip: TipOption) => void;
   onReceiptChange: () => void;
   onSecurePayment: () => void;
+  onReloadBill: () => void;
 }) {
   return (
     <section>
@@ -854,43 +955,64 @@ function PaymentScreen({
         </button>
       </div>
 
-      <div className="space-y-3">
-        {initialBillItems.map((item) => {
-          const selected = selectedItemIds.includes(item.id);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => !item.paid && onToggleItem(item.id)}
-              disabled={item.paid}
-              className={`flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-colors ${
-                item.paid
-                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                  : selected
-                    ? "border-emerald-200 bg-emerald-50/70 text-slate-950"
-                    : "border-slate-200 bg-white text-slate-950 hover:bg-slate-50"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs ${
-                    selected ? "border-[#10b981] bg-[#10b981] text-white" : "border-slate-300 bg-white"
-                  }`}
-                >
-                  {selected ? "✓" : ""}
-                </span>
-                <div>
-                  <p className="text-sm font-bold">{item.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {item.quantity} adet {item.paid ? "· Ödendi" : ""}
-                  </p>
+      {billLoading ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-500">
+          Masa hesabı yükleniyor…
+        </div>
+      ) : billItems.length === 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-800">
+          {billError || "Ödenecek hesap kalemi yok."}
+          <button
+            type="button"
+            onClick={onReloadBill}
+            className="mt-3 block text-xs font-bold text-amber-900 underline"
+          >
+            Yeniden dene
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {billItems.map((item) => {
+            const selected = selectedItemIds.includes(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => !item.paid && onToggleItem(item.id)}
+                disabled={item.paid}
+                className={`flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-colors ${
+                  item.paid
+                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    : selected
+                      ? "border-emerald-200 bg-emerald-50/70 text-slate-950"
+                      : "border-slate-200 bg-white text-slate-950 hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs ${
+                      selected ? "border-[#10b981] bg-[#10b981] text-white" : "border-slate-300 bg-white"
+                    }`}
+                  >
+                    {selected ? "✓" : ""}
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold">{item.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {item.quantity} adet {item.paid ? "· Ödendi" : ""}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <p className="text-sm font-bold">{formatPrice(item.quantity * item.price)}</p>
-            </button>
-          );
-        })}
-      </div>
+                <p className="text-sm font-bold">{formatPrice(item.quantity * item.price)}</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {billError && billItems.length > 0 && (
+        <p className="mt-3 text-xs font-semibold text-rose-600">{billError}</p>
+      )}
 
       <div className="mt-5">
         <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
@@ -984,6 +1106,9 @@ function PaymentFormScreen({
         <div className="space-y-3">
           <MockField label="Kart üzerindeki isim" value="MERT YILMAZ" />
           <MockField label="Maskeli kart numarası" value="**** **** **** 4821" />
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
+            Kart alanları simülasyondur. Ödeme kaydı demo MOCK sağlayıcısı ile oluşur; gerçek POS yoktur.
+          </div>
           <MockField label="Tutar" value={formatPrice(payableTotal)} />
         </div>
       </div>

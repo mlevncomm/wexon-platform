@@ -71,6 +71,7 @@ export function toOrderResponse(order: {
 export function toPaymentResponse(payment: {
   id: string;
   amount: unknown;
+  tipAmount?: unknown;
   status: string;
   provider: string | null;
   providerRef: string | null;
@@ -88,6 +89,7 @@ export function toPaymentResponse(payment: {
   return {
     id: payment.id,
     amount: Number(payment.amount),
+    tipAmount: Number(payment.tipAmount ?? 0),
     status: payment.status,
     provider: payment.provider,
     transactionId: payment.providerRef,
@@ -130,6 +132,7 @@ export function toTableResponse(table: {
   payments: Array<{
     id: string;
     amount: unknown;
+    tipAmount?: unknown;
     status: string;
     provider: string | null;
     providerRef: string | null;
@@ -146,10 +149,14 @@ export function toTableResponse(table: {
     : table.orders.filter((order) => order.status !== "CANCELLED");
   const operationalPayments = isOperationallyEmpty ? [] : table.payments;
   const paidPayments = operationalPayments.filter(
-    (payment) => payment.status === "PAID" || payment.status === "SUCCEEDED",
+    (payment) => payment.status === "PAID" || payment.status === "PARTIAL",
   );
   const totalAmount = activeOrders.reduce((sum, order) => sum + Number(order.subtotal), 0);
-  const paidAmount = paidPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const paidAmount = paidPayments.reduce((sum, payment) => {
+    const gross = Number(payment.amount);
+    const tip = Number(payment.tipAmount ?? 0);
+    return sum + Math.max(gross - tip, 0);
+  }, 0);
   const receiptRequested =
     !isOperationallyEmpty &&
     (table.receiptRequests.some((request) => request.status === "REQUESTED") ||
@@ -184,6 +191,7 @@ export function toTableResponse(table: {
     payments: operationalPayments.map((payment) => ({
       id: payment.id,
       amount: Number(payment.amount),
+      tipAmount: Number(payment.tipAmount ?? 0),
       status: payment.status,
       provider: payment.provider,
       transactionId: payment.providerRef,

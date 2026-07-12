@@ -2,24 +2,32 @@ import { prisma } from "@/lib/prisma";
 import { requireWexPayDemoContext } from "../_access";
 import { errorResponse, toProductResponse } from "../_utils";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const demo = await requireWexPayDemoContext();
     if (!demo.ok) return demo.response;
+
+    const { searchParams } = new URL(request.url);
+    const scope = searchParams.get("scope") === "admin" ? "admin" : "customer";
+    const includeInactive = scope === "admin";
 
     const [categories, products] = await Promise.all([
       prisma.menuCategory.findMany({
         where: {
           branchId: demo.branch.id,
-          isActive: true,
+          ...(includeInactive ? {} : { isActive: true }),
         },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       }),
       prisma.menuProduct.findMany({
         where: {
           branchId: demo.branch.id,
-          isActive: true,
-          category: { isActive: true },
+          ...(includeInactive
+            ? {}
+            : {
+                isActive: true,
+                category: { isActive: true },
+              }),
         },
         include: { category: true },
         orderBy: [{ createdAt: "asc" }, { name: "asc" }],
@@ -32,6 +40,7 @@ export async function GET() {
         name: demo.restaurant.name,
         slug: demo.restaurant.slug,
       },
+      scope,
       categories: categories.map((category) => ({
         id: category.id,
         name: category.name,
