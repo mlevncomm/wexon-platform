@@ -1,3 +1,5 @@
+import { WEXPAY_CURRENCY, WEXPAY_PLAN_CATALOG, WEXPAY_TAX_RATE } from "@/lib/wexon-plan-catalog.mjs";
+
 export class CheckoutValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -5,16 +7,27 @@ export class CheckoutValidationError extends Error {
   }
 }
 
-export const checkoutPriceMap = {
-  wexpay: {
-    basic: { monthly: 1490, yearly: 14900 },
-    standard: { monthly: 2990, yearly: 29900 },
-    pro: { monthly: 5990, yearly: 59900 },
-  },
-} as const;
-
 export type CheckoutPlanKey = "basic" | "standard" | "pro";
 export type CheckoutBillingInterval = "monthly" | "yearly";
+
+type PlanPricing = { monthly: number; yearly: number };
+
+// Derived from the canonical catalog so checkout, seed data and marketing
+// pages always share the same prices (single source of truth).
+const wexpayPricing = WEXPAY_PLAN_CATALOG.reduce<Record<CheckoutPlanKey, PlanPricing>>(
+  (accumulator, plan) => {
+    accumulator[plan.planKey as CheckoutPlanKey] = {
+      monthly: plan.priceMonthly,
+      yearly: plan.priceYearly,
+    };
+    return accumulator;
+  },
+  {} as Record<CheckoutPlanKey, PlanPricing>,
+);
+
+export const checkoutPriceMap: { wexpay: Record<CheckoutPlanKey, PlanPricing> } = {
+  wexpay: wexpayPricing,
+};
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -47,9 +60,9 @@ function normalizeInterval(value: string): CheckoutBillingInterval {
 
 export function checkoutPrice(productKey: "wexpay", planKey: CheckoutPlanKey, interval: CheckoutBillingInterval) {
   const subtotal = checkoutPriceMap[productKey][planKey][interval];
-  const tax = Math.round(subtotal * 0.2);
+  const tax = Math.round(subtotal * WEXPAY_TAX_RATE);
   const total = subtotal + tax;
-  return { subtotal, tax, total, currency: "TRY" };
+  return { subtotal, tax, total, currency: WEXPAY_CURRENCY };
 }
 
 export function parseCheckoutPayload(formData: FormData, hasCustomerSession: boolean) {

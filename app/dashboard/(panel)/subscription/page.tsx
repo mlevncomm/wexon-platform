@@ -16,6 +16,13 @@ import {
 
 const textEntitlements = ["reporting_level", "integration_level", "support_level", "role_level"];
 
+function formatPlanAmount(value: unknown, currency: string) {
+  if (value === null || value === undefined) return "-";
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return "-";
+  return `${amount.toLocaleString("tr-TR")} ${currency}`;
+}
+
 type DashboardSearchParams = Promise<{ organizationId?: string; organizationSlug?: string }>;
 
 export default async function DashboardSubscriptionPage({ searchParams }: { searchParams: DashboardSearchParams }) {
@@ -58,6 +65,8 @@ export default async function DashboardSubscriptionPage({ searchParams }: { sear
           <div className="grid gap-3">
             <DashboardInfoRow label="Ürün" value={wexPayLicense.product.name} />
             <DashboardInfoRow label="Paket" value={wexPayLicense.plan.name} />
+            <DashboardInfoRow label="Aylık ücret (KDV hariç)" value={formatPlanAmount(wexPayLicense.plan.priceMonthly, wexPayLicense.plan.currency)} />
+            <DashboardInfoRow label="Yıllık ücret (KDV hariç)" value={formatPlanAmount(wexPayLicense.plan.priceYearly, wexPayLicense.plan.currency)} />
             <DashboardInfoRow label="Lisans tipi" value={formatCoreStatus(wexPayLicense.licenseType)} />
             <DashboardInfoRow label="Durum" value={formatCoreStatus(wexPayLicense.status)} />
             <DashboardInfoRow label="Başlangıç tarihi" value={formatCoreDate(wexPayLicense.startsAt)} />

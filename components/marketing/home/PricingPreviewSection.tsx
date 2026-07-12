@@ -1,6 +1,7 @@
-import { PRICING_PLANS } from "@/lib/wexon-home-content";
+import { ENTERPRISE_PLAN } from "@/lib/wexon-home-content";
+import { wexPayDisplayPlans } from "@/lib/wexon-pricing";
+import WexPayPricingPlans from "@/components/marketing/WexPayPricingPlans";
 import SectionShell from "@/components/ui/SectionShell";
-import PricingCard from "@/components/ui/PricingCard";
 import SectionHeading from "./SectionHeading";
 
 export default function PricingPreviewSection() {
@@ -15,26 +16,20 @@ export default function PricingPreviewSection() {
             <>
               İşletmenizin ölçeğine göre{" "}
               <span className="bg-gradient-to-r from-emerald-300 to-emerald-500 bg-clip-text text-transparent">
-                büyüyen paketler
+                büyüyen WexPay paketleri
               </span>
             </>
           }
-          subtitle="Wexon ürünleri, lisans ve entitlement yapısıyla organization bazında kontrollü şekilde ölçeklenir. Fiyat; ihtiyacınıza göre demo görüşmesinde netleşir."
+          subtitle="WexPay paketleri; masa, şube, personel, rapor ve entegrasyon seviyelerine göre ölçeklenir. Aylık veya yıllık faturalandırın; özel kurulum ve SLA ihtiyaçları için Enterprise teklifiyle ilerleyin."
         />
 
-        <p className="mt-8 text-center text-xs font-semibold text-slate-400">
-          Aylık · Yıllık · Tek seferlik lisans seçenekleri · fiyat demo görüşmesinde netleşir
-        </p>
-
-        <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 lg:items-stretch">
-          {PRICING_PLANS.map((plan) => (
-            <PricingCard
-              key={plan.id}
-              plan={plan}
-              href={`/demo-request?plan=${plan.id}`}
-              tone="dark"
-            />
-          ))}
+        <div className="mt-12">
+          <WexPayPricingPlans
+            plans={wexPayDisplayPlans}
+            tone="dark"
+            gridClassName="lg:grid-cols-4 lg:items-stretch"
+            extraCards={[{ plan: ENTERPRISE_PLAN, href: "/demo-request?product=wexpay&source=pricing" }]}
+          />
         </div>
       </div>
     </SectionShell>

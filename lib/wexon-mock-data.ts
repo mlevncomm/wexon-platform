@@ -1,4 +1,4 @@
-import type { WexonProduct, PricingTier, WexonStat, DemoCard, NavLink } from "@/types/wexon";
+import type { WexonProduct, WexonStat, DemoCard, NavLink } from "@/types/wexon";
 
 export const NAV_LINKS: NavLink[] = [
   { label: "Ürünler", href: "/#products" },
@@ -120,49 +120,5 @@ export const DEMO_CARDS: DemoCard[] = [
       { label: "GMV (Aylık)", value: "$1.2M", trend: "up", trendValue: "+31%" },
       { label: "Bekleyen Onaylar", value: "5", trend: "neutral" },
     ],
-  },
-];
-
-export const PRICING_TIERS: PricingTier[] = [
-  {
-    id: "basic",
-    product: "Wexon Platform",
-    name: "Basic",
-    monthlyPrice: 49,
-    description: "Yeni başlayan işletmeler için temel ürün erişimi.",
-    features: ["Tek ürün erişimi", "Temel lisans yönetimi", "Aylık lisans seçeneği", "E-posta desteği"],
-    highlighted: false,
-    cta: "Demo Talep Et",
-  },
-  {
-    id: "pro",
-    product: "Wexon Platform",
-    name: "Pro",
-    monthlyPrice: 129,
-    description: "Birden fazla ürün ve gelişmiş operasyon ihtiyacı olan ekipler için.",
-    features: [
-      "Çoklu ürün erişimi",
-      "Wexon Core yönetimi",
-      "Aylık / yıllık lisans",
-      "Öncelikli destek",
-      "Gelişmiş raporlar",
-    ],
-    highlighted: true,
-    cta: "Demo Talep Et",
-  },
-  {
-    id: "enterprise",
-    product: "Wexon Platform",
-    name: "Enterprise",
-    monthlyPrice: null,
-    description: "Kurumsal yapı, çoklu şube ve özel lisans ihtiyaçları için.",
-    features: [
-      "Tüm ürünlere erişim",
-      "Tek seferlik lisans seçeneği",
-      "Özel paket ve yetki kurgusu",
-      "Kurumsal destek",
-    ],
-    highlighted: false,
-    cta: "Demo Talep Et",
   },
 ];

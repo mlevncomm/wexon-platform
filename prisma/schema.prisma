@@ -237,6 +237,9 @@ model Plan {
   name            String
   description     String?
   billingInterval BillingInterval
+  priceMonthly    Decimal?        @db.Decimal(10, 2)
+  priceYearly     Decimal?        @db.Decimal(10, 2)
+  currency        String          @default("TRY")
   isPublic        Boolean         @default(true)
   isActive        Boolean         @default(true)
   sortOrder       Int             @default(0)

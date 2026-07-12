@@ -15,6 +15,19 @@ function entitlementValue(plan: Awaited<ReturnType<typeof getAdminPlansData>>[nu
   return item?.valueString ?? item?.valueInt ?? (item?.valueBool ? "Evet" : "-");
 }
 
+function planAmount(value: unknown, currency: string) {
+  if (value === null || value === undefined) return "-";
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return "-";
+  return `${amount.toLocaleString("tr-TR")} ${currency}`;
+}
+
+function decimalDefault(value: unknown) {
+  if (value === null || value === undefined) return "";
+  const amount = Number(value);
+  return Number.isNaN(amount) ? "" : String(amount);
+}
+
 export default async function AdminPlansPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
   const { adminError } = await searchParams;
   const [plans, products] = await Promise.all([getAdminPlansData(), getAdminProductsData()]);
@@ -62,6 +75,9 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
             <option value="YEARLY">Yıllık</option>
             <option value="ONE_TIME">Tek seferlik</option>
           </AdminSelectField>
+          <AdminTextField label="Aylık ücret (KDV hariç)" name="priceMonthly" type="number" placeholder="2990" />
+          <AdminTextField label="Yıllık ücret (KDV hariç)" name="priceYearly" type="number" placeholder="29900" />
+          <AdminTextField label="Para birimi" name="currency" defaultValue="TRY" />
           <AdminTextField label="Sıra" name="sortOrder" type="number" defaultValue="0" />
           <AdminSelectField label="Herkese açık" name="isPublic" defaultValue="true">
             <option value="true">Evet</option>
@@ -102,9 +118,11 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <AdminInfoRow label="Şube limiti" value={entitlementValue(plan, "branch_limit")} />
                 <AdminInfoRow label="Masa limiti" value={entitlementValue(plan, "table_limit")} />
-                <AdminInfoRow label="Menü limiti" value={entitlementValue(plan, "menu_item_limit")} />
+                <AdminInfoRow label="Ürün limiti" value={entitlementValue(plan, "product_limit")} />
                 <AdminInfoRow label="Personel limiti" value={entitlementValue(plan, "staff_limit")} />
-                <AdminInfoRow label="Aylık işlem limiti" value={entitlementValue(plan, "monthly_order_limit")} />
+                <AdminInfoRow label="Aylık işlem limiti" value={entitlementValue(plan, "monthly_transaction_limit")} />
+                <AdminInfoRow label="Aylık ücret" value={planAmount(plan.priceMonthly, plan.currency)} />
+                <AdminInfoRow label="Yıllık ücret" value={planAmount(plan.priceYearly, plan.currency)} />
                 <AdminInfoRow label="Lisans sayısı" value={plan.licenses.length} />
               </div>
 
@@ -116,6 +134,9 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
                   <option value="YEARLY">Yıllık</option>
                   <option value="ONE_TIME">Tek seferlik</option>
                 </AdminSelectField>
+                <AdminTextField label="Aylık ücret (KDV hariç)" name="priceMonthly" type="number" defaultValue={decimalDefault(plan.priceMonthly)} />
+                <AdminTextField label="Yıllık ücret (KDV hariç)" name="priceYearly" type="number" defaultValue={decimalDefault(plan.priceYearly)} />
+                <AdminTextField label="Para birimi" name="currency" defaultValue={plan.currency} />
                 <AdminTextField label="Sıra" name="sortOrder" type="number" defaultValue={String(plan.sortOrder)} />
                 <AdminSelectField label="Herkese açık" name="isPublic" defaultValue={plan.isPublic ? "true" : "false"}>
                   <option value="true">Evet</option>
