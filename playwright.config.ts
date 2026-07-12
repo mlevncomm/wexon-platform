@@ -6,7 +6,21 @@ loadEnv({ path: resolve(process.cwd(), ".env"), quiet: true });
 loadEnv({ path: resolve(process.cwd(), ".env.local"), override: true, quiet: true });
 
 const port = Number(process.env.SMOKE_PORT ?? 3100);
-const baseURL = process.env.SMOKE_BASE_URL ?? `http://localhost:${port}`;
+const baseURL =
+  process.env.E2E_BASE_URL?.trim() ||
+  process.env.SMOKE_BASE_URL?.trim() ||
+  `http://localhost:${port}`;
+
+const e2eTarget = (process.env.WEXON_E2E_TARGET ?? "local").trim().toLowerCase();
+const productionConfirmed = process.env.WEXON_E2E_CONFIRM_PRODUCTION === "true";
+const looksProduction =
+  e2eTarget === "production" || /https?:\/\/([a-z0-9-]+\.)?wexon\.dev\b/i.test(baseURL);
+
+if (looksProduction && !(e2eTarget === "production" && productionConfirmed)) {
+  throw new Error(
+    "E2E production target blocked. Set WEXON_E2E_TARGET=production and WEXON_E2E_CONFIRM_PRODUCTION=true, or use a local/preview base URL.",
+  );
+}
 
 export default defineConfig({
   testDir: "./e2e",
@@ -28,5 +42,10 @@ export default defineConfig({
         url: baseURL,
         reuseExistingServer: Boolean(process.env.SMOKE_REUSE_SERVER),
         timeout: 120_000,
+        env: {
+          ...process.env,
+          // Relax in-memory auth rate limits for serial local E2E only.
+          WEXON_E2E_RELAX_RATE_LIMIT: looksProduction ? process.env.WEXON_E2E_RELAX_RATE_LIMIT ?? "" : "true",
+        },
       },
 });

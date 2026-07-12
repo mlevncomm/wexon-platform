@@ -14,15 +14,28 @@ function readString(formData: FormData, key: string) {
 
 function safeAdminNextPath(value: string) {
   const path = canonicalSafeNextPath(value, "/applications");
+  const productionWexon = isWexonProductionDeployment();
+
   if (path === "/login" || path.startsWith("/login/")) {
-    return isWexonProductionDeployment() ? "/applications" : "/admin";
+    return productionWexon ? "/applications" : "/admin";
   }
   if (path.startsWith("/admin/login")) {
-    return isWexonProductionDeployment() ? "/applications" : "/admin";
+    return productionWexon ? "/applications" : "/admin";
   }
   if (path === "/" || path === "/admin") {
-    return isWexonProductionDeployment() ? "/applications" : "/admin";
+    return productionWexon ? "/applications" : "/admin";
   }
+
+  // Local/preview serve admin under /admin/*; production admin host strips the prefix.
+  if (!productionWexon) {
+    if (path === "/applications" || path.startsWith("/applications/")) {
+      return `/admin${path}`;
+    }
+    if (!path.startsWith("/admin")) {
+      return `/admin${path.startsWith("/") ? path : `/${path}`}`;
+    }
+  }
+
   return path;
 }
 
