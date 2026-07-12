@@ -70,6 +70,21 @@ function parseBoolean(formData: FormData, key: string) {
   return readString(formData, key) === "true";
 }
 
+function nullableDecimal(formData: FormData, key: string, label: string) {
+  const value = readString(formData, key);
+  if (!value) return null;
+  const normalized = value.replace(/\s/g, "").replace(",", ".");
+  const amount = Number(normalized);
+  if (Number.isNaN(amount) || amount < 0) {
+    throw new AdminValidationError(`${label} geçerli bir tutar olmalıdır.`);
+  }
+  return normalized;
+}
+
+function parseCurrency(formData: FormData) {
+  return (readString(formData, "currency") || "TRY").toUpperCase();
+}
+
 function parseCountry(formData: FormData) {
   return (readString(formData, "country") || "TR").toUpperCase();
 }
@@ -304,6 +319,9 @@ export function parsePlanCreatePayload(formData: FormData) {
     name: requiredString(formData, "name", "Paket adı"),
     description: nullableString(formData, "description"),
     billingInterval: oneOf(requiredString(formData, "billingInterval", "Faturalama aralığı"), billingIntervals, "Faturalama aralığı"),
+    priceMonthly: nullableDecimal(formData, "priceMonthly", "Aylık ücret"),
+    priceYearly: nullableDecimal(formData, "priceYearly", "Yıllık ücret"),
+    currency: parseCurrency(formData),
     isPublic: parseBoolean(formData, "isPublic"),
     isActive: parseBoolean(formData, "isActive"),
     sortOrder: Number.isNaN(sortOrder) ? 0 : sortOrder,
@@ -317,6 +335,9 @@ export function parsePlanUpdatePayload(formData: FormData) {
     name: requiredString(formData, "name", "Paket adı"),
     description: nullableString(formData, "description"),
     billingInterval: oneOf(requiredString(formData, "billingInterval", "Faturalama aralığı"), billingIntervals, "Faturalama aralığı"),
+    priceMonthly: nullableDecimal(formData, "priceMonthly", "Aylık ücret"),
+    priceYearly: nullableDecimal(formData, "priceYearly", "Yıllık ücret"),
+    currency: parseCurrency(formData),
     isPublic: parseBoolean(formData, "isPublic"),
     isActive: parseBoolean(formData, "isActive"),
     sortOrder: Number.isNaN(sortOrder) ? 0 : sortOrder,
