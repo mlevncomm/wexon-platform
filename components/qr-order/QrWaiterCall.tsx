@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { qrCard, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { WAITER_REASON_LABELS, type WaiterReason } from "@/lib/qr-order/types";
 
 const REASONS = Object.keys(WAITER_REASON_LABELS) as WaiterReason[];
@@ -46,15 +47,23 @@ export default function QrWaiterCall({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="qr-waiter-title">
-      <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-[2px] sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="qr-waiter-title"
+    >
+      <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur-md">
         {success ? (
           <div className="text-center">
-            <p id="qr-waiter-title" className="text-lg font-black text-slate-950">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-2xl font-black text-white">
+              ✓
+            </div>
+            <p id="qr-waiter-title" className="mt-4 text-xl font-black text-slate-950">
               Garson çağrıldı
             </p>
             <p className="mt-2 text-sm font-semibold text-slate-500">
-              Personel en kısa sürede masanıza gelecek.
+              Talebiniz masanıza bağlı olarak iletildi. Personel en kısa sürede gelecek.
             </p>
             <button
               type="button"
@@ -64,7 +73,7 @@ export default function QrWaiterCall({
                 setNote("");
                 onClose();
               }}
-              className="mt-5 flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#10b981] px-4 text-sm font-black text-white"
+              className={`${qrPrimaryCta} mt-6`}
             >
               Tamam
             </button>
@@ -73,7 +82,7 @@ export default function QrWaiterCall({
           <>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p id="qr-waiter-title" className="text-lg font-black text-slate-950">
+                <p id="qr-waiter-title" className="text-xl font-black text-slate-950">
                   Garson çağır
                 </p>
                 <p className="mt-1 text-sm font-semibold text-slate-500">Nasıl yardımcı olalım?</p>
@@ -81,7 +90,7 @@ export default function QrWaiterCall({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-200 text-sm font-bold text-slate-600"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border border-slate-200 text-sm font-bold text-slate-600"
                 aria-label="Kapat"
               >
                 ✕
@@ -94,10 +103,10 @@ export default function QrWaiterCall({
                   key={item}
                   type="button"
                   onClick={() => setReason(item)}
-                  className={`flex min-h-12 w-full items-center rounded-2xl border px-4 text-left text-sm font-bold ${
+                  className={`flex min-h-12 w-full items-center rounded-2xl border px-4 text-left text-sm font-bold transition ${
                     reason === item
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                      : "border-slate-200 bg-slate-50 text-slate-800"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                      : `${qrCard} !shadow-none text-slate-800`
                   }`}
                 >
                   {WAITER_REASON_LABELS[item]}
@@ -106,17 +115,19 @@ export default function QrWaiterCall({
             </div>
 
             <label className="mt-4 block">
-              <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Not (opsiyonel)</span>
+              <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                Not (opsiyonel)
+              </span>
               <textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={2}
-                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
               />
             </label>
 
             {error ? (
-              <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700">
+              <p className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
                 {error}
               </p>
             ) : null}
@@ -126,9 +137,9 @@ export default function QrWaiterCall({
               data-testid="qr-waiter-submit"
               onClick={() => void submit()}
               disabled={pending}
-              className="mt-4 flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#10b981] px-4 text-sm font-black text-white disabled:bg-slate-300"
+              className={`${qrPrimaryCta} mt-4`}
             >
-              {pending ? "Gönderiliyor..." : "Garsonu çağır"}
+              {pending ? "Gönderiliyor…" : "Garsonu çağır"}
             </button>
           </>
         )}

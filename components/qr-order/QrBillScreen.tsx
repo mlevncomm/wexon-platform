@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import QrStatusBadge from "@/components/qr-order/QrStatusBadge";
+import { qrCard, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
 import type { QrBillSnapshot, QrTableContext } from "@/lib/qr-order/types";
 
@@ -77,17 +79,14 @@ export default function QrBillScreen({
   return (
     <div className="mx-auto min-h-[100dvh] w-full max-w-lg px-4 pb-10 pt-4">
       <header className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-200 text-sm font-bold"
-          aria-label="Geri"
-        >
+        <button type="button" onClick={onBack} className={qrIconBtn} aria-label="Geri">
           ←
         </button>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Masa hesabı</p>
-          <h1 className="truncate text-lg font-black text-slate-950">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+            Masa hesabı
+          </p>
+          <h1 className="truncate text-lg font-black tracking-tight text-slate-950">
             {context.restaurantName} · {context.tableLabel}
           </h1>
         </div>
@@ -95,13 +94,13 @@ export default function QrBillScreen({
 
       {loading ? (
         <div className="mt-6 space-y-3" data-testid="qr-bill-loading">
-          <div className="h-24 animate-pulse rounded-[22px] bg-slate-200/70" />
-          <div className="h-40 animate-pulse rounded-[22px] bg-slate-200/70" />
+          <div className="h-28 animate-pulse rounded-[28px] bg-white/70" />
+          <div className="h-44 animate-pulse rounded-[28px] bg-white/70" />
         </div>
       ) : null}
 
       {error ? (
-        <p className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">
+        <p className="mt-6 rounded-[24px] bg-rose-50 px-4 py-4 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
           {error}
         </p>
       ) : null}
@@ -109,92 +108,92 @@ export default function QrBillScreen({
       {bill && !loading ? (
         <div className="mt-5 space-y-4" data-testid="qr-bill-screen">
           {bill.empty ? (
-            <div className="rounded-[22px] border border-dashed border-slate-300 bg-white p-5 text-sm font-semibold text-slate-500">
-              Bu masa için henüz açık hesap yok. Önce sipariş verebilirsiniz.
+            <div className={`${qrCard} p-6 text-center`}>
+              <p className="text-base font-black text-slate-900">Açık hesap yok</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">
+                Bu masa için henüz ücretlendirilecek sipariş bulunmuyor.
+              </p>
             </div>
           ) : (
             <>
               <div className="space-y-2">
                 {bill.lines.map((line) => (
-                  <div
-                    key={line.id}
-                    className="flex items-start justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3"
-                  >
+                  <div key={line.id} className={`${qrCard} flex items-start justify-between gap-3 px-4 py-3.5`}>
                     <div className="min-w-0">
                       <p className="text-sm font-black text-slate-950">
                         {line.quantity}× {line.name}
                       </p>
-                      <p className="text-xs font-semibold text-slate-400">
+                      <p className="mt-0.5 text-xs font-semibold text-slate-400">
                         {line.orderNo} · {line.status}
                       </p>
                     </div>
-                    <p className="shrink-0 text-sm font-black text-slate-950">
+                    <p className="shrink-0 text-sm font-black tabular-nums text-slate-950">
                       {formatTry(line.lineTotal)}
                     </p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+              <div className={`${qrGlassSoft} rounded-[28px] p-5`}>
                 <div className="flex justify-between text-sm font-bold text-slate-600">
                   <span>Toplam</span>
-                  <span>{formatTry(bill.totalAmount)}</span>
+                  <span className="tabular-nums">{formatTry(bill.totalAmount)}</span>
                 </div>
                 <div className="mt-2 flex justify-between text-sm font-bold text-slate-600">
                   <span>Ödenen</span>
-                  <span>{formatTry(bill.paidAmount)}</span>
+                  <span className="tabular-nums">{formatTry(bill.paidAmount)}</span>
                 </div>
-                <div className="mt-2 flex justify-between text-base font-black text-slate-950">
+                <div className="mt-3 flex justify-between border-t border-emerald-100/80 pt-3 text-lg font-black text-slate-950">
                   <span>Kalan</span>
-                  <span data-testid="qr-bill-remaining">{formatTry(bill.remainingAmount)}</span>
+                  <span data-testid="qr-bill-remaining" className="tabular-nums text-emerald-700">
+                    {formatTry(bill.remainingAmount)}
+                  </span>
                 </div>
               </div>
             </>
           )}
 
-          <div className="rounded-[22px] border border-amber-200 bg-amber-50 p-4" data-testid="qr-online-pay-soon">
-            <p className="text-sm font-black text-amber-900">Online ödeme yakında</p>
-            <p className="mt-1 text-xs font-semibold text-amber-800">
-              Bu ekrandan kart ile ödeme başlatılmıyor. Garsona ödeme yapabilir veya ödeme talebi
-              gönderebilirsiniz.
-            </p>
+          <div
+            className="rounded-[28px] border border-emerald-100/80 bg-gradient-to-br from-emerald-50/90 to-lime-50/70 p-5"
+            data-testid="qr-online-pay-soon"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-emerald-950">Online ödeme yakında</p>
+                <p className="mt-1.5 text-xs font-semibold leading-relaxed text-emerald-900/80">
+                  Bu ekrandan kart ile ödeme başlatılmıyor. Garsona ödeme talebi gönderebilir veya
+                  masada ödeme yapabilirsiniz.
+                </p>
+              </div>
+              <QrStatusBadge tone="mint">Pilot</QrStatusBadge>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+            <p className="px-1 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
               Bölüşerek ödeme
             </p>
-            <button
-              type="button"
-              disabled
-              className="flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-sm font-bold text-slate-400"
-            >
-              Tüm hesabı öde (yakında)
-            </button>
-            <button
-              type="button"
-              disabled
-              className="flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-sm font-bold text-slate-400"
-            >
-              Kendi ürünlerimi öde (yakında)
-            </button>
-            <button
-              type="button"
-              disabled
-              className="flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-sm font-bold text-slate-400"
-            >
-              Tutar girerek öde (yakında)
-            </button>
+            {["Tüm hesabı öde", "Kendi ürünlerimi öde", "Tutar girerek öde"].map((label) => (
+              <button
+                key={label}
+                type="button"
+                disabled
+                className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-slate-200/80 bg-white/60 px-4 text-sm font-bold text-slate-400"
+              >
+                <span>{label}</span>
+                <span className="text-[10px] font-black uppercase tracking-wide">Yakında</span>
+              </button>
+            ))}
           </div>
 
           {requestSuccess ? (
             <div
-              className="rounded-[22px] border border-emerald-200 bg-emerald-50 p-4"
+              className={`${qrCard} border-emerald-200 bg-emerald-50/80 p-5`}
               data-testid="qr-payment-request-success"
             >
-              <p className="text-sm font-black text-emerald-900">Ödeme talebi restorana iletildi</p>
+              <p className="text-sm font-black text-emerald-950">Ödeme talebi restorana iletildi</p>
               <p className="mt-1 text-xs font-semibold text-emerald-800">
-                Garson ödeme için yönlendirilecek.
+                Garson ödeme için masanıza yönlendirilecek.
               </p>
             </div>
           ) : (
@@ -203,23 +202,19 @@ export default function QrBillScreen({
               data-testid="qr-payment-request"
               onClick={() => void requestPayment("full_bill")}
               disabled={requestPending}
-              className="flex min-h-14 w-full items-center justify-center rounded-2xl bg-[#10b981] text-sm font-black text-white disabled:bg-slate-300"
+              className={qrPrimaryCta}
             >
-              {requestPending ? "Gönderiliyor..." : "Garsona ödeme talebi gönder"}
+              {requestPending ? "Gönderiliyor…" : "Garsona ödeme talebi gönder"}
             </button>
           )}
 
           {requestError ? (
-            <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700">
+            <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
               {requestError}
             </p>
           ) : null}
 
-          <button
-            type="button"
-            onClick={onCallWaiter}
-            className="flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700"
-          >
+          <button type="button" onClick={onCallWaiter} className={qrGhostCta}>
             Garson çağır
           </button>
         </div>

@@ -137,7 +137,7 @@ export default function QrCustomerApp({
   }
 
   return (
-    <main className="min-h-[100dvh] bg-[#f6f8f7] text-slate-950">
+    <main className="min-h-[100dvh] bg-[linear-gradient(165deg,#F6F8F5_0%,#ECFDF5_42%,#FAFAF7_100%)] text-slate-950">
       {view === "landing" ? (
         <QrLanding
           context={context}
@@ -185,7 +185,11 @@ export default function QrCustomerApp({
           order={success}
           onBackHome={() => {
             setSuccess(null);
-            setView("landing");
+            setView("menu");
+          }}
+          onViewBill={() => {
+            setSuccess(null);
+            setView("bill");
           }}
           onCallWaiter={() => setWaiterOpen(true)}
         />

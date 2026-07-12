@@ -1,6 +1,11 @@
 # QR customer order experience
 
-## 1. Amaç
+## Visual direction (premium redesign)
+
+Primary: **Wexon Glass Light** — soft mint gradient canvas, restrained frosted cards, solid emerald CTAs.
+Secondary warmth: Soft Restaurant App pastel mint/lime accents and welcoming landing tone.
+No Yemeksepeti/Getir colors; no heavy blur; no admin-dashboard look.
+
 
 Restoran müşterisi masadaki QR’ı okuttuğunda mobil-first bir ekranda önce **sipariş** veya **ödeme** niyetini seçer; sipariş akışı gerçek public order API’ye bağlanır; ödeme ekranı hesap görüntüleme + ödeme talebi / garson çağırma sunar (bu PR’da PayTR charge yok).
 
