@@ -22,7 +22,7 @@
     "test:e2e:auth": "playwright test e2e/auth.spec.ts",
     "test:e2e:admin": "playwright test e2e/admin.spec.ts",
     "test:e2e:security": "playwright test e2e/security.spec.ts",
-    "test:unit": "tsx --import ./scripts/load-local-env.mjs --test lib/wexpay-public-checkout.test.ts lib/wexpay-paytr-adapter.test.ts lib/wexpay-paytr-webhook-lookup.test.ts lib/wexpay-paytr-webhook.test.ts lib/wexon-rate-limit.test.ts lib/wexon-core-access.test.ts lib/wexon-canonical-host.test.ts lib/wexon/urls.test.ts scripts/cloudflare/admin-access-lib.test.ts",
+    "test:unit": "tsx --import ./scripts/load-local-env.mjs --test lib/wexpay-public-checkout.test.ts lib/wexpay-paytr-adapter.test.ts lib/wexpay-paytr-webhook-lookup.test.ts lib/wexpay-paytr-webhook.test.ts lib/wexon-rate-limit.test.ts lib/wexon-core-access.test.ts lib/wexon-canonical-host.test.ts lib/wexon/urls.test.ts lib/qr-order/pricing.test.ts scripts/cloudflare/admin-access-lib.test.ts",
     "production:check": "node scripts/check-production-env.mjs",
     "production:check:psp": "node scripts/check-production-env.mjs --strict-psp",
     "production:preflight": "node scripts/run-production-preflight.mjs",

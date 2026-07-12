@@ -35,6 +35,8 @@ export async function GET(_request: Request, context: { params: Promise<{ qrCode
         description: product.description,
         price: Number(product.price),
         currency: product.currency,
+        imageUrl: product.imageUrl,
+        isPopular: product.isPopular,
       })),
     })),
   });
