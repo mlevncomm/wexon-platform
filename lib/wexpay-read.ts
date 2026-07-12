@@ -271,7 +271,15 @@ export async function getPublicBranchMenu(organizationId: string, branchId: stri
       products: {
         where: { isActive: true, inStock: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, description: true, price: true, currency: true },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          price: true,
+          currency: true,
+          imageUrl: true,
+          isPopular: true,
+        },
       },
     },
   });

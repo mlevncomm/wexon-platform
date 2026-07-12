@@ -1341,3 +1341,145 @@ export async function createPublicOrder(input: {
     throw error;
   }
 }
+
+export type PublicTableBillLine = {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  orderNo: string;
+  status: string;
+};
+
+export async function getPublicTableBill(input: {
+  organizationId: string;
+  branchId: string;
+  tableId: string;
+}) {
+  const table = await prisma.restaurantTable.findFirst({
+    where: {
+      id: input.tableId,
+      branchId: input.branchId,
+      isActive: true,
+      branch: { restaurant: { organizationId: input.organizationId } },
+    },
+    include: {
+      orders: {
+        select: {
+          id: true,
+          orderNo: true,
+          status: true,
+          subtotal: true,
+          createdAt: true,
+          receiptRequested: true,
+          items: {
+            select: {
+              id: true,
+              productName: true,
+              quantity: true,
+              unitPrice: true,
+              totalPrice: true,
+            },
+            orderBy: { id: "asc" },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+      payments: {
+        select: { status: true, amount: true, receiptRequested: true, createdAt: true },
+      },
+      receiptRequests: { select: { status: true, createdAt: true } },
+    },
+  });
+
+  if (!table) throw new WexPayValidationError("Masa bulunamadı.");
+
+  const sessionOrders = filterTableSessionRecords(table.orders, table.lastClosedAt, table.orders);
+  const sessionPayments = filterTableSessionRecords(table.payments, table.lastClosedAt, table.orders);
+  const sessionReceiptRequests = filterTableSessionRecords(table.receiptRequests, table.lastClosedAt, table.orders);
+  const account = calculateTableAccount({
+    orders: sessionOrders,
+    payments: sessionPayments,
+    receiptRequests: sessionReceiptRequests,
+  });
+
+  const lines: PublicTableBillLine[] = sessionOrders.flatMap((order) =>
+    order.items.map((item) => ({
+      id: item.id,
+      name: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      lineTotal: Number(item.totalPrice),
+      orderNo: order.orderNo,
+      status: String(order.status),
+    })),
+  );
+
+  return {
+    totalAmount: account.totalAmount,
+    paidAmount: account.paidAmount,
+    remainingAmount: account.remainingAmount,
+    status: account.status,
+    empty: lines.length === 0 && account.totalAmount === 0,
+    lines,
+  };
+}
+
+export async function createPublicTableAssistNotification(input: {
+  organizationId: string;
+  branchId: string;
+  tableId: string;
+  kind: "payment_request" | "waiter_call";
+  reason?: string | null;
+  note?: string | null;
+  ipAddress: string | null;
+}) {
+  const table = await prisma.restaurantTable.findFirst({
+    where: {
+      id: input.tableId,
+      branchId: input.branchId,
+      isActive: true,
+      branch: { restaurant: { organizationId: input.organizationId } },
+    },
+  });
+  if (!table) throw new WexPayValidationError("Masa bulunamadı.");
+
+  const isPayment = input.kind === "payment_request";
+  const title = isPayment
+    ? `[ÖDEME TALEBİ] ${table.label}`
+    : `[GARSON ÇAĞRISI] ${table.label}`;
+  const reasonPart = input.reason?.trim() ? ` Sebep: ${input.reason.trim()}.` : "";
+  const notePart = input.note?.trim() ? ` Not: ${input.note.trim()}` : "";
+  const message = isPayment
+    ? `${table.label} için müşteri ödeme talebi gönderdi.${reasonPart}${notePart}`
+    : `${table.label} için garson çağrısı alındı.${reasonPart}${notePart}`;
+
+  const notification = await prisma.businessNotification.create({
+    data: {
+      branchId: input.branchId,
+      type: NotificationType.TABLE_UPDATED,
+      title,
+      message,
+    },
+  });
+
+  await writeAuditLog({
+    action: isPayment ? "wexpay.public.payment_request" : "wexpay.public.waiter_call",
+    organizationId: input.organizationId,
+    userId: null,
+    entityType: "BusinessNotification",
+    entityId: notification.id,
+    ipAddress: input.ipAddress,
+    source: "wexpay_public",
+    metadata: {
+      source: "public_qr",
+      kind: input.kind,
+      branchId: input.branchId,
+      tableId: table.id,
+      reason: input.reason ?? null,
+    },
+  });
+
+  return { id: notification.id, title };
+}
