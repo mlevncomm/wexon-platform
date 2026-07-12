@@ -1,20 +1,21 @@
 import type { Metadata } from "next";
 import WexonFooter from "@/components/marketing/WexonFooter";
 import WexonNavbar from "@/components/marketing/WexonNavbar";
+import WexPayPricingPlans from "@/components/marketing/WexPayPricingPlans";
 import WexPayPreview from "@/components/marketing/home/preview/WexPayPreview";
 import { WEXPAY_APP, WEXPAY_FLOW_STEPS } from "@/lib/wexon-home-content";
+import { wexPayDisplayPlans } from "@/lib/wexon-pricing";
 import {
   Badge,
   Button,
   Eyebrow,
   FeatureChip,
   PhoneFrame,
-  PricingCard,
   SectionHeading,
   SectionShell,
   WexonIcon,
 } from "@/components/ui";
-import type { PricingPlan, WexonIconName } from "@/types/wexon";
+import type { WexonIconName } from "@/types/wexon";
 
 export const metadata: Metadata = {
   title: "WexPay - QR Menü, Sipariş ve Ödeme Sistemi",
@@ -69,37 +70,6 @@ const businessExperience = [
   "Siparişleri takip eder",
   "Ödemeleri görür",
   "Fiş taleplerini karşılar",
-];
-
-const plans: PricingPlan[] = [
-  {
-    id: "basic",
-    name: "Basic",
-    audience: "Küçük kafe ve tek şubeli işletmeler için temel operasyon limitleri.",
-    priceLabel: "Lisans modeli",
-    billingNote: "Aylık · Yıllık · Tek seferlik",
-    features: ["Belirli masa limiti", "Tek şube kullanımı", "Sınırlı personel hesabı", "Temel raporlar", "Standart destek"],
-    cta: "Abonelik Başlat",
-  },
-  {
-    id: "standard",
-    name: "Standard",
-    audience: "Yoğun restoranlar ve büyüyen ekipler için daha geniş kullanım hakları.",
-    priceLabel: "Lisans modeli",
-    billingNote: "Aylık · Yıllık · Tek seferlik",
-    features: ["Artırılmış masa limiti", "Çoklu personel yönetimi", "Gelişmiş rapor seviyesi", "Temel entegrasyonlar", "Rol bazlı yetkilendirme"],
-    cta: "Abonelik Başlat",
-    highlighted: true,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    audience: "Çok şubeli işletmeler ve ileri operasyon ihtiyaçları için.",
-    priceLabel: "Lisans modeli",
-    billingNote: "Aylık · Yıllık · Tek seferlik",
-    features: ["Çoklu şube limiti", "Gelişmiş yetkilendirme", "İleri raporlama", "Geniş entegrasyon seviyesi", "Öncelikli destek"],
-    cta: "Abonelik Başlat",
-  },
 ];
 
 const corePackageFeatures = [
@@ -441,7 +411,7 @@ export default function WexPayPage() {
                     Fatura ve tahsilat ayrı takip edilir; erişimle karışmaz.
                   </p>
                 </div>
-                {plans.map((plan) => (
+                {wexPayDisplayPlans.map((plan) => (
                   <div
                     key={plan.id}
                     className={`rounded-2xl border p-5 ${
@@ -502,17 +472,7 @@ export default function WexPayPage() {
               ))}
             </div>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {plans.map((plan) => (
-              <PricingCard
-                key={plan.id}
-                plan={plan}
-                href={`/checkout?product=wexpay&plan=${plan.id}`}
-                tone="light"
-                className={plan.id === "pro" ? "sm:col-span-2 lg:col-span-1" : undefined}
-              />
-            ))}
-          </div>
+          <WexPayPricingPlans plans={wexPayDisplayPlans} tone="light" />
         </SectionShell>
 
         {/* POS + Core notes */}

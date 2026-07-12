@@ -9,6 +9,13 @@ import { formatCoreDate, formatCoreStatus, getCustomerDashboardData } from "@/li
 
 type DashboardSearchParams = Promise<{ organizationId?: string; organizationSlug?: string }>;
 
+function formatPlanAmount(value: unknown, currency: string) {
+  if (value === null || value === undefined) return "-";
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return "-";
+  return `${amount.toLocaleString("tr-TR")} ${currency}`;
+}
+
 export default async function DashboardBillingPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
   const { organization, wexPayLicense } = await getCustomerDashboardData(params);
@@ -32,7 +39,10 @@ export default async function DashboardBillingPage({ searchParams }: { searchPar
       />
       <DashboardPanel>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <DashboardInfoRow label="Abonelik durumu" value="Abonelik bilgisi bekleniyor" />
+          <DashboardInfoRow
+            label="Aylık paket ücreti"
+            value={wexPayLicense ? formatPlanAmount(wexPayLicense.plan.priceMonthly, wexPayLicense.plan.currency) : "-"}
+          />
           <DashboardInfoRow label="Lisans tipi" value={wexPayLicense ? formatCoreStatus(wexPayLicense.licenseType) : "Aylık"} />
           <DashboardInfoRow label="Yenileme tarihi" value={wexPayLicense?.endsAt ? formatCoreDate(wexPayLicense.endsAt) : "-"} />
           <DashboardInfoRow label="Son ödeme" value={organization.billingPayments[0] ? formatCoreStatus(organization.billingPayments[0].status) : "Henüz yok"} />

@@ -11,17 +11,6 @@ export interface WexonProduct {
   statusLabel?: string;
 }
 
-export interface PricingTier {
-  id: string;
-  product: string;
-  name: string;
-  monthlyPrice: number | null;
-  description: string;
-  features: string[];
-  highlighted: boolean;
-  cta: string;
-}
-
 export interface WexonStat {
   value: string;
   label: string;

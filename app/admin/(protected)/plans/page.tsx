@@ -102,9 +102,9 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <AdminInfoRow label="Şube limiti" value={entitlementValue(plan, "branch_limit")} />
                 <AdminInfoRow label="Masa limiti" value={entitlementValue(plan, "table_limit")} />
-                <AdminInfoRow label="Menü limiti" value={entitlementValue(plan, "menu_item_limit")} />
+                <AdminInfoRow label="Ürün limiti" value={entitlementValue(plan, "product_limit")} />
                 <AdminInfoRow label="Personel limiti" value={entitlementValue(plan, "staff_limit")} />
-                <AdminInfoRow label="Aylık işlem limiti" value={entitlementValue(plan, "monthly_order_limit")} />
+                <AdminInfoRow label="Aylık işlem limiti" value={entitlementValue(plan, "monthly_transaction_limit")} />
                 <AdminInfoRow label="Lisans sayısı" value={plan.licenses.length} />
               </div>
 
