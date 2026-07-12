@@ -1,7 +1,5 @@
-import Image from "next/image";
 import {
   WEXON_BRAND_LOGO_BOX_CLASS,
-  WEXON_BRAND_LOGO_SIZES,
   WEXON_BRAND_LOGO_STYLE,
   WEXON_BRAND_LOGOS,
 } from "@/components/marketing/wexon-brand-logo";
@@ -17,13 +15,14 @@ export default function WexonBrandLogo({
 }) {
   return (
     <span className={`${WEXON_BRAND_LOGO_BOX_CLASS} ${className}`} style={WEXON_BRAND_LOGO_STYLE}>
-      <Image
+      {/* SVG lockups: native img avoids next/image SVG optimization limits. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         src={WEXON_BRAND_LOGOS[variant]}
         alt="Wexon"
-        fill
-        className="object-contain"
-        sizes={WEXON_BRAND_LOGO_SIZES}
-        priority={priority}
+        className="h-full w-full object-contain object-left"
+        decoding="async"
+        fetchPriority={priority ? "high" : "auto"}
       />
     </span>
   );
