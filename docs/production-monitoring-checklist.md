@@ -72,7 +72,7 @@ Escalate if any item is **FAIL** or unexplained spike vs prior quiet period.
 
 ### 6. 404 / 500 route errors
 
-- [x] Marketing and product routes remain 200 (`/`, `/links`, `/products/wexpay`, `/demo/wexpay`)
+- [x] Marketing and product routes remain 200 (`/`, `/links`, `/products/wexpay`, `/demo-request`)
 - [x] Unknown paths return expected 404 (not 500)
 - [x] No new high-volume 404 scanning causing log noise only (note separately)
 - [x] No 500s on `/dashboard`, `/apps/wexpay`, `/admin/*` for authenticated flows
@@ -100,7 +100,7 @@ Escalate if any item is **FAIL** or unexplained spike vs prior quiet period.
 
 ### 9. WexPay page errors
 
-- [x] `www.wexon.dev/products/wexpay` and `/demo/wexpay` healthy
+- [x] `www.wexon.dev/products/wexpay` and `/demo-request` healthy
 - [x] `app.wexon.dev/apps/wexpay` loads for authenticated customers
 - [x] No PayTR / payment API calls enabled unexpectedly (`WEXPAY_PAYTR_ENABLE_API` still set in Production)
 - [x] No client-side error storms on WexPay surfaces

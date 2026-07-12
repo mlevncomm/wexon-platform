@@ -79,13 +79,13 @@ export default function ApplyPage() {
       </section>
 
       <section className="mt-16 rounded-[32px] border border-slate-900 bg-slate-950 p-8 text-center text-white shadow-2xl shadow-slate-950/20 sm:p-12">
-        <h2 className="text-3xl font-black tracking-[-0.02em] sm:text-4xl">Karar vermeden önce canlı demo izleyin</h2>
+        <h2 className="text-3xl font-black tracking-[-0.02em] sm:text-4xl">Karar vermeden önce demo talep edin</h2>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <Link href="/demo/wexpay/business" className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white hover:bg-emerald-400">
-            Canlı WexPay Demosu
-          </Link>
-          <Link href="/demo-request" className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-white hover:bg-white/10">
+          <Link href="/demo-request?product=wexpay" className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-7 py-3.5 text-sm font-bold text-white hover:bg-emerald-400">
             Demo Talep Et
+          </Link>
+          <Link href="/book-demo" className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-bold text-white hover:bg-white/10">
+            Randevu Al
           </Link>
         </div>
       </section>

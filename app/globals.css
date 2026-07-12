@@ -53,6 +53,25 @@
   --wx-motion-normal: 220ms;
   --wx-ease-out:      cubic-bezier(0.22, 1, 0.36, 1);
   --wx-ease-soft:     cubic-bezier(0.25, 0.8, 0.25, 1);
+
+  /* ── Kit: light marketing surfaces ─────────────────────────────────── */
+  --wx-surface:        #f6f8f7;   /* page canvas */
+  --wx-surface-subtle: #eef2f1;   /* alternating band */
+  --wx-surface-card:   #ffffff;   /* white cards */
+  --wx-ink:            #020617;    /* slate-950 headings */
+  --wx-ink-muted:      #475569;    /* slate-600 body */
+  --wx-ink-faint:      #94a3b8;    /* slate-400 captions */
+  --wx-hairline:       #e2e8f0;    /* slate-200 borders */
+
+  /* Kit radii */
+  --wx-radius-pill: 9999px;
+  --wx-radius-xl:   1.75rem;   /* 28px hero/feature cards */
+  --wx-radius-2xl:  2.25rem;   /* 36px oversized panels */
+
+  /* Kit shadows (light surfaces) */
+  --wx-shadow-soft: 0 20px 50px -28px rgba(2, 44, 34, 0.28);
+  --wx-shadow-lift: 0 28px 64px -30px rgba(16, 185, 129, 0.40);
+  --wx-shadow-inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 /* ─── Tailwind Theme Bridge ─────────────────────────────────────────────── */
@@ -69,6 +88,14 @@
   --color-wx-text-muted:   var(--wx-text-muted);
   --color-wx-text-faint:   var(--wx-text-faint);
   --color-wx-border:       var(--wx-border);
+
+  --color-wx-surface:        var(--wx-surface);
+  --color-wx-surface-subtle: var(--wx-surface-subtle);
+  --color-wx-surface-card:   var(--wx-surface-card);
+  --color-wx-ink:            var(--wx-ink);
+  --color-wx-ink-muted:      var(--wx-ink-muted);
+  --color-wx-ink-faint:      var(--wx-ink-faint);
+  --color-wx-hairline:       var(--wx-hairline);
 }
 
 /* ─── Base Reset ────────────────────────────────────────────────────────── */
@@ -107,14 +134,14 @@ input[type="password"]::-webkit-password-toggle-button {
 
 /* ─── Motion & Transitions ──────────────────────────────────────────────── */
 
+/* Opacity-only: any transform on .wx-page-shell creates a containing block
+   and breaks position:fixed descendants (navbar scrolls away after client nav). */
 @keyframes wx-page-enter-keyframes {
   from {
     opacity: 0;
-    transform: translate3d(0, 5px, 0);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -995,4 +1022,63 @@ input[type="password"]::-webkit-password-toggle-button {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* ─── Wexon Kit surfaces (light marketing) ──────────────────────────────── */
+
+/* White product card with soft green-tinted lift shadow. */
+.wx-kit-card {
+  background: var(--wx-surface-card);
+  border: 1px solid var(--wx-hairline);
+  border-radius: var(--wx-radius-xl);
+  box-shadow: var(--wx-shadow-soft);
+}
+
+/* Reusable hover lift for cards / tiles. */
+.wx-lift {
+  transition:
+    transform var(--wx-motion-normal) var(--wx-ease-out),
+    box-shadow var(--wx-motion-normal) var(--wx-ease-out),
+    border-color var(--wx-motion-fast) var(--wx-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wx-lift:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: var(--wx-shadow-lift);
+  }
+}
+
+/* Dark emerald panel used by pricing / CTA / dark previews. */
+.wx-dark-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 12% 0%, rgba(16, 185, 129, 0.18) 0%, transparent 45%),
+    linear-gradient(155deg, #06110c 0%, #06140f 45%, #030b08 100%);
+}
+
+/* Faint grid overlay for dark panels — pair with an absolutely-positioned div. */
+.wx-grid-overlay {
+  background-image:
+    linear-gradient(rgba(52, 211, 153, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(52, 211, 153, 0.08) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 78%);
+}
+
+/* Soft dotted overlay for light sections. */
+.wx-dots-overlay {
+  background-image: radial-gradient(rgba(16, 185, 129, 0.14) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(100% 100% at 50% 0%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(100% 100% at 50% 0%, #000 0%, transparent 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-lift,
+  .wx-lift:hover {
+    transform: none !important;
+  }
 }

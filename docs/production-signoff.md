@@ -27,8 +27,8 @@
 - `https://www.wexon.dev/` → 200
 - `https://www.wexon.dev/links` → 200
 - `https://www.wexon.dev/products/wexpay` → 200
-- `https://www.wexon.dev/demo/wexpay` → 200
 - `https://www.wexon.dev/demo-request` → 200
+- `https://www.wexon.dev/book-demo` → 200
 
 ## Auth / session notes
 

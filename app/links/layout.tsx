@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "WexPay Links",
   description:
-    "Restoranlar için QR menü, sipariş ve ödeme. WexPay demo ve bağlantılar tek yerde.",
+    "Restoranlar için QR menü, sipariş ve ödeme. WexPay ürün ve bağlantılar tek yerde.",
   openGraph: {
     title: "WexPay Links",
     description: "QR menü, sipariş ve ödeme deneyimi — WexPay bağlantı merkezi.",

@@ -29,7 +29,7 @@ Bu dosya iki ayrimi net tutar:
 ## WexApp/WexPay MVP Kurallari
 
 - Seed edilen stok demo data gercek WexPay app'in kendisi degildir.
-- Gercek WexPay app `/api/wexpay/demo/*` endpoint'lerini kullanmaz.
+- Gercek WexPay app public sandbox `/demo/wexpay*` veya eski demo API'lerine bagli degildir.
 - Gercek WexPay app `Organization.isDemo = false` olan musteri tenant'lari icin tasarlanir.
 - Gercek WexPay app testi icin `npm.cmd run prisma:seed:real` ile `isDemo=false` tenant olusturulabilir (restoran, masa, QR menu + inactive license fixture dahil).
 - Sabit demo restaurant/branch slug'lari gercek app icine tasinmaz.
@@ -315,7 +315,7 @@ WexPay MVP kod tarafi tamam; asagidaki maddeler production lansman oncesi dogrul
 - [ ] `Product` kaydinda WexPay urunu mevcut (seed veya admin).
 - [ ] Gercek musteri organization `isDemo=false`.
 - [ ] Aktif license, app installation, subscription ve Core access (`requireProductAccess`) izin veriyor.
-- [ ] Demo tenant (`isDemo=true`) gercek `/apps/wexpay/*` app'ine giremiyor (yalnizca `/demo/wexpay/*` ve `/api/wexpay/demo/*`).
+- [ ] Demo tenant (`isDemo=true`) gercek `/apps/wexpay/*` app'ine giremiyor.
 - [ ] Entitlement limitleri (branch, table, staff, vb.) server-side enforce ediliyor.
 
 ### Restaurant app

@@ -61,8 +61,8 @@ test.describe.serial("production smoke", () => {
     await page.goto("/products/wexpay");
     await expect(page.getByText("WexPay").first()).toBeVisible();
 
-    await page.goto("/demo/wexpay/business");
-    await expect(page.getByText(/WexPay|operasyon/i).first()).toBeVisible();
+    await page.goto("/demo-request");
+    await expect(page.getByText(/Demo|WexPay/i).first()).toBeVisible();
   });
 
   test("admin login reaches organizations", async ({ page }) => {

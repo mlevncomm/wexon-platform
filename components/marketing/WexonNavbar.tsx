@@ -2,9 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
 import { NAV_LINKS } from "@/lib/wexon-mock-data";
 import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
+
+function readScrollY() {
+  if (typeof window === "undefined") return 0;
+  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+}
 
 function WexonBrand({ overDark }: { overDark: boolean }) {
   return (
@@ -93,8 +99,17 @@ interface WexonNavbarProps {
 }
 
 export default function WexonNavbar({ transparent = false, preApplicationBar = false }: WexonNavbarProps) {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Close the mobile menu on route change. Adjusting state during render
+  // (React's documented pattern) avoids a synchronous setState-in-effect.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
+    if (menuOpen) setMenuOpen(false);
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -109,26 +124,34 @@ export default function WexonNavbar({ transparent = false, preApplicationBar = f
 
   useEffect(() => {
     let frame = 0;
-    let lastScrolled = window.scrollY > 16;
+
+    const syncScrolled = () => {
+      setScrolled(readScrollY() > 16);
+    };
 
     const onScroll = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        const nextScrolled = window.scrollY > 16;
-        if (nextScrolled !== lastScrolled) {
-          lastScrolled = nextScrolled;
-          setScrolled(nextScrolled);
-        }
+        syncScrolled();
       });
     };
 
+    syncScrolled();
+    const timeoutId = window.setTimeout(syncScrolled, 0);
+    const rafId = window.requestAnimationFrame(syncScrolled);
+
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pageshow", syncScrolled);
+
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
       window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pageshow", syncScrolled);
     };
-  }, []);
+  }, [pathname]);
 
   const overDark = transparent && !scrolled;
   const lightMobileChrome = menuOpen;
@@ -158,7 +181,7 @@ export default function WexonNavbar({ transparent = false, preApplicationBar = f
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-50 overflow-hidden transition-all duration-300 ease-out ${headerSurfaceClass} ${headerShapeClass}`}
+      className={`fixed inset-x-0 top-0 z-50 overflow-x-clip transition-all duration-300 ease-out ${headerSurfaceClass} ${headerShapeClass}`}
     >
       {preApplicationBar && <PreApplicationTopBar overDark={overDark && !lightMobileChrome} />}
 

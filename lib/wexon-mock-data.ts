@@ -21,7 +21,7 @@ export const PRODUCTS: WexonProduct[] = [
       "Masa ve ödeme takibi",
       "Menü / ürün yönetimi",
       "Raporlama",
-      "Demo reset sistemi",
+      "Core lisans entegrasyonu",
     ],
     href: "/products/wexpay",
     statusLabel: "Pilot",
