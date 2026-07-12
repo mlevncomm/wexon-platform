@@ -13,7 +13,7 @@ test.describe.serial("security journey", () => {
 
   test("customer cannot open admin panel", async ({ page }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
-    test.skip(!fixtures.customerEmail, "customer fixture required");
+    test.skip(!fixtures.fixturesReady || !fixtures.customerOrgId, fixtures.setupError ?? "customer fixture required");
 
     await loginCustomer(page, fixtures.customerEmail, customerPassword());
     await page.goto("/admin");

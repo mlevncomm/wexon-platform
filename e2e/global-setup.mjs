@@ -69,7 +69,7 @@ export default async function globalSetup() {
             select: { id: true, name: true, isDemo: true },
           }),
           prisma.organization.findFirst({
-            where: { slug: "mavi-bahce-demo" },
+            where: { slug: "mavi-bahce-demo", isActive: true },
             select: { id: true, name: true },
           }),
           prisma.user.findFirst({
@@ -168,11 +168,14 @@ export default async function globalSetup() {
     if (!license) missing.push("license:wexpay ACTIVE");
     if (productCount < 2) missing.push("menu_products:>=2");
 
-    const customerOrgId = realUser?.memberships[0]?.organizationId ?? realOrg?.id ?? demoOrg?.id ?? null;
-    const customerEmail = realUser?.email ?? (realOrg ? "real@wexon.dev" : "demo@wexon.dev");
-    const licensedOrgId = realOrg?.id ?? customerOrgId;
     const fixturesReady = missing.length === 0;
-
+    const customerOrgId = fixturesReady
+      ? (realUser?.memberships[0]?.organizationId ?? realOrg?.id ?? demoOrg?.id ?? null)
+      : null;
+    const customerEmail = fixturesReady
+      ? (realUser?.email ?? (realOrg ? "real@wexon.dev" : "demo@wexon.dev"))
+      : "real@wexon.dev";
+    const licensedOrgId = fixturesReady ? (realOrg?.id ?? customerOrgId) : null;
     const fixtures = {
       dbAvailable: true,
       fixturesReady,
@@ -182,11 +185,11 @@ export default async function globalSetup() {
       customerOrgId,
       licensedCustomerEmail: "real@wexon.dev",
       licensedOrgId,
-      realOrgId: realOrg?.id ?? null,
-      demoOrgId: demoOrg?.id ?? null,
-      inactiveWexPayOrgId: inactiveWexPay?.organizationId ?? null,
+      realOrgId: fixturesReady ? (realOrg?.id ?? null) : null,
+      demoOrgId: fixturesReady ? (demoOrg?.id ?? null) : null,
+      inactiveWexPayOrgId: fixturesReady ? (inactiveWexPay?.organizationId ?? null) : null,
       qrCode: fixturesReady ? (qrTable?.qrCode ?? null) : null,
-      inactiveQrCode: inactiveQrTable?.qrCode ?? null,
+      inactiveQrCode: fixturesReady ? (inactiveQrTable?.qrCode ?? null) : null,
     };
 
     writeFileSync(fixturesPath, JSON.stringify(fixtures, null, 2), "utf8");
