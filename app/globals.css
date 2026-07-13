@@ -865,8 +865,6 @@ input[type="password"]::-webkit-password-toggle-button {
 
   .wx-page-enter,
   .wx-hero-headline-enter,
-  .wx-hero-headline-em,
-  .wx-hero-word-chip-ring,
   .wx-hero-float,
   .wx-hero-float-slow,
   .wx-hero-proof,
@@ -885,9 +883,7 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-tactile,
   .wx-nav-pill-link,
   .wx-btn,
-  .wx-input-focus,
-  .wx-hero-word-active,
-  .wx-hero-word-leaving {
+  .wx-input-focus {
     transition-duration: 1ms !important;
     filter: none !important;
   }
