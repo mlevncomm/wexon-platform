@@ -29,7 +29,7 @@ const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
   ],
   Yasal: [
     { label: "KVKK", href: "/kvkk" },
-    { label: "Gizlilik", href: "/gizlilik-politikasi" },
+    { label: "Gizlilik", href: "/gizlilik" },
     { label: "Kullanım Şartları", href: "/kullanim-sartlari" },
     { label: "Çerez Politikası", href: "/cerez-politikasi" },
   ],

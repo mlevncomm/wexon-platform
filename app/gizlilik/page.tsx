@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import LegalDocumentPage from "@/components/marketing/LegalDocumentPage";
 import { getLegalDocument } from "@/lib/legal-content";
 
-const document = getLegalDocument("cerezPolitikasi");
+const document = getLegalDocument("gizlilik");
 
 export const metadata: Metadata = {
   title: document.metaTitle,
   description: document.metaDescription,
-  alternates: { canonical: "/cerez-politikasi" },
+  alternates: { canonical: "/gizlilik" },
   robots: { index: true, follow: true },
 };
 
-export default function CerezPolitikasiPage() {
+export default function GizlilikPage() {
   return <LegalDocumentPage document={document} />;
 }

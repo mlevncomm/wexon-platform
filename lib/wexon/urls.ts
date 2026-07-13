@@ -143,6 +143,7 @@ export const PUBLIC_MARKETING_PATHS = [
   "/products/wexb2b",
   "/legal",
   "/kvkk",
+  "/gizlilik",
   "/gizlilik-politikasi",
   "/kullanim-sartlari",
   "/cerez-politikasi",

@@ -26,6 +26,7 @@ const routes: Array<{ path: string; priority: number; changeFrequency: MetadataR
   { path: "/legal/cookies", priority: 0.25, changeFrequency: "yearly" },
   { path: "/legal/security", priority: 0.25, changeFrequency: "yearly" },
   { path: "/kvkk", priority: 0.25, changeFrequency: "yearly" },
+  { path: "/gizlilik", priority: 0.25, changeFrequency: "yearly" },
   { path: "/gizlilik-politikasi", priority: 0.25, changeFrequency: "yearly" },
   { path: "/kullanim-sartlari", priority: 0.25, changeFrequency: "yearly" },
   { path: "/cerez-politikasi", priority: 0.25, changeFrequency: "yearly" },

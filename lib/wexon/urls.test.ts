@@ -30,6 +30,7 @@ describe("isPublicMarketingPath", () => {
     assert.equal(isPublicMarketingPath("/contact"), true);
     assert.equal(isPublicMarketingPath("/iletisim"), true);
     assert.equal(isPublicMarketingPath("/kvkk"), true);
+    assert.equal(isPublicMarketingPath("/gizlilik"), true);
     assert.equal(isPublicMarketingPath("/gizlilik-politikasi"), true);
     assert.equal(isPublicMarketingPath("/dashboard"), false);
     assert.equal(isPublicMarketingPath("/apps/wexpay"), false);
