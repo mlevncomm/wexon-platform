@@ -8,7 +8,6 @@ const FADE_MS = 260;
 export default function WexonHeroRotatingWord({ words }: { words: readonly string[] }) {
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
-  const [reducedMotion, setReducedMotion] = useState(false);
 
   const longestWord = useMemo(
     () => words.reduce((longest, word) => (word.length > longest.length ? word : longest), words[0] ?? ""),
@@ -16,19 +15,14 @@ export default function WexonHeroRotatingWord({ words }: { words: readonly strin
   );
 
   useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const syncReducedMotion = () => setReducedMotion(media.matches);
-    syncReducedMotion();
-    media.addEventListener("change", syncReducedMotion);
-    return () => media.removeEventListener("change", syncReducedMotion);
-  }, []);
-
-  useEffect(() => {
-    if (words.length <= 1 || reducedMotion) return;
+    // Keep rotating on real phones even when iOS "Reduce Motion" is on —
+    // that preference freezes CSS/JS marketing motion in desktop-vs-device checks.
+    if (words.length <= 1) return;
 
     let fadeTimeout: ReturnType<typeof setTimeout> | undefined;
 
     const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       setVisible(false);
       fadeTimeout = setTimeout(() => {
         setIndex((current) => (current + 1) % words.length);
@@ -40,9 +34,9 @@ export default function WexonHeroRotatingWord({ words }: { words: readonly strin
       clearInterval(interval);
       if (fadeTimeout) clearTimeout(fadeTimeout);
     };
-  }, [words.length, reducedMotion]);
+  }, [words.length]);
 
-  const activeWord = reducedMotion ? words[0] : words[index];
+  const activeWord = words[index] ?? words[0] ?? "";
 
   return (
     <span className="wx-hero-word-chip" aria-label={activeWord}>
@@ -52,8 +46,8 @@ export default function WexonHeroRotatingWord({ words }: { words: readonly strin
           {longestWord}
         </span>
         <span
-          aria-live={reducedMotion ? "off" : "polite"}
-          className={`wx-hero-word-chip-label ${reducedMotion || visible ? "wx-hero-word-active" : "wx-hero-word-leaving"}`}
+          aria-live="polite"
+          className={`wx-hero-word-chip-label ${visible ? "wx-hero-word-active" : "wx-hero-word-leaving"}`}
         >
           {activeWord}
         </span>
