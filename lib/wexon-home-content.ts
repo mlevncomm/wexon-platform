@@ -163,7 +163,7 @@ export const ADMIN_METRICS: AdminMetric[] = [
 
 export const ADMIN_ORGANIZATIONS: AdminOrganizationRow[] = [
   {
-    organization: "Kadıköy Lezzet A.Ş.",
+    organization: "Mavi Bahçe Restaurant",
     activeProducts: "WexPay",
     plan: "Platform",
     billingState: { label: "Ödendi", tone: "success" },
@@ -171,7 +171,7 @@ export const ADMIN_ORGANIZATIONS: AdminOrganizationRow[] = [
     status: { label: "Aktif", tone: "success" },
   },
   {
-    organization: "Bosphorus Hotel",
+    organization: "Nova Hotel",
     activeProducts: "WexHotel · WexPay",
     plan: "Growth",
     billingState: { label: "Beklemede", tone: "warning" },
@@ -206,8 +206,8 @@ export const ADMIN_ORGANIZATIONS: AdminOrganizationRow[] = [
 
 export const ADMIN_ACTIVITY: AdminActivityItem[] = [
   { icon: "license", title: "License renewed", detail: "Marmara Group · Enterprise", tone: "success" },
-  { icon: "entitlement", title: "Entitlement updated", detail: "Bosphorus Hotel · +1 ürün", tone: "info" },
-  { icon: "billing", title: "Payment received", detail: "Kadıköy Lezzet · ₺4.200", tone: "success" },
+  { icon: "entitlement", title: "Entitlement updated", detail: "Nova Hotel · +1 ürün", tone: "info" },
+  { icon: "billing", title: "Payment received", detail: "Mavi Bahçe Restaurant · ₺4.200", tone: "success" },
   { icon: "track", title: "Trial expiring", detail: "Ege Kahve · 3 gün kaldı", tone: "warning" },
   { icon: "shield", title: "Admin override applied", detail: "Anadolu Toptan · erişim kısıtlandı", tone: "error" },
 ];
@@ -387,7 +387,7 @@ export const WEXB2B_APP: WexB2BAppData = {
       payment: { label: "Bekliyor", tone: "warning" },
     },
     {
-      dealer: "Marmara Ltd.",
+      dealer: "Atlas B2B",
       quote: "#T-1039",
       orderStatus: { label: "Sevk edildi", tone: "info" },
       payment: { label: "Gecikmiş", tone: "error" },

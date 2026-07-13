@@ -1,6 +1,7 @@
 import Link from "next/link";
 import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
 import {
+  WEXON_PRODUCT_LOCKUPS,
   WEXON_PRODUCT_MARKS,
 } from "@/components/marketing/wexon-brand-logo";
 import { WexPayDarkPanelHeaderBackdrop } from "@/components/wexpay/WexPayBusinessUI";
@@ -343,20 +344,14 @@ export default function WexonLinksPage() {
           <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-5 py-6 text-center">
             <WexPayDarkPanelHeaderBackdrop />
             <div className="relative flex flex-col items-center">
-              <div className="flex items-center gap-2.5" aria-label="weX.Pay">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={WEXON_PRODUCT_MARKS.wexpay}
-                  alt=""
-                  className="h-10 w-10 object-contain sm:h-11 sm:w-11"
-                  decoding="async"
-                  fetchPriority="high"
-                />
-                <span className="text-[1.65rem] font-black leading-none tracking-tight sm:text-[1.75rem]">
-                  <span className="text-white">weX</span>
-                  <span className="text-[#5DFF65]">.Pay</span>
-                </span>
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={WEXON_PRODUCT_LOCKUPS.wexpay}
+                alt="weX.Pay"
+                className="h-11 w-auto max-w-[250px] object-contain object-center sm:h-12"
+                decoding="async"
+                fetchPriority="high"
+              />
               <h1 className="mt-5 text-2xl font-black tracking-tight text-white">QR menü, sipariş ve ödeme</h1>
               <p className="mt-2 max-w-[320px] text-[13px] leading-relaxed text-slate-400">
                 Restoranlar için tek QR üzerinden menü, sipariş ve ödeme akışı.

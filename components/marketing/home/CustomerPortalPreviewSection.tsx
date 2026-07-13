@@ -62,7 +62,7 @@ function PortalShell() {
             </div>
             <div className="leading-tight">
               <p className="text-sm font-black text-slate-950">Customer Portal</p>
-              <p className="text-[10px] font-semibold text-slate-400">Kadıköy Lezzet</p>
+              <p className="text-[10px] font-semibold text-slate-400">Mavi Bahçe Restaurant</p>
             </div>
           </div>
           <nav className="mt-2 flex gap-1.5 overflow-x-auto md:mt-3 md:flex-col md:overflow-visible">
@@ -85,7 +85,7 @@ function PortalShell() {
         <div className="p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[15px] font-black tracking-tight text-slate-950">Kadıköy Lezzet A.Ş.</p>
+              <p className="text-[15px] font-black tracking-tight text-slate-950">Mavi Bahçe Restaurant</p>
               <p className="text-[11px] font-medium text-slate-500">Organization paneli · yalnızca kendi kapsamı</p>
             </div>
             <span className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-500 sm:inline-flex">
