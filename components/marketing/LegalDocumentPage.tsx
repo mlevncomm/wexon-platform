@@ -4,7 +4,7 @@ import WexonStaticPageShell from "@/components/marketing/WexonStaticPageShell";
 
 function enrichContactLine(line: string) {
   if (line === LEGAL_CONTACT_EMAIL || line.endsWith(LEGAL_CONTACT_EMAIL)) {
-    const label = line === LEGAL_CONTACT_EMAIL ? line : line.slice(0, line.indexOf(LEGAL_CONTACT_EMAIL));
+    const label = line === LEGAL_CONTACT_EMAIL ? "" : line.slice(0, line.indexOf(LEGAL_CONTACT_EMAIL));
     return (
       <p key={line} className="font-medium">
         {label}
