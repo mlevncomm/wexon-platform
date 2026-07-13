@@ -20,3 +20,18 @@ export const WEXON_BRAND_LOGOS = {
   hero: "/brand/wexon-dev.svg",
   dark: "/brand/wexon-siyah.svg",
 } satisfies Record<"hero" | "dark", string>;
+
+/** Product lockups (wordmark + mark) — intended for dark backgrounds. */
+export const WEXON_PRODUCT_LOCKUPS = {
+  wexpay: "/brand/wex-pay.png",
+  wexhotel: "/brand/wex-hotel.png",
+  wexb2b: "/brand/wex-b2b.png",
+} as const;
+
+/** Transparent product marks for light surfaces / compact UI. */
+export const WEXON_PRODUCT_MARKS = {
+  wexon: "/brand/wexon-mark.svg",
+  wexpay: "/brand/wexpay-mark.svg",
+  wexhotel: "/brand/wexhotel-mark.svg",
+  wexb2b: "/brand/wexb2b-mark.svg",
+} as const;

@@ -43,11 +43,11 @@ test.describe.serial("wexpay flow journey", () => {
     }
   });
 
-  test("public product page uses pilot / manual language when PayTR disabled", async ({ page }) => {
+  test("public product page uses Business Suite / manuel language when PayTR disabled", async ({ page }) => {
     test.skip(process.env.WEXPAY_PAYTR_ENABLE_API === "true", "PayTR enabled — skip disabled-copy check");
 
     await page.goto("/products/wexpay");
     const bodyText = await page.locator("body").innerText();
-    expect(bodyText).toMatch(/WexPay|pilot|manuel|tahsilat|ödeme/i);
+    expect(bodyText).toMatch(/WexPay|Business Suite|manuel|tahsilat|ödeme/i);
   });
 });

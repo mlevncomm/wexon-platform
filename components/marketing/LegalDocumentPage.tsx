@@ -117,40 +117,38 @@ export default function LegalDocumentPage({ document }: { document: LegalDocumen
       headline={document.title}
       description={document.description}
     >
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 lg:hidden">
-          <LegalAside document={document} />
-        </div>
+      <div className="mb-6 lg:hidden">
+        <LegalAside document={document} />
+      </div>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-10">
-          <article className="min-w-0 max-w-3xl justify-self-stretch lg:max-w-none xl:max-w-3xl">
-            <div className="space-y-5 sm:space-y-6">
-              {document.sections.map((section) => (
-                <section
-                  key={section.heading}
-                  id={sectionAnchorId(section.heading)}
-                  className="scroll-mt-28 rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/5 sm:p-7"
-                >
-                  <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">{section.heading}</h2>
-                  <div className="mt-4 space-y-3.5">
-                    {section.blocks.map((block, index) => (
-                      <LegalBlockView key={`${section.heading}-${index}`} block={block} />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-
-            {document.footerNote ? (
-              <p className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 text-sm leading-relaxed text-slate-500">
-                {document.footerNote}
-              </p>
-            ) : null}
-          </article>
-
-          <div className="hidden lg:block">
-            <LegalAside document={document} />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-10">
+        <article className="min-w-0">
+          <div className="space-y-5 sm:space-y-6">
+            {document.sections.map((section) => (
+              <section
+                key={section.heading}
+                id={sectionAnchorId(section.heading)}
+                className="scroll-mt-28 rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/5 sm:p-7"
+              >
+                <h2 className="text-lg font-black tracking-tight text-slate-950 sm:text-xl">{section.heading}</h2>
+                <div className="mt-4 space-y-3.5">
+                  {section.blocks.map((block, index) => (
+                    <LegalBlockView key={`${section.heading}-${index}`} block={block} />
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
+
+          {document.footerNote ? (
+            <p className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 text-sm leading-relaxed text-slate-500">
+              {document.footerNote}
+            </p>
+          ) : null}
+        </article>
+
+        <div className="hidden lg:block">
+          <LegalAside document={document} />
         </div>
       </div>
     </WexonStaticPageShell>

@@ -20,11 +20,11 @@ import type {
 } from "@/types/wexon";
 
 /* -------------------------------------------------------------------------- */
-/* Trust strip + platform stats (honest, pilot-stage)                          */
+/* Trust strip + platform stats (honest, early-access stage)                 */
 /* -------------------------------------------------------------------------- */
 
 export const TRUST_SIGNALS: TrustSignal[] = [
-  { icon: "qr", label: "WexPay Pilot · canlı" },
+  { icon: "qr", label: "WexPay Business Suite · canlı" },
   { icon: "layers", label: "Tek Wexon Core" },
   { icon: "isolation", label: "Tenant isolation" },
   { icon: "entitlement", label: "Lisans & entitlement" },
@@ -62,7 +62,7 @@ export const ECOSYSTEM_PRODUCTS: EcosystemProduct[] = [
     name: "WexPay",
     icon: "qr",
     accent: "emerald",
-    statusLabel: "Pilot",
+    statusLabel: "Business Suite",
     tagline: "Restoranlar için tek QR ile sipariş ve ödeme",
     description:
       "Tek QR üzerinden menü, sepet, sipariş ve ödeme; masa durumu, fiş talepleri ve tahsilat tek panelde canlı takip edilir.",

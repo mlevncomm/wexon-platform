@@ -10,12 +10,12 @@ const SERVICE_CARDS = [
     body: "QR menü, masa, sipariş ve ödeme",
     href: "/products/wexpay",
     initials: "WP",
-    badge: "Pilot",
+    badge: "Business Suite",
   },
   {
     title: "Wexon Core",
     body: "Lisans, abonelik, kota ve entitlement",
-    href: "/#core",
+    href: "/products/wexon-core",
     initials: "CO",
     badge: "Core",
   },
@@ -28,7 +28,7 @@ const SERVICE_CARDS = [
   },
   {
     title: "PayTR",
-    body: "Sanal POS — pilot doğrulama sonrası",
+    body: "Sanal POS — merchant / test-mode onayı sonrası",
     href: "/demo-request",
     initials: "PT",
     badge: "Yakında",

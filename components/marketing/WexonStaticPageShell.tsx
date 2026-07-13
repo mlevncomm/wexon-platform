@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import WexonFooter from "@/components/marketing/WexonFooter";
 import WexonNavbar from "@/components/marketing/WexonNavbar";
 
+/** Shared alignment for static/legal hero + body (hero and content share edges). */
+export const PUBLIC_PAGE_CONTAINER = "mx-auto w-full max-w-[1180px] px-4 sm:px-6 lg:px-8";
+
 export function WexonPageCTA({
   title,
   description,
@@ -62,8 +65,8 @@ export default function WexonStaticPageShell({
   return (
     <>
       <WexonNavbar />
-      <main className="min-h-screen bg-[#f6f8f7] px-5 pb-16 pt-24 text-slate-950 sm:px-8 sm:pb-20 md:pt-28 lg:px-12 xl:px-16 2xl:px-20">
-        <div className="mx-auto max-w-[1440px]">
+      <main className="min-h-screen bg-[#f6f8f7] pb-16 pt-24 text-slate-950 sm:pb-20 md:pt-28">
+        <div className={PUBLIC_PAGE_CONTAINER}>
           <section
             className={`relative overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_15%_0%,#0f3024_0%,transparent_48%),linear-gradient(180deg,#050b16_0%,#081424_100%)] text-white shadow-xl shadow-slate-950/15 sm:rounded-[32px] ${
               compact ? "p-6 sm:p-8" : "p-8 sm:p-10 lg:p-12"
@@ -77,7 +80,7 @@ export default function WexonStaticPageShell({
                 backgroundSize: "56px 56px",
               }}
             />
-            <div className={`relative ${compact ? "max-w-3xl" : "max-w-4xl"}`}>
+            <div className="relative max-w-3xl">
               <span className="mb-4 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-semibold text-emerald-300 sm:mb-5">
                 {badge}
               </span>
@@ -85,7 +88,7 @@ export default function WexonStaticPageShell({
                 className={`font-black leading-tight tracking-[-0.02em] text-white ${
                   compact
                     ? "text-3xl sm:text-4xl lg:text-[2.75rem]"
-                    : "text-4xl sm:text-5xl lg:text-6xl"
+                    : "text-4xl sm:text-5xl lg:text-[3.25rem]"
                 }`}
               >
                 {headline}
@@ -100,7 +103,7 @@ export default function WexonStaticPageShell({
             </div>
           </section>
 
-          <div className={`wx-fade-in ${compact ? "mt-8 space-y-8 sm:mt-10" : "mt-12 space-y-12 sm:mt-16 sm:space-y-16"}`}>
+          <div className={`wx-fade-in ${compact ? "mt-8 space-y-8 sm:mt-10" : "mt-10 space-y-10 sm:mt-12 sm:space-y-12"}`}>
             {children}
           </div>
         </div>

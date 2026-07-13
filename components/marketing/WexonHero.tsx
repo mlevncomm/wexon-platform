@@ -14,10 +14,10 @@ const FLOATING_PROOFS: Array<{
 }> = [
   {
     initials: "QR",
-    title: "WexPay Pilot",
-    body: "Restoran, masa, sipariş ve manuel tahsilat akışı pilot müşterilerle aktif.",
+    title: "WexPay Business Suite",
+    body: "Restoran, masa, sipariş ve manuel tahsilat akışı kontrollü müşterilerle aktif.",
     side: "left",
-    badge: "Pilot",
+    badge: "Canlı",
   },
   {
     initials: "CO",
@@ -29,7 +29,7 @@ const FLOATING_PROOFS: Array<{
   {
     initials: "PS",
     title: "Manuel tahsilat",
-    body: "İlk production path manuel ödeme; PayTR pilot doğrulama sonrası açılır.",
+    body: "İlk production path manuel ödeme; PayTR merchant / test-mode onayı sonrası açılır.",
     side: "right",
     badge: "Ödeme",
   },
@@ -42,7 +42,7 @@ const FLOATING_PROOFS: Array<{
   },
 ];
 
-const TRUST_BADGES = ["WexPay Pilot", "Tek Core", "Manuel tahsilat", "Türkçe arayüz", "Tenant isolation"];
+const TRUST_BADGES = ["WexPay Business Suite", "Tek Core", "Manuel tahsilat", "Türkçe arayüz", "Tenant isolation"];
 
 function FloatingProof({
   initials,
@@ -130,7 +130,7 @@ export default function WexonHero() {
         <div className="wx-hero-copy mx-auto w-full">
           <span className="wx-hero-eyebrow">
             <span className="wx-hero-eyebrow-dot" aria-hidden />
-            <span>WexPay Pilot Launch</span>
+            <span>WexPay Business Suite</span>
             <span className="wx-hero-eyebrow-sep" aria-hidden>
               ·
             </span>

@@ -1,71 +1,71 @@
-"use client";
-
-import { FormEvent, useState } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import WexonInfoCard from "@/components/marketing/WexonInfoCard";
 import WexonStaticPageShell from "@/components/marketing/WexonStaticPageShell";
+import { PublicCTASection } from "@/components/marketing/PublicMarketingBlocks";
+import { WEXON_INSTAGRAM } from "@/lib/wexon/social-links";
 
-const contactCards = [
-  { title: "Demo talepleri", href: "/demo-request" },
-  { title: "Randevu", href: "/book-demo" },
-  { title: "Ön başvuru", href: "/apply" },
-];
+export const metadata: Metadata = {
+  title: "İletişim",
+  description: "Wexon.dev iletişim: mlevn@wexon.dev, Instagram ve demo talebi.",
+  alternates: { canonical: "/contact" },
+};
 
 export default function ContactPage() {
-  const [submitted, setSubmitted] = useState(false);
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitted(true);
-  }
-
   return (
     <WexonStaticPageShell
       badge="İletişim"
       headline="Wexon ekibiyle iletişime geçin"
-      description="Demo, ön başvuru, iş ortaklığı veya genel sorularınız için bizimle iletişime geçebilirsiniz."
+      description="Demo, ön başvuru, iş birliği veya KVKK talepleri için buradayız. Fiziksel adres yayınlanmıyorsa uydurma adres kullanmıyoruz."
     >
       <section className="grid gap-5 lg:grid-cols-3">
-        {contactCards.map((card) => (
-          <Link key={card.href} href={card.href}>
-            <WexonInfoCard title={card.title} description="İlgili aksiyon sayfasına ilerleyin." />
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">E-posta</p>
+          <a href="mailto:mlevn@wexon.dev" className="mt-2 inline-flex text-base font-bold text-emerald-700 underline-offset-2 hover:underline">
+            mlevn@wexon.dev
+          </a>
+        </div>
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">Web</p>
+          <a href="https://www.wexon.dev" className="mt-2 inline-flex text-base font-bold text-emerald-700 underline-offset-2 hover:underline" rel="noopener noreferrer">
+            https://www.wexon.dev
+          </a>
+        </div>
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">Instagram</p>
+          <a
+            href={WEXON_INSTAGRAM.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={WEXON_INSTAGRAM.ariaLabel}
+            className="mt-2 inline-flex text-base font-bold text-emerald-700 underline-offset-2 hover:underline"
+          >
+            {WEXON_INSTAGRAM.handle}
+          </a>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        {[
+          { label: "Demo Talep Et", href: "/demo-request" },
+          { label: "Ön Başvuru", href: "/on-basvuru" },
+          { label: "Randevu talebi", href: "/randevu-ai" },
+        ].map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="rounded-3xl border border-slate-200/80 bg-white p-5 text-sm font-bold text-slate-950 shadow-sm transition hover:border-emerald-200 hover:text-emerald-800"
+          >
+            {item.label}
           </Link>
         ))}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-        <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm shadow-slate-200/60">
-          <h2 className="text-2xl font-black tracking-[-0.02em] text-slate-950">Statik iletişim bilgileri</h2>
-          <div className="mt-6 space-y-4 text-sm font-semibold text-slate-600">
-            <p>E-posta: info@wexon.dev</p>
-            <p>Çalışma alanı: Türkiye</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60">
-          <h2 className="text-2xl font-black tracking-[-0.02em] text-slate-950">Mesaj gönderin</h2>
-          {submitted && (
-            <p className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
-              Mesajınız alındı. En kısa sürede sizinle iletişime geçeceğiz.
-            </p>
-          )}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {["Ad soyad", "E-posta", "Konu"].map((label) => (
-              <label key={label} className={label === "Konu" ? "sm:col-span-2" : ""}>
-                <span className="text-sm font-bold text-slate-700">{label}</span>
-                <input className="mt-2 min-h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-400/40" />
-              </label>
-            ))}
-            <label className="sm:col-span-2">
-              <span className="text-sm font-bold text-slate-700">Mesaj</span>
-              <textarea rows={5} className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-400/40" />
-            </label>
-            <button type="submit" className="sm:col-span-2 rounded-full bg-emerald-500 px-6 py-4 text-sm font-bold text-white transition-colors hover:bg-emerald-600">
-              Mesaj Gönder
-            </button>
-          </div>
-        </form>
-      </section>
+      <PublicCTASection
+        title="Ürün demosu için en hızlı yol"
+        description="Formu doldurun; Wexon ekibi uygunluk durumuna göre size dönüş yapsın."
+        primary={{ label: "Demo Talep Et", href: "/demo-request" }}
+        secondary={{ label: "Paketler", href: "/packages" }}
+      />
     </WexonStaticPageShell>
   );
 }
