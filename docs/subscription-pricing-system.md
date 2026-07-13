@@ -1,7 +1,7 @@
 # Subscription pricing system
 
 Date: 2026-07-13  
-Branch: `cursor/production-backend-hardening`
+Branch: `cursor/paytr-real-subscription-checkout`
 
 ## Source of truth
 
@@ -38,9 +38,10 @@ Checkout totals are computed by `computePlanPrice(plan, interval)` in `lib/wexon
 ## Subscription checkout
 
 - **Mock** checkout (`createMockCheckoutSubscriptionAction`) — disabled in production (`NODE_ENV=production`).
-- **Admin-manual** subscription/invoice/payment recording via admin portal.
-- **Live PayTR / Stripe for org subscriptions:** out of scope (not built).
-- PayTR adapters remain for **operational** diner→restaurant payments only, gated by `WEXPAY_PAYTR_ENABLE_API`.
+- **Admin-manual** subscription/invoice/payment recording via admin portal (audit note required on status changes).
+- **PayTR iFrame for Core subscriptions:** implemented behind `PAYTR_SUBSCRIPTION_ENABLE_API` + `PAYTR_IFRAME_ENABLE_API` (default false). See `docs/paytr-subscription-checkout.md`.
+- WexPay operational diner→restaurant PayTR remains separate (`WEXPAY_PAYTR_ENABLE_API` + tenant credentials).
+- Recurring / stored card: **not enabled** — `docs/paytr-recurring-readiness.md`.
 
 ## Fallbacks (intentional)
 

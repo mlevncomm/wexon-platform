@@ -169,6 +169,61 @@ if (isProduction) {
   }
 }
 
+const paytrSubErrors = [];
+const paytrSubEnabled = getValue("PAYTR_SUBSCRIPTION_ENABLE_API") === "true";
+const paytrIframeEnabled = getValue("PAYTR_IFRAME_ENABLE_API") === "true";
+const paytrRecurringEnabled = getValue("PAYTR_RECURRING_ENABLE_API") === "true";
+const paytrTestMode = getValue("PAYTR_TEST_MODE");
+const paytrDebugOn = getValue("PAYTR_DEBUG_ON");
+
+for (const name of [
+  "PAYTR_SUBSCRIPTION_ENABLE_API",
+  "PAYTR_IFRAME_ENABLE_API",
+  "PAYTR_RECURRING_ENABLE_API",
+  "PAYTR_TEST_MODE",
+  "PAYTR_DEBUG_ON",
+]) {
+  if (isSet(name)) {
+    const err = validateBooleanFlag(name);
+    if (err) paytrSubErrors.push(err);
+  }
+}
+
+if (paytrSubEnabled) {
+  for (const name of ["PAYTR_MERCHANT_ID", "PAYTR_MERCHANT_KEY", "PAYTR_MERCHANT_SALT"]) {
+    if (!isSet(name)) paytrSubErrors.push(`${name} is required when PAYTR_SUBSCRIPTION_ENABLE_API=true.`);
+    else if (isPlaceholder(getValue(name))) paytrSubErrors.push(`${name} still looks like a placeholder.`);
+  }
+  if (!paytrIframeEnabled) {
+    paytrSubErrors.push("PAYTR_IFRAME_ENABLE_API must be true when PAYTR_SUBSCRIPTION_ENABLE_API=true.");
+  }
+  const appUrl = getValue("NEXT_PUBLIC_APP_URL");
+  const publicOrigin = getValue("NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN") || appUrl;
+  if (!publicOrigin.startsWith("https://") && isProduction) {
+    paytrSubErrors.push("NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN (or NEXT_PUBLIC_APP_URL) must be https in production when PayTR subscription is enabled.");
+  }
+  if (paytrTestMode === "false" && paytrDebugOn !== "false") {
+    paytrSubErrors.push("PAYTR_DEBUG_ON must be false when PAYTR_TEST_MODE=false (live mode).");
+  }
+}
+
+if (paytrRecurringEnabled) {
+  paytrSubErrors.push(
+    "PAYTR_RECURRING_ENABLE_API=true is blocked until recurring readiness is verified (see docs/paytr-recurring-readiness.md).",
+  );
+}
+
+if (paytrSubErrors.length > 0) {
+  console.error("PayTR subscription environment check failed:");
+  for (const item of paytrSubErrors) {
+    console.error(`  - ${item}`);
+  }
+  process.exit(1);
+}
+
 console.log("Production environment check passed.");
 console.log(`Required: ${REQUIRED.length}/${REQUIRED.length}`);
 console.log(`PSP optional checked: ${PSP_OPTIONAL.length - pspMissing.length}/${PSP_OPTIONAL.length}`);
+console.log(
+  `PayTR subscription API: ${paytrSubEnabled ? "enabled-gated" : "disabled"} (recurring=${paytrRecurringEnabled ? "BLOCKED" : "off"})`,
+);

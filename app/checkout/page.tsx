@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import PaytrCheckoutPanel from "@/components/billing/PaytrCheckoutPanel";
 import { createMockCheckoutSubscriptionAction } from "@/lib/wexon-checkout-actions";
 import {
   computePlanPrice,
@@ -7,6 +8,7 @@ import {
   type CheckoutPlanKey,
 } from "@/lib/wexon-checkout-validation";
 import { getCurrentCustomerUser } from "@/lib/wexon-customer-auth";
+import { isPaytrSubscriptionEnabled } from "@/lib/paytr/paytr-client";
 import { prisma } from "@/lib/prisma";
 
 type CheckoutSearchParams = Promise<{ product?: string; plan?: string; interval?: string; checkoutError?: string }>;
@@ -53,11 +55,13 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
       );
 
   const currentUser = await getCurrentCustomerUser();
-  const showMockNotice = process.env.NODE_ENV !== "production";
+  const paytrEnabled = isPaytrSubscriptionEnabled();
+  const showMockNotice = process.env.NODE_ENV !== "production" && !paytrEnabled;
   const checkoutBase = `/checkout?product=wexpay&plan=${planKey}`;
   const accountFeature = currentUser
     ? "Abonelik mevcut Wexon Core hesabınıza bağlanır"
     : "Wexon Core hesabı otomatik oluşturulur";
+  const canUsePaytr = Boolean(paytrEnabled && currentUser && dbPlan);
 
   if (productKey !== "wexpay") {
     return (
@@ -201,52 +205,83 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
               {params.checkoutError}
             </div>
           )}
-          <form action={createMockCheckoutSubscriptionAction} className="mt-5 grid gap-3">
-            <input type="hidden" name="productKey" value="wexpay" />
-            <input type="hidden" name="planKey" value={planKey} />
-            <input type="hidden" name="billingInterval" value={billingInterval} />
-            <SectionLabel>İletişim bilgileri</SectionLabel>
-            <Input label="Yetkili adı" name="name" defaultValue={currentUser?.name ?? ""} required />
-            <Input
-              label="E-posta"
-              name="email"
-              type="email"
-              defaultValue={currentUser?.email ?? ""}
-              required
-              readOnly={Boolean(currentUser)}
+
+          {canUsePaytr && currentUser && dbPlan ? (
+            <PaytrCheckoutPanel
+              planId={dbPlan.id}
+              organizationId={currentUser.memberships[0]!.organizationId}
+              billingInterval={billingInterval}
+              planLabel={`WexPay ${dbPlan.name}`}
+              totalLabel={money(price.total, price.currency)}
             />
-            {!currentUser && (
-              <>
-                <SectionLabel>Hesap bilgileri</SectionLabel>
-                <Input label="Şifre" name="password" type="password" required />
-                <Input label="Şifre tekrar" name="passwordConfirm" type="password" required />
-              </>
-            )}
-            <SectionLabel>İşletme bilgileri</SectionLabel>
-            <Input
-              label="İşletme / organizasyon adı"
-              name="organizationName"
-              defaultValue={currentUser?.memberships[0]?.organization.name ?? ""}
-              required
-              readOnly={Boolean(currentUser)}
-            />
-            <Input label="Telefon" name="phone" defaultValue={currentUser?.phone ?? ""} />
-            <Input label="Ülke" name="country" defaultValue="TR" />
-            <SectionLabel>Ödeme yöntemi</SectionLabel>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600">
-              <p className="font-black text-slate-950">Mock ödeme</p>
-              <p className="mt-1 text-xs leading-relaxed">
-                Bu geliştirme ortamında ödeme başarılı kabul edilir. Production ödeme akışı ödeme sağlayıcı session ile
-                değiştirilecektir.
-              </p>
-            </div>
-            <button
-              type="submit"
-              className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700"
-            >
-              {money(price.total, price.currency)} öde ve aboneliği başlat
-            </button>
-          </form>
+          ) : (
+            <form action={createMockCheckoutSubscriptionAction} className="mt-5 grid gap-3">
+              <input type="hidden" name="productKey" value="wexpay" />
+              <input type="hidden" name="planKey" value={planKey} />
+              <input type="hidden" name="billingInterval" value={billingInterval} />
+              <SectionLabel>İletişim bilgileri</SectionLabel>
+              <Input label="Yetkili adı" name="name" defaultValue={currentUser?.name ?? ""} required />
+              <Input
+                label="E-posta"
+                name="email"
+                type="email"
+                defaultValue={currentUser?.email ?? ""}
+                required
+                readOnly={Boolean(currentUser)}
+              />
+              {!currentUser && (
+                <>
+                  <SectionLabel>Hesap bilgileri</SectionLabel>
+                  <Input label="Şifre" name="password" type="password" required />
+                  <Input label="Şifre tekrar" name="passwordConfirm" type="password" required />
+                </>
+              )}
+              <SectionLabel>İşletme bilgileri</SectionLabel>
+              <Input
+                label="İşletme / organizasyon adı"
+                name="organizationName"
+                defaultValue={currentUser?.memberships[0]?.organization.name ?? ""}
+                required
+                readOnly={Boolean(currentUser)}
+              />
+              <Input label="Telefon" name="phone" defaultValue={currentUser?.phone ?? ""} />
+              <Input label="Ülke" name="country" defaultValue="TR" />
+              <SectionLabel>Ödeme yöntemi</SectionLabel>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600">
+                {paytrEnabled ? (
+                  <>
+                    <p className="font-black text-slate-950">PayTR için giriş gerekli</p>
+                    <p className="mt-1 text-xs leading-relaxed">
+                      Canlı PayTR abonelik ödemesi için önce Wexon Core hesabınıza giriş yapın. Kart bilgileri Wexon’da
+                      saklanmaz.
+                    </p>
+                    <Link href="/login?next=%2Fcheckout" className="mt-3 inline-flex font-black text-emerald-700">
+                      Giriş yap →
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-black text-slate-950">
+                      {process.env.NODE_ENV === "production" ? "Manuel / admin aktivasyon" : "Mock ödeme"}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed">
+                      {process.env.NODE_ENV === "production"
+                        ? "PayTR abonelik API’si kapalı. Abonelik admin-manual veya test mode açılışı sonrası PayTR ile alınır."
+                        : "Geliştirme ortamında ödeme mock olarak başarılı kabul edilir. Production’da PayTR iFrame kullanılır."}
+                    </p>
+                  </>
+                )}
+              </div>
+              {!paytrEnabled && process.env.NODE_ENV !== "production" ? (
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700"
+                >
+                  {money(price.total, price.currency)} öde ve aboneliği başlat
+                </button>
+              ) : null}
+            </form>
+          )}
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs font-semibold text-slate-500">
             <div className="flex flex-wrap gap-3">
               <Link href="/" className="font-bold text-slate-600 hover:text-slate-950">

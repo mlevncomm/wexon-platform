@@ -984,6 +984,27 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
     const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
     if (!subscription) throw new AdminValidationError("Abonelik bulunamadı.");
 
+    const paidPaytr = await prisma.subscriptionPayment.findFirst({
+      where: {
+        organizationId: subscription.organizationId,
+        planId: subscription.planId,
+        status: "PAID",
+        provider: "PAYTR",
+      },
+      orderBy: { paidAt: "desc" },
+    });
+
+    if (
+      payload.status === "ACTIVE" &&
+      paidPaytr &&
+      subscription.status !== "ACTIVE" &&
+      !payload.acknowledgePaytrPaid
+    ) {
+      throw new AdminValidationError(
+        `Bu plan için PAID PayTR ödemesi var (merchant_oid=${paidPaytr.merchantOid}). Çift aktivasyonu önlemek için acknowledgePaytrPaid işaretleyin ve audit notu girin.`,
+      );
+    }
+
     await prisma.$transaction(async (tx) => {
       const updated = await tx.subscription.update({
         where: { id: subscriptionId },
@@ -1000,7 +1021,13 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
           organizationId: subscription.organizationId,
           entityType: "Subscription",
           entityId: subscriptionId,
-          metadata: { before: { status: subscription.status }, after: { status: updated.status } },
+          metadata: {
+            before: { status: subscription.status },
+            after: { status: updated.status },
+            auditNote: payload.auditNote,
+            acknowledgePaytrPaid: payload.acknowledgePaytrPaid,
+            paidPaytrMerchantOid: paidPaytr?.merchantOid ?? null,
+          },
         },
         tx,
       );

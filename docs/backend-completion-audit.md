@@ -38,7 +38,8 @@ Core customer, admin, and WexPay QR backends are real (DB-backed, server-priced,
 | Bill | Done | Session-scoped totals + paymentAvailability |
 | Payment request | Done | Notification only — **no live charge** |
 | Waiter call | Done | Notification + rate limit |
-| PayTR live charge | Gated | Requires `WEXPAY_PAYTR_ENABLE_API=true` + credentials; diner UI still “yakında” |
+| PayTR live charge (WexPay QR) | Gated | Requires `WEXPAY_PAYTR_ENABLE_API=true` + tenant credentials |
+| PayTR Core subscription iFrame | Gated | `PAYTR_SUBSCRIPTION_ENABLE_API` + platform merchant env; see `docs/paytr-subscription-checkout.md` |
 
 ## Admin / ops
 
