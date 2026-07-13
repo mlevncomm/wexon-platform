@@ -230,15 +230,6 @@ input[type="password"]::-webkit-password-toggle-button {
   }
 }
 
-@keyframes wx-hero-marquee {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(-50%, 0, 0);
-  }
-}
-
 @keyframes wx-hero-word-leave {
   to {
     opacity: 0;
@@ -762,24 +753,6 @@ input[type="password"]::-webkit-password-toggle-button {
   }
 }
 
-.wx-hero-marquee-track {
-  animation: wx-hero-marquee 36s linear infinite;
-  will-change: transform;
-}
-
-/* Touch devices keep sticky :hover after tap — that would freeze the marquee. */
-@media (hover: hover) and (pointer: fine) {
-  .wx-hero-marquee-track:hover {
-    animation-play-state: paused;
-  }
-}
-
-@media (max-width: 640px) {
-  .wx-hero-marquee-track {
-    animation-duration: 28s;
-  }
-}
-
 .wx-card-enter:nth-child(2) {
   animation-delay: 40ms;
 }
@@ -900,7 +873,6 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-hero-proof-pulse,
   .wx-hero-proof-icon,
   .wx-hero-proof-shimmer,
-  .wx-hero-marquee-track,
   .wx-panel-enter,
   .wx-card-enter,
   .wx-fade-in {
