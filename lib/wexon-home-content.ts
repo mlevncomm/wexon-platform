@@ -269,10 +269,10 @@ export const CUSTOMER_BILLING: BillingSummary = {
 };
 
 export const CUSTOMER_TEAM: TeamMember[] = [
-  { name: "Ali Yılmaz", role: "Owner", email: "ali@kadikoylezzet.com" },
-  { name: "Zeynep Kaya", role: "Admin", email: "zeynep@kadikoylezzet.com" },
-  { name: "Mehmet Demir", role: "Billing User", email: "muhasebe@kadikoylezzet.com" },
-  { name: "Elif Şahin", role: "Product User", email: "elif@kadikoylezzet.com" },
+  { name: "Ali Yılmaz", role: "Owner", email: "ali@mavibahce.demo" },
+  { name: "Zeynep Kaya", role: "Admin", email: "zeynep@mavibahce.demo" },
+  { name: "Mehmet Demir", role: "Billing User", email: "muhasebe@mavibahce.demo" },
+  { name: "Elif Şahin", role: "Product User", email: "elif@mavibahce.demo" },
 ];
 
 /* -------------------------------------------------------------------------- */
