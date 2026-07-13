@@ -425,45 +425,10 @@ export const WEXPAY_FLOW_STEPS: FlowStep[] = [
 /* Pricing / Security / FAQ                                                    */
 /* -------------------------------------------------------------------------- */
 
-export const PRICING_PLANS: PricingPlan[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    audience: "İlk ürününü yayına almak isteyen işletmeler",
-    priceLabel: "Demo ile belirlenir",
-    billingNote: "Tek ürün · temel lisans",
-    features: ["Tek ürün erişimi", "Wexon Core temel yönetim", "Aylık lisans", "E-posta desteği"],
-    cta: "Demo Talep Et",
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    audience: "Çok şubeli veya büyüyen ekipler",
-    priceLabel: "Demo ile belirlenir",
-    billingNote: "Çoklu şube · gelişmiş rapor",
-    features: ["Çoklu şube", "Gelişmiş raporlar", "Rol ve yetki kurgusu", "Öncelikli destek"],
-    cta: "Demo Talep Et",
-    highlighted: true,
-  },
-  {
-    id: "platform",
-    name: "Platform",
-    audience: "Birden fazla Wexon ürününü kullanan işletmeler",
-    priceLabel: "Demo ile belirlenir",
-    billingNote: "Çoklu ürün · merkezi Core",
-    features: ["Çoklu ürün erişimi", "Merkezi entitlement", "Birleşik fatura akışı", "API key yönetimi"],
-    cta: "Demo Talep Et",
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    audience: "Özel kurulum, entegrasyon ve SLA ihtiyacı olanlar",
-    priceLabel: "Teklif al",
-    billingNote: "Özel kurulum · SLA",
-    features: ["Özel entegrasyon", "SLA ve gelişmiş destek", "Tek seferlik lisans seçeneği", "Özel yetki kurgusu"],
-    cta: "Teklif Al",
-  },
-];
+import { WEXPAY_PRICING_FALLBACK, ENTERPRISE_PRICING_PLAN } from "@/lib/wexon-public-pricing-fallback";
+
+/** @deprecated Prefer getPublicWexPayPricingPlans() — static fallback for client-safe imports. */
+export const PRICING_PLANS: PricingPlan[] = [...WEXPAY_PRICING_FALLBACK, ENTERPRISE_PRICING_PLAN];
 
 export const SECURITY_ITEMS: SecurityItem[] = [
   {

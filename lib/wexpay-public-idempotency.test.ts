@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  clearIdempotencyStoreForTests,
-  getIdempotentResponse,
-  normalizeIdempotencyKey,
-  storeIdempotentResponse,
-} from "./wexpay-public-idempotency";
+import { normalizeIdempotencyKey, readIdempotencyKeyFromRequest } from "./wexpay-public-idempotency";
 
 describe("public QR idempotency", () => {
   it("normalizes keys", () => {
@@ -14,13 +9,10 @@ describe("public QR idempotency", () => {
     assert.equal(normalizeIdempotencyKey("x".repeat(200)), null);
   });
 
-  it("stores and replays responses", () => {
-    clearIdempotencyStoreForTests();
-    storeIdempotentResponse("scope", "key-1", 201, { orderId: "o1" });
-    const cached = getIdempotentResponse("scope", "key-1");
-    assert.ok(cached);
-    assert.equal(cached?.status, 201);
-    assert.deepEqual(cached?.body, { orderId: "o1" });
-    assert.equal(getIdempotentResponse("scope", "missing"), null);
+  it("reads Idempotency-Key header", () => {
+    const request = new Request("https://example.com", {
+      headers: { "Idempotency-Key": "  key-1  " },
+    });
+    assert.equal(readIdempotencyKeyFromRequest(request), "key-1");
   });
 });

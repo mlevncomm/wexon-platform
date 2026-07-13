@@ -5,6 +5,8 @@ import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 import { createPublicTableAssistNotification } from "@/lib/wexpay-service";
 import { validatePublicNote } from "@/lib/wexpay-validation";
 
+const ALLOWED_PAYMENT_MODES = new Set(["full_bill", "selected_items", "split", "other"]);
+
 /**
  * PUBLIC QR payment request -> POST /api/wexpay/public/[qrCode]/payment-request
  *
@@ -48,7 +50,8 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
   try {
     const body = (parsed.body ?? {}) as { note?: unknown; mode?: unknown };
     const note = validatePublicNote(body.note);
-    const mode = typeof body.mode === "string" && body.mode.trim() ? body.mode.trim() : "full_bill";
+    const modeRaw = typeof body.mode === "string" ? body.mode.trim() : "full_bill";
+    const mode = ALLOWED_PAYMENT_MODES.has(modeRaw) ? modeRaw : "full_bill";
 
     const result = await createPublicTableAssistNotification({
       organizationId: resolution.organizationId,

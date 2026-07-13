@@ -15,6 +15,11 @@ function entitlementValue(plan: Awaited<ReturnType<typeof getAdminPlansData>>[nu
   return item?.valueString ?? item?.valueInt ?? (item?.valueBool ? "Evet" : "-");
 }
 
+function moneyLabel(value: unknown, currency: string) {
+  if (value == null) return "-";
+  return `${Number(value).toLocaleString("tr-TR")} ${currency}`;
+}
+
 export default async function AdminPlansPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
   const { adminError } = await searchParams;
   const [plans, products] = await Promise.all([getAdminPlansData(), getAdminProductsData()]);
@@ -25,7 +30,7 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
         <AdminSectionTitle
           badge="Planlar"
           title="Paket ve limit yönetimi"
-          description="Paket oluşturun, limitleri düzenleyin ve lisans dağılımını kontrol edin."
+          description="Paket oluşturun, fiyat ve limitleri düzenleyin, lisans dağılımını kontrol edin."
         />
         <AdminQuickLinks
           links={[
@@ -63,6 +68,11 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
             <option value="ONE_TIME">Tek seferlik</option>
           </AdminSelectField>
           <AdminTextField label="Sıra" name="sortOrder" type="number" defaultValue="0" />
+          <AdminTextField label="Aylık fiyat (TRY)" name="priceMonthly" type="number" placeholder="1490" />
+          <AdminTextField label="Yıllık fiyat (TRY)" name="priceYearly" type="number" placeholder="14900" />
+          <AdminTextField label="Tek seferlik fiyat (TRY)" name="priceOneTime" type="number" />
+          <AdminTextField label="Para birimi" name="currency" defaultValue="TRY" />
+          <AdminTextField label="KDV (%)" name="taxRatePct" type="number" defaultValue="20" />
           <AdminSelectField label="Herkese açık" name="isPublic" defaultValue="true">
             <option value="true">Evet</option>
             <option value="false">Hayır</option>
@@ -100,11 +110,16 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <AdminInfoRow label="Aylık fiyat" value={moneyLabel(plan.priceMonthly, plan.currency)} />
+                <AdminInfoRow label="Yıllık fiyat" value={moneyLabel(plan.priceYearly, plan.currency)} />
+                <AdminInfoRow label="Tek seferlik" value={moneyLabel(plan.priceOneTime, plan.currency)} />
+                <AdminInfoRow label="KDV" value={`%${plan.taxRatePct}`} />
                 <AdminInfoRow label="Şube limiti" value={entitlementValue(plan, "branch_limit")} />
                 <AdminInfoRow label="Masa limiti" value={entitlementValue(plan, "table_limit")} />
-                <AdminInfoRow label="Menü limiti" value={entitlementValue(plan, "menu_item_limit")} />
+                <AdminInfoRow label="Ürün limiti" value={entitlementValue(plan, "product_limit")} />
                 <AdminInfoRow label="Personel limiti" value={entitlementValue(plan, "staff_limit")} />
                 <AdminInfoRow label="Aylık işlem limiti" value={entitlementValue(plan, "monthly_order_limit")} />
+                <AdminInfoRow label="API limiti" value={entitlementValue(plan, "api_request_limit")} />
                 <AdminInfoRow label="Lisans sayısı" value={plan.licenses.length} />
               </div>
 
@@ -117,6 +132,26 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
                   <option value="ONE_TIME">Tek seferlik</option>
                 </AdminSelectField>
                 <AdminTextField label="Sıra" name="sortOrder" type="number" defaultValue={String(plan.sortOrder)} />
+                <AdminTextField
+                  label="Aylık fiyat (TRY)"
+                  name="priceMonthly"
+                  type="number"
+                  defaultValue={plan.priceMonthly != null ? String(Number(plan.priceMonthly)) : ""}
+                />
+                <AdminTextField
+                  label="Yıllık fiyat (TRY)"
+                  name="priceYearly"
+                  type="number"
+                  defaultValue={plan.priceYearly != null ? String(Number(plan.priceYearly)) : ""}
+                />
+                <AdminTextField
+                  label="Tek seferlik fiyat (TRY)"
+                  name="priceOneTime"
+                  type="number"
+                  defaultValue={plan.priceOneTime != null ? String(Number(plan.priceOneTime)) : ""}
+                />
+                <AdminTextField label="Para birimi" name="currency" defaultValue={plan.currency} />
+                <AdminTextField label="KDV (%)" name="taxRatePct" type="number" defaultValue={String(plan.taxRatePct)} />
                 <AdminSelectField label="Herkese açık" name="isPublic" defaultValue={plan.isPublic ? "true" : "false"}>
                   <option value="true">Evet</option>
                   <option value="false">Hayır</option>

@@ -84,6 +84,8 @@ const wexPayEntitlements = {
   table_limit: 75,
   product_limit: 250,
   staff_limit: 10,
+  monthly_order_limit: 7500,
+  api_request_limit: 50000,
   reporting_level: "standard",
   integration_level: "standard",
   support_level: "priority",
@@ -142,6 +144,10 @@ async function ensureWexPayPlan() {
       isPublic: true,
       isActive: true,
       sortOrder: 2,
+      priceMonthly: 2990,
+      priceYearly: 29900,
+      currency: "TRY",
+      taxRatePct: 20,
     },
     create: {
       productId: product.id,
@@ -152,6 +158,10 @@ async function ensureWexPayPlan() {
       isPublic: true,
       isActive: true,
       sortOrder: 2,
+      priceMonthly: 2990,
+      priceYearly: 29900,
+      currency: "TRY",
+      taxRatePct: 20,
     },
   });
 

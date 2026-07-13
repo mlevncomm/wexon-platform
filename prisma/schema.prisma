@@ -240,6 +240,11 @@ model Plan {
   isPublic        Boolean         @default(true)
   isActive        Boolean         @default(true)
   sortOrder       Int             @default(0)
+  priceMonthly    Decimal?        @db.Decimal(10, 2)
+  priceYearly     Decimal?        @db.Decimal(10, 2)
+  priceOneTime    Decimal?        @db.Decimal(10, 2)
+  currency        String          @default("TRY")
+  taxRatePct      Int             @default(20)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -715,4 +720,16 @@ model WexPayWebhookEvent {
   @@index([provider])
   @@index([status])
   @@index([receivedAt])
+}
+
+/// Postgres-backed idempotency for public QR mutations (survives serverless multi-instance).
+model PublicIdempotencyRecord {
+  id        String   @id @default(cuid())
+  scopeKey  String   @unique
+  status    Int
+  bodyJson  Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
 }

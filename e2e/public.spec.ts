@@ -16,9 +16,16 @@ test.describe.serial("public journey", () => {
 
     await page.goto("/products/wexpay");
     await expect(page.getByText("WexPay").first()).toBeVisible();
+    await expect(page.getByText(/₺1\.490\/ay|₺1490\/ay/i).first()).toBeVisible();
+    await expect(page.getByText(/₺2\.990\/ay|₺2990\/ay/i).first()).toBeVisible();
+    await expect(page.getByText(/₺5\.990\/ay|₺5990\/ay/i).first()).toBeVisible();
+
+    const demoGone = await page.goto("/demo/wexpay");
+    expect(demoGone?.status()).toBeGreaterThanOrEqual(400);
 
     await page.goto("/links");
     await expect(page.getByRole("link").first()).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/\/demo\/wexpay/i);
   });
 
   test("demo request validation rejects empty and invalid fields", async ({ page }) => {

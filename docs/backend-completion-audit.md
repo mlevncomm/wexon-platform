@@ -67,22 +67,27 @@ Core customer, admin, and WexPay QR backends are real (DB-backed, server-priced,
 4. Bill `paymentAvailability` + aliases (`subtotal`/`paid`/`remaining`)  
 5. Payment-request returns `charged: false`  
 6. Note length + cart size limits; reject client price fields  
-7. Optional `Idempotency-Key` for public orders  
+7. Optional `Idempotency-Key` for public orders (**Postgres-backed** via `PublicIdempotencyRecord`)  
 8. Ops live-event badges for assist/QR order  
 9. Docs + unit/API/E2E coverage expansion  
 10. Read-only `npm run audit:demo-accounts`  
-11. Production fixture disable/archive after live app proof + verify
+11. Production fixture disable/archive after live app proof + verify  
+12. **Plan pricing in DB** (`priceMonthly` / `priceYearly` / `priceOneTime` / `currency` / `taxRatePct`) + admin edit UI  
+13. Trusted client IP prefers `x-real-ip` over spoofable XFF leftmost  
+14. `payment-request` mode allow-list (`full_bill|selected_items|split|other`)  
+15. Dashboard billing reads real `Subscription.status`
 
 ## Remaining TODOs
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Production fixture disable/archive | **Done** | Non-destructive disable applied 2026-07-12 after `PRODUCTION DISABLE ONAY`; verify PASS |
+| Production fixture disable/archive | **Done** | Non-destructive disable applied 2026-07-12; re-verified 2026-07-13 still disabled after pricing seed |
 | Permanent delete of disabled fixture rows | P3 (ops) | Only with separate approval; hashes retained today |
 | Non-fixture production customer smoke credential | P1 (ops) | Blocked until a dedicated non-fixture test user is provisioned |
 | Distributed rate limits (Redis/WAF) | P2 | In-memory per process today |
 | Per-admin hashed credentials + MFA | P2 | Shared admin password MVP |
 | Signup rate limit | P2 | Open signup still unthrottled |
+| Live subscription payment gateway | P2 | Mock/admin-manual only; PayTR/Stripe for Core billing out of scope |
 | Typed `WAITER_CALL` / `PAYMENT_REQUEST` notification enums | P3 | Would need migration |
 | Wire diner UI to PayTR `/checkout` | P3 | API exists; product decision |
 | Dedicated assist UI cards in ops | P3 | Badges sufficient for now |
@@ -94,4 +99,5 @@ Core customer, admin, and WexPay QR backends are real (DB-backed, server-priced,
 - Cloudflare Access on admin (verified challenge still active post-disable)  
 - Forbidden env vars unset  
 - `WEXPAY_PAYTR_ENABLE_API=false` until pilot  
-- Production fixture accounts disabled (completed)
+- Production fixture accounts disabled (completed + re-verified 2026-07-13)
+- Subscription org payments remain mock/admin-manual (no live gateway)

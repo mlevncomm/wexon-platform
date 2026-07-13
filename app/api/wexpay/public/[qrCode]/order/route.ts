@@ -64,7 +64,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
 
   const idempotencyKey = readIdempotencyKeyFromRequest(request);
   const idempotencyScope = `qr-order:${resolution.table.id}`;
-  const cached = getIdempotentResponse(idempotencyScope, idempotencyKey);
+  const cached = await getIdempotentResponse(idempotencyScope, idempotencyKey);
   if (cached) {
     return Response.json(cached.body, { status: cached.status });
   }
@@ -98,7 +98,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       status: String(order.status),
     };
 
-    storeIdempotentResponse(idempotencyScope, idempotencyKey, 201, payload);
+    await storeIdempotentResponse(idempotencyScope, idempotencyKey, 201, payload);
     return Response.json(payload, { status: 201 });
   } catch (error) {
     return wexpayApiErrorResponse(error, {

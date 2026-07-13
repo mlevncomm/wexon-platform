@@ -5,16 +5,16 @@ export class CheckoutValidationError extends Error {
   }
 }
 
-export const checkoutPriceMap = {
-  wexpay: {
-    basic: { monthly: 1490, yearly: 14900 },
-    standard: { monthly: 2990, yearly: 29900 },
-    pro: { monthly: 5990, yearly: 59900 },
-  },
-} as const;
-
 export type CheckoutPlanKey = "basic" | "standard" | "pro";
 export type CheckoutBillingInterval = "monthly" | "yearly";
+
+export type PlanPriceSource = {
+  priceMonthly?: unknown;
+  priceYearly?: unknown;
+  priceOneTime?: unknown;
+  currency?: string | null;
+  taxRatePct?: number | null;
+};
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -45,11 +45,56 @@ function normalizeInterval(value: string): CheckoutBillingInterval {
   return interval as CheckoutBillingInterval;
 }
 
-export function checkoutPrice(productKey: "wexpay", planKey: CheckoutPlanKey, interval: CheckoutBillingInterval) {
-  const subtotal = checkoutPriceMap[productKey][planKey][interval];
-  const tax = Math.round(subtotal * 0.2);
+function toNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(String(value));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+/**
+ * Compute subscription checkout totals from a DB Plan row.
+ * Tax uses plan.taxRatePct (default 20).
+ */
+export function computePlanPrice(plan: PlanPriceSource, interval: CheckoutBillingInterval | "one_time") {
+  const taxRatePct = typeof plan.taxRatePct === "number" && Number.isFinite(plan.taxRatePct) ? plan.taxRatePct : 20;
+  const currency = (plan.currency ?? "TRY").toUpperCase();
+
+  let raw: number | null = null;
+  if (interval === "yearly") raw = toNumber(plan.priceYearly);
+  else if (interval === "one_time") raw = toNumber(plan.priceOneTime);
+  else raw = toNumber(plan.priceMonthly);
+
+  if (raw == null) {
+    throw new CheckoutValidationError("Seçilen faturalama aralığı için fiyat tanımlı değil.");
+  }
+
+  const subtotal = Math.round(raw);
+  const tax = Math.round(subtotal * (taxRatePct / 100));
   const total = subtotal + tax;
-  return { subtotal, tax, total, currency: "TRY" };
+  return { subtotal, tax, total, currency, taxRatePct };
+}
+
+/** Narrow fallback used only when a DB plan price is unavailable. */
+export function checkoutPrice(
+  _productKey: "wexpay",
+  planKey: CheckoutPlanKey,
+  interval: CheckoutBillingInterval,
+) {
+  const fallback: Record<CheckoutPlanKey, { monthly: number; yearly: number }> = {
+    basic: { monthly: 1490, yearly: 14900 },
+    standard: { monthly: 2990, yearly: 29900 },
+    pro: { monthly: 5990, yearly: 59900 },
+  };
+  return computePlanPrice(
+    {
+      priceMonthly: fallback[planKey].monthly,
+      priceYearly: fallback[planKey].yearly,
+      currency: "TRY",
+      taxRatePct: 20,
+    },
+    interval,
+  );
 }
 
 export function parseCheckoutPayload(formData: FormData, hasCustomerSession: boolean) {
