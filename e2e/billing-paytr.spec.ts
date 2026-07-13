@@ -18,8 +18,8 @@ test.describe("billing paytr subscription", () => {
     const res = await request.post("/api/billing/paytr/iframe-token", {
       data: { planId: "missing", billingInterval: "monthly", amount: 1 },
     });
-    // 401 when enabled path auth required, or 403 when feature disabled.
-    expect([401, 403]).toContain(res.status());
+    // Auth always first: unauthenticated requests must get 401 even when flags are off.
+    expect(res.status()).toBe(401);
   });
 
   test("callback rejects invalid hash without OK", async ({ request }) => {

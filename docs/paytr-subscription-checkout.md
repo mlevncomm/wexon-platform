@@ -71,5 +71,9 @@ This is **not** WexPay restaurant/QR PayTR (`WEXPAY_PAYTR_ENABLE_API` + tenant `
   - `PAYTR_DEBUG_ON=true`
   - `PAYTR_RECURRING_ENABLE_API=false`
 - Checkout shows a safe fallback (no broken iframe): online payment “yapılandırılıyor” + demo-request CTA.
+- `POST /api/billing/paytr/iframe-token`: unauth → `401`; auth + flags off → `403` disabled (no token).
+- Callback fail-closed when credentials missing / invalid hash (never plain `OK`, no subscription activate).
 - Ready for PayTR **test mode** after merchant credentials + PayTR panel callback URL are set.
 - **No live charge** without exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
+
+**Final decision:** READY FOR PAYTR TEST MODE WITH BLOCKERS — production flags safely disabled until merchant credentials are added.

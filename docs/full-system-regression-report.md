@@ -136,6 +136,8 @@ Reasons:
 
 - Code deployed on production (`main` SHA matched deploy).
 - Production payment flags temporarily disabled because merchant credentials are missing (`PAYTR_SUBSCRIPTION_ENABLE_API=false`, `PAYTR_IFRAME_ENABLE_API=false`; `PAYTR_TEST_MODE=true`; recurring false).
-- Checkout uses safe fallback (no broken iframe); iframe-token returns disabled when flags off.
+- Checkout uses safe fallback (no broken iframe); iframe-token: unauth `401`, auth+disabled `403`.
+- Callback fail-closed (no `OK` / no activate on invalid hash or missing credentials).
 - Ready for test mode after merchant credentials + PayTR callback panel setup.
 - Live charge **not** enabled; requires exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
+- `WEXPAY_PAYTR_ENABLE_API` left untouched; fixture QR/users remain disabled.

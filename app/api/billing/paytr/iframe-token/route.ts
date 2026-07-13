@@ -18,16 +18,16 @@ type TokenBody = {
 };
 
 export async function POST(request: Request) {
+  const user = await getCurrentCustomerUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   if (!isPaytrSubscriptionEnabled()) {
     return NextResponse.json(
       { error: "paytr_subscription_disabled", message: "PayTR abonelik ödemesi kapalı." },
       { status: 403 },
     );
-  }
-
-  const user = await getCurrentCustomerUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const ip = getRequestIpAddress(request) ?? "unknown";
