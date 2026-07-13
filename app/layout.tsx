@@ -8,6 +8,7 @@ import {
   WEXON_SITE_NAME,
   WEXON_SITE_URL,
 } from "@/lib/wexon-site-metadata";
+import { WEXON_INSTAGRAM } from "@/lib/wexon/social-links";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -67,6 +68,7 @@ const structuredData = {
       url: `${WEXON_SITE_URL}/`,
       logo: `${WEXON_SITE_URL}/apple-icon`,
       description: WEXON_DEFAULT_DESCRIPTION,
+      sameAs: [WEXON_INSTAGRAM.href],
       brand: [
         { "@type": "Brand", name: "Wexon" },
         { "@type": "Brand", name: "WexPay" },
