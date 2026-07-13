@@ -1,6 +1,7 @@
 import Link from "next/link";
 import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
 import { publicUrl, resolveNavigationHref } from "@/lib/wexon/urls";
+import { WEXON_SOCIAL_LINKS } from "@/lib/wexon/social-links";
 
 const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
   Ürünler: [
@@ -88,28 +89,22 @@ export default function WexonFooter() {
           </p>
 
           <div className="flex items-center gap-4">
-            <a
-              href="https://instagram.com/wexon"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Instagram"
-              className="text-slate-400 transition-colors hover:text-slate-700"
-            >
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M7 2h10a5 5 0 015 5v10a5 5 0 01-5 5H7a5 5 0 01-5-5V7a5 5 0 015-5zm5 5a5 5 0 100 10 5 5 0 000-10zm6.5-.75a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0z" />
-              </svg>
-            </a>
-            <a
-              href="https://linkedin.com/company/wexon"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="LinkedIn"
-              className="text-slate-400 transition-colors hover:text-slate-700"
-            >
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 3a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14m-.5 15.5v-5.3a3.26 3.26 0 00-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 011.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 001.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 00-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
-              </svg>
-            </a>
+            {WEXON_SOCIAL_LINKS.map((social) => (
+              <a
+                key={social.id}
+                href={social.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={social.ariaLabel}
+                className="text-slate-400 transition-colors hover:text-emerald-700"
+              >
+                {social.id === "instagram" ? (
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M7 2h10a5 5 0 015 5v10a5 5 0 01-5 5H7a5 5 0 01-5-5V7a5 5 0 015-5zm5 5a5 5 0 100 10 5 5 0 000-10zm6.5-.75a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0z" />
+                  </svg>
+                ) : null}
+              </a>
+            ))}
           </div>
         </div>
       </div>

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { WexPayDarkPanelHeaderBackdrop } from "@/components/wexpay/WexPayBusinessUI";
 import { customerLoginUrl, publicUrl } from "@/lib/wexon/urls";
+import { WEXON_INSTAGRAM } from "@/lib/wexon/social-links";
 
-type LinkIcon = "play" | "sparkles" | "credit-card" | "qr" | "home" | "hotel" | "building" | "user" | "shield" | "mail" | "instagram" | "linkedin";
+type LinkIcon = "play" | "sparkles" | "credit-card" | "qr" | "home" | "hotel" | "building" | "user" | "shield" | "mail" | "instagram";
 
 type WexonLinkItem = {
   id: string;
@@ -49,19 +50,10 @@ const WEXON_LINKS = {
     { id: "contact", label: "İletişim", description: "Bizimle iletişime geçin", href: "/contact", icon: "mail" as const, compact: true },
     {
       id: "instagram",
-      label: "Instagram",
-      description: "@wexon",
-      href: "https://instagram.com/wexon",
+      label: WEXON_INSTAGRAM.label,
+      description: WEXON_INSTAGRAM.handle,
+      href: WEXON_INSTAGRAM.href,
       icon: "instagram" as const,
-      external: true,
-      compact: true,
-    },
-    {
-      id: "linkedin",
-      label: "LinkedIn",
-      description: "Wexon",
-      href: "https://linkedin.com/company/wexon",
-      icon: "linkedin" as const,
       external: true,
       compact: true,
     },
@@ -158,12 +150,6 @@ function LinkIconGlyph({ icon, className = "" }: { icon: LinkIcon; className?: s
           <path d="M7 2h10a5 5 0 015 5v10a5 5 0 01-5 5H7a5 5 0 01-5-5V7a5 5 0 015-5zm5 5a5 5 0 100 10 5 5 0 000-10zm6.5-.75a1.25 1.25 0 11-2.5 0 1.25 1.25 0 012.5 0z" />
         </svg>
       );
-    case "linkedin":
-      return (
-        <svg {...props} fill="currentColor">
-          <path d="M19 3a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14m-.5 15.5v-5.3a3.26 3.26 0 00-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 011.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 001.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 00-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
-        </svg>
-      );
   }
 }
 
@@ -210,7 +196,7 @@ function FeaturedLinkCard({ item }: { item: WexonLinkItem }) {
 
   if (item.external) {
     return (
-      <a href={item.href} target="_blank" rel="noreferrer" className={isHero ? heroClass : normalClass}>
+      <a href={item.href} target="_blank" rel="noopener noreferrer" className={isHero ? heroClass : normalClass}>
         {inner}
       </a>
     );
