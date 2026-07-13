@@ -109,3 +109,10 @@ Reasons:
 - Pricing source of truth = DB; admin editable; fixtures remain disabled after seed.
 - Targeted E2E green where runnable; fixture-dependent QR/customer journeys intentionally skipped.
 - Warnings: remote-unverified shared DB; no non-fixture customer smoke credential; live Core subscription gateway not built (mock/admin-manual only); in-memory rate limits remain.
+
+## Merge conflict follow-up (2026-07-13)
+
+- Merged `origin/main` into `cursor/production-backend-hardening`.
+- `app/globals.css` resolved cleanly and is **identical to `origin/main`** (no conflict markers).
+- Branch deletions of CSS-only hero marquee rules were superseded by main’s current global CSS; subscription/pricing/backend work did not depend on those deletions.
+- Quality gates re-run after merge: production:check, unit, lint, tsc, build.
