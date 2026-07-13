@@ -60,3 +60,16 @@ This is **not** WexPay restaurant/QR PayTR (`WEXPAY_PAYTR_ENABLE_API` + tenant `
 4. `PAYTR_SUBSCRIPTION_ENABLE_API=true` + `PAYTR_IFRAME_ENABLE_API=true`.
 5. Start with `PAYTR_TEST_MODE=true`.
 6. Live charge only after exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
+
+## Production status (post-merge safe mode)
+
+- **Code deployed** on `main` / production (PayTR subscription checkout + `SubscriptionPayment`).
+- **Production payment flags temporarily disabled** while merchant credentials are missing:
+  - `PAYTR_SUBSCRIPTION_ENABLE_API=false`
+  - `PAYTR_IFRAME_ENABLE_API=false`
+  - `PAYTR_TEST_MODE=true` (do not flip to live until approval)
+  - `PAYTR_DEBUG_ON=true`
+  - `PAYTR_RECURRING_ENABLE_API=false`
+- Checkout shows a safe fallback (no broken iframe): online payment “yapılandırılıyor” + demo-request CTA.
+- Ready for PayTR **test mode** after merchant credentials + PayTR panel callback URL are set.
+- **No live charge** without exact approval: `PAYTR LIVE TEST CHARGE ONAY`.

@@ -259,15 +259,26 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
                       Giriş yap →
                     </Link>
                   </>
+                ) : process.env.NODE_ENV === "production" ? (
+                  <>
+                    <p className="font-black text-slate-950">Online ödeme yapılandırılıyor</p>
+                    <p className="mt-1 text-xs leading-relaxed">
+                      PayTR güvenli ödeme henüz production’da açılmadı. Bu ekranda kırık ödeme formu gösterilmez.
+                      Abonelik için demo talebi bırakın; ekibimiz sizinle iletişime geçer.
+                    </p>
+                    <Link
+                      href="/demo-request?product=wexpay"
+                      className="mt-3 inline-flex rounded-full bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700"
+                    >
+                      Demo talebi oluştur →
+                    </Link>
+                  </>
                 ) : (
                   <>
-                    <p className="font-black text-slate-950">
-                      {process.env.NODE_ENV === "production" ? "Manuel / admin aktivasyon" : "Mock ödeme"}
-                    </p>
+                    <p className="font-black text-slate-950">Mock ödeme</p>
                     <p className="mt-1 text-xs leading-relaxed">
-                      {process.env.NODE_ENV === "production"
-                        ? "PayTR abonelik API’si kapalı. Abonelik admin-manual veya test mode açılışı sonrası PayTR ile alınır."
-                        : "Geliştirme ortamında ödeme mock olarak başarılı kabul edilir. Production’da PayTR iFrame kullanılır."}
+                      Geliştirme ortamında ödeme mock olarak başarılı kabul edilir. Production’da PayTR iFrame
+                      kullanılır.
                     </p>
                   </>
                 )}

@@ -132,8 +132,10 @@ Reasons:
 
 ### Final decision (PayTR pass)
 
-**READY FOR PAYTR TEST MODE**
+**READY FOR PAYTR TEST MODE WITH BLOCKERS — production flags safely disabled until merchant credentials are added.**
 
-- Code + callback hash/idempotency + unit/E2E billing smoke in place.
-- Live charge **not** enabled; requires `PAYTR LIVE TEST CHARGE ONAY`.
-- Credentials optional until merchant env is configured in Vercel.
+- Code deployed on production (`main` SHA matched deploy).
+- Production payment flags temporarily disabled because merchant credentials are missing (`PAYTR_SUBSCRIPTION_ENABLE_API=false`, `PAYTR_IFRAME_ENABLE_API=false`; `PAYTR_TEST_MODE=true`; recurring false).
+- Checkout uses safe fallback (no broken iframe); iframe-token returns disabled when flags off.
+- Ready for test mode after merchant credentials + PayTR callback panel setup.
+- Live charge **not** enabled; requires exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
