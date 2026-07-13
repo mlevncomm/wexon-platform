@@ -119,6 +119,16 @@ enum BillingPaymentStatus {
   REFUNDED
 }
 
+enum SubscriptionPaymentStatus {
+  INITIATED
+  TOKEN_CREATED
+  PENDING_CALLBACK
+  PAID
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
 enum AppInstallationStatus {
   ACTIVE
   DISABLED
@@ -152,16 +162,17 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships       Membership[]
-  restaurants       Restaurant[]
-  licenses          License[]
-  subscriptions     Subscription[]
-  invoices          Invoice[]
-  billingPayments   BillingPayment[]
-  appInstallations  AppInstallation[]
-  auditLogs         AuditLog[]
-  apiKeys           ApiKey[]
-  webhookEndpoints  WebhookEndpoint[]
+  memberships           Membership[]
+  restaurants           Restaurant[]
+  licenses              License[]
+  subscriptions         Subscription[]
+  invoices              Invoice[]
+  billingPayments       BillingPayment[]
+  subscriptionPayments  SubscriptionPayment[]
+  appInstallations      AppInstallation[]
+  auditLogs             AuditLog[]
+  apiKeys               ApiKey[]
+  webhookEndpoints      WebhookEndpoint[]
   wexPayProviderCredentials WexPayProviderCredential[]
   wexPayWebhookEvents       WexPayWebhookEvent[]
 
@@ -183,9 +194,10 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  memberships Membership[]
-  auditLogs   AuditLog[]
-  apiKeys     ApiKey[]
+  memberships          Membership[]
+  auditLogs            AuditLog[]
+  apiKeys              ApiKey[]
+  subscriptionPayments SubscriptionPayment[]
 
   @@index([isActive])
 }
@@ -248,10 +260,11 @@ model Plan {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  entitlements  Entitlement[]
-  licenses      License[]
-  subscriptions Subscription[]
+  product              Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  entitlements         Entitlement[]
+  licenses             License[]
+  subscriptions        Subscription[]
+  subscriptionPayments SubscriptionPayment[]
 
   @@index([productId])
   @@index([billingInterval])
@@ -314,11 +327,12 @@ model Subscription {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  license         License          @relation(fields: [licenseId], references: [id], onDelete: Cascade)
-  plan            Plan             @relation(fields: [planId], references: [id])
-  invoices        Invoice[]
-  billingPayments BillingPayment[]
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  license              License               @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  plan                 Plan                  @relation(fields: [planId], references: [id])
+  invoices             Invoice[]
+  billingPayments      BillingPayment[]
+  subscriptionPayments SubscriptionPayment[]
 
   @@index([organizationId])
   @@index([planId])
@@ -372,6 +386,48 @@ model BillingPayment {
   @@index([subscriptionId])
   @@index([invoiceId])
   @@index([status])
+}
+
+/// Platform PayTR iFrame ledger for Core subscription checkout (NOT WexPay operational Payment).
+model SubscriptionPayment {
+  id                   String                     @id @default(cuid())
+  organizationId       String
+  subscriptionId       String?
+  planId               String
+  userId               String?
+  provider             String                     @default("PAYTR")
+  providerMode         String                     @default("iframe")
+  merchantOid          String                     @unique
+  amount               Decimal                    @db.Decimal(10, 2)
+  amountMinor          Int
+  currency             String                     @default("TRY")
+  taxRatePct           Int                        @default(20)
+  billingInterval      BillingInterval
+  status               SubscriptionPaymentStatus  @default(INITIATED)
+  paytrTokenHash       String?
+  callbackStatus       String?
+  callbackTotalAmount  String?
+  callbackPaymentAmount String?
+  callbackCurrency     String?
+  failedReasonCode     String?
+  failedReasonMsg      String?
+  rawCallbackJson      Json?
+  idempotencyKey       String?                    @unique
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  paidAt               DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  plan         Plan          @relation(fields: [planId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([planId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model AppInstallation {

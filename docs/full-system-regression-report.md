@@ -116,3 +116,24 @@ Reasons:
 - `app/globals.css` resolved cleanly and is **identical to `origin/main`** (no conflict markers).
 - Branch deletions of CSS-only hero marquee rules were superseded by main’s current global CSS; subscription/pricing/backend work did not depend on those deletions.
 - Quality gates re-run after merge: production:check, unit, lint, tsc, build.
+
+---
+
+## PayTR Core subscription checkout (2026-07-13)
+
+| Item | Value |
+|------|-------|
+| Branch | `cursor/paytr-real-subscription-checkout` (from `origin/main`) |
+| Model | `SubscriptionPayment` + migration `20260713190000_add_subscription_payment` |
+| Callback | `https://www.wexon.dev/api/billing/paytr/callback` |
+| Flags | `PAYTR_SUBSCRIPTION_ENABLE_API=false` (default); recurring blocked |
+| WexPay flag | Unchanged (`WEXPAY_PAYTR_ENABLE_API`) |
+| Docs | `docs/paytr-subscription-checkout.md`, `docs/paytr-recurring-readiness.md` |
+
+### Final decision (PayTR pass)
+
+**READY FOR PAYTR TEST MODE**
+
+- Code + callback hash/idempotency + unit/E2E billing smoke in place.
+- Live charge **not** enabled; requires `PAYTR LIVE TEST CHARGE ONAY`.
+- Credentials optional until merchant env is configured in Vercel.

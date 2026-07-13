@@ -194,8 +194,14 @@ export function parsePlanActivePayload(formData: FormData) {
 }
 
 export function parseSubscriptionStatusPayload(formData: FormData) {
+  const auditNote = requiredString(formData, "auditNote", "Audit notu");
+  if (auditNote.length < 8) {
+    throw new AdminValidationError("Audit notu en az 8 karakter olmalıdır.");
+  }
   return {
     status: oneOf(requiredString(formData, "status", "Abonelik durumu"), subscriptionStatuses, "Abonelik durumu"),
+    auditNote,
+    acknowledgePaytrPaid: parseBoolean(formData, "acknowledgePaytrPaid"),
   };
 }
 

@@ -146,11 +146,21 @@ export async function getAdminSubscriptionsData() {
 }
 
 export async function getAdminBillingData() {
-  const [invoices, billingPayments] = await Promise.all([
+  const [invoices, billingPayments, subscriptionPayments] = await Promise.all([
     prisma.invoice.findMany({ include: { organization: true, subscription: true }, orderBy: { createdAt: "desc" } }),
     prisma.billingPayment.findMany({ include: { organization: true, invoice: true }, orderBy: { createdAt: "desc" } }),
+    prisma.subscriptionPayment.findMany({
+      include: {
+        organization: true,
+        plan: true,
+        user: true,
+        subscription: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
   ]);
-  return { invoices, billingPayments };
+  return { invoices, billingPayments, subscriptionPayments };
 }
 
 export async function getAdminIntegrationsData() {

@@ -25,10 +25,11 @@ const paymentStatusOptions = [
 
 export default async function AdminBillingPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
   const { adminError } = await searchParams;
-  const [{ invoices, billingPayments }, options] = await Promise.all([getAdminBillingData(), getAdminOperationOptions()]);
+  const [{ invoices, billingPayments, subscriptionPayments }, options] = await Promise.all([getAdminBillingData(), getAdminOperationOptions()]);
   const pendingInvoices = invoices.filter((invoice) => invoice.status === "ISSUED" || invoice.status === "OVERDUE");
   const paidInvoices = invoices.filter((invoice) => invoice.status === "PAID");
   const paidPayments = billingPayments.filter((payment) => payment.status === "PAID");
+  const paytrPaid = subscriptionPayments.filter((payment) => payment.status === "PAID");
 
   return (
     <div className="space-y-8">
@@ -49,11 +50,12 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
 
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
-      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
         <AdminSummaryCard label="Toplam fatura" value={invoices.length} />
         <AdminSummaryCard label="Bekleyen fatura" value={pendingInvoices.length} />
         <AdminSummaryCard label="Ödenen fatura" value={paidInvoices.length} />
         <AdminSummaryCard label="Başarılı tahsilat" value={paidPayments.length} />
+        <AdminSummaryCard label="PayTR PAID" value={paytrPaid.length} />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
@@ -170,6 +172,60 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
                         value={invoice.status}
                         options={invoiceStatusOptions}
                       />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </AdminTableShell>
+        )}
+      </AdminPanel>
+
+      <AdminPanel>
+        <AdminSectionTitle badge="PayTR" title="Abonelik ödeme geçmişi (SubscriptionPayment)" />
+        {subscriptionPayments.length === 0 ? (
+          <AdminEmptyState>Henüz PayTR abonelik ödemesi yok.</AdminEmptyState>
+        ) : (
+          <AdminTableShell>
+            <table className="w-full min-w-[1100px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
+                <tr>
+                  <th className="px-5 py-4 font-bold">merchantOid</th>
+                  <th className="px-5 py-4 font-bold">Provider</th>
+                  <th className="px-5 py-4 font-bold">Müşteri</th>
+                  <th className="px-5 py-4 font-bold">Plan</th>
+                  <th className="px-5 py-4 font-bold">Customer</th>
+                  <th className="px-5 py-4 font-bold">Tutar</th>
+                  <th className="px-5 py-4 font-bold">Durum</th>
+                  <th className="px-5 py-4 font-bold">paidAt</th>
+                  <th className="px-5 py-4 font-bold">Callback</th>
+                  <th className="px-5 py-4 font-bold">Failed</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {subscriptionPayments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{payment.merchantOid}</td>
+                    <td className="px-5 py-4 text-slate-600">
+                      {payment.provider}/{payment.providerMode}
+                    </td>
+                    <td className="px-5 py-4">
+                      <AdminOrgLink id={payment.organizationId} name={payment.organization.name} />
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">{displayPlanName(payment.plan.name)}</td>
+                    <td className="px-5 py-4 text-slate-600">{payment.user?.email ?? "-"}</td>
+                    <td className="px-5 py-4 text-slate-600">
+                      {String(payment.amount)} {payment.currency}
+                    </td>
+                    <td className="px-5 py-4">
+                      <AdminStatusPill active={payment.status === "PAID"}>{formatAdminStatus(payment.status)}</AdminStatusPill>
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">{formatAdminDate(payment.paidAt)}</td>
+                    <td className="px-5 py-4 text-slate-600">
+                      {payment.callbackStatus ? `${payment.callbackStatus}` : "—"}
+                    </td>
+                    <td className="px-5 py-4 text-xs text-rose-700">
+                      {payment.failedReasonMsg ?? payment.failedReasonCode ?? "—"}
                     </td>
                   </tr>
                 ))}

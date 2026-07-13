@@ -1,6 +1,6 @@
 import { AdminEmptyState, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
 import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton } from "@/components/marketing/WexonAdminForms";
-import { AdminInlineSelectForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
+import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { createAdminSubscriptionAction, updateAdminSubscriptionStatusAction } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOperationOptions, getAdminSubscriptionsData } from "@/lib/wexon-admin";
 
@@ -116,13 +116,37 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
                     <AdminStatusPill active={subscription.status === "ACTIVE"}>{formatAdminStatus(subscription.status)}</AdminStatusPill>
                   </td>
                   <td className="px-5 py-4">
-                    <AdminInlineSelectForm
+                    <form
                       action={updateAdminSubscriptionStatusAction.bind(null, subscription.id)}
-                      returnTo="/admin/subscriptions"
-                      fieldName="status"
-                      value={subscription.status}
-                      options={subscriptionStatusOptions}
-                    />
+                      className="flex min-w-[220px] flex-col gap-2"
+                    >
+                      <input type="hidden" name="returnTo" value="/admin/subscriptions" />
+                      <select
+                        name="status"
+                        defaultValue={subscription.status}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+                      >
+                        {subscriptionStatusOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        name="auditNote"
+                        required
+                        minLength={8}
+                        placeholder="Audit notu (zorunlu)"
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                      />
+                      <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-500">
+                        <input type="checkbox" name="acknowledgePaytrPaid" value="true" className="mt-0.5" />
+                        PAID PayTR varsa çift aktivasyonu onayla
+                      </label>
+                      <button type="submit" className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
+                        Kaydet
+                      </button>
+                    </form>
                   </td>
                 </tr>
               ))}
