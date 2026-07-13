@@ -126,18 +126,20 @@ Reasons:
 | Branch | `cursor/paytr-real-subscription-checkout` (from `origin/main`) |
 | Model | `SubscriptionPayment` + migration `20260713190000_add_subscription_payment` |
 | Callback | `https://www.wexon.dev/api/billing/paytr/callback` |
-| Flags | `PAYTR_SUBSCRIPTION_ENABLE_API=false` (default); recurring blocked |
+| Deploy | `dpl_H9pXZnZEexrAAAD6PtMZaVNmAa5v` |
+| SHA | `5aefae8` |
+| Production status | READY |
+| Flags | `PAYTR_SUBSCRIPTION_ENABLE_API=false`, `PAYTR_IFRAME_ENABLE_API=false`, `PAYTR_TEST_MODE=true`, `PAYTR_DEBUG_ON=true`, `PAYTR_RECURRING_ENABLE_API=false` |
 | WexPay flag | Unchanged (`WEXPAY_PAYTR_ENABLE_API`) |
 | Docs | `docs/paytr-subscription-checkout.md`, `docs/paytr-recurring-readiness.md` |
 
 ### Final decision (PayTR pass)
 
-**READY FOR PAYTR TEST MODE WITH BLOCKERS — production flags safely disabled until merchant credentials are added.**
+**READY FOR PAYTR TEST MODE WITH BLOCKERS**
 
-- Code deployed on production (`main` SHA matched deploy).
-- Production payment flags temporarily disabled because merchant credentials are missing (`PAYTR_SUBSCRIPTION_ENABLE_API=false`, `PAYTR_IFRAME_ENABLE_API=false`; `PAYTR_TEST_MODE=true`; recurring false).
-- Checkout uses safe fallback (no broken iframe); iframe-token: unauth `401`, auth+disabled `403`.
+- Merchant credentials missing → production ödeme akışı safe fallback’te.
+- Canlı charge yok. `PAYTR LIVE TEST CHARGE ONAY` alınmadı.
+- Checkout safe fallback (no broken iframe); iframe-token: unauth `401`, auth+disabled `403`.
 - Callback fail-closed (no `OK` / no activate on invalid hash or missing credentials).
 - Ready for test mode after merchant credentials + PayTR callback panel setup.
-- Live charge **not** enabled; requires exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
 - `WEXPAY_PAYTR_ENABLE_API` left untouched; fixture QR/users remain disabled.

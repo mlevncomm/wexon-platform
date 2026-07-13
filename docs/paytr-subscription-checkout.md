@@ -61,19 +61,27 @@ This is **not** WexPay restaurant/QR PayTR (`WEXPAY_PAYTR_ENABLE_API` + tenant `
 5. Start with `PAYTR_TEST_MODE=true`.
 6. Live charge only after exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
 
-## Production status (post-merge safe mode)
+## Production status (safe-blocked record)
 
-- **Code deployed** on `main` / production (PayTR subscription checkout + `SubscriptionPayment`).
-- **Production payment flags temporarily disabled** while merchant credentials are missing:
-  - `PAYTR_SUBSCRIPTION_ENABLE_API=false`
-  - `PAYTR_IFRAME_ENABLE_API=false`
-  - `PAYTR_TEST_MODE=true` (do not flip to live until approval)
-  - `PAYTR_DEBUG_ON=true`
-  - `PAYTR_RECURRING_ENABLE_API=false`
-- Checkout shows a safe fallback (no broken iframe): online payment “yapılandırılıyor” + demo-request CTA.
+| Field | Value |
+|-------|-------|
+| Deploy | `dpl_H9pXZnZEexrAAAD6PtMZaVNmAa5v` |
+| SHA | `5aefae8` |
+| Production status | READY |
+| Decision | **READY FOR PAYTR TEST MODE WITH BLOCKERS** |
+
+**PayTR subscription flags (Production):**
+
+- `PAYTR_SUBSCRIPTION_ENABLE_API=false`
+- `PAYTR_IFRAME_ENABLE_API=false`
+- `PAYTR_TEST_MODE=true`
+- `PAYTR_DEBUG_ON=true`
+- `PAYTR_RECURRING_ENABLE_API=false`
+
+**Notes:**
+
+- Merchant credentials missing → production ödeme akışı safe fallback’te (no broken iframe; “yapılandırılıyor” + demo-request CTA).
 - `POST /api/billing/paytr/iframe-token`: unauth → `401`; auth + flags off → `403` disabled (no token).
 - Callback fail-closed when credentials missing / invalid hash (never plain `OK`, no subscription activate).
-- Ready for PayTR **test mode** after merchant credentials + PayTR panel callback URL are set.
-- **No live charge** without exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
-
-**Final decision:** READY FOR PAYTR TEST MODE WITH BLOCKERS — production flags safely disabled until merchant credentials are added.
+- Canlı charge yok. `PAYTR LIVE TEST CHARGE ONAY` alınmadı.
+- Ready for PayTR **test mode** only after merchant credentials + PayTR panel Bildirim URL + flag enablement (still start with `PAYTR_TEST_MODE=true`).
