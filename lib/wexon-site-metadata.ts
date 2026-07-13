@@ -10,7 +10,7 @@ export const WEXON_DEFAULT_DESCRIPTION =
 export const WEXON_HOME_TITLE = "Wexon.dev | Business OS";
 
 export const WEXON_HOME_DESCRIPTION =
-  "QR menü, sipariş, ödeme ve restoran operasyonu için WexPay pilotu; lisans, abonelik ve erişim kararları için Wexon Core. WexHotel ve WexB2B roadmap'te.";
+  "QR menü, sipariş, ödeme ve restoran operasyonu için WexPay Business Suite; lisans, abonelik ve erişim kararları için Wexon Core. WexHotel ve WexB2B roadmap'te.";
 
 export const WEXON_KEYWORDS = [
   "Wexon",

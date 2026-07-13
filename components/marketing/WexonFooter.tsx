@@ -8,13 +8,13 @@ const FOOTER_LINKS: Record<string, { label: string; href: string }[]> = {
     { label: "WexPay", href: "/products/wexpay" },
     { label: "WexHotel", href: "/products/wexhotel" },
     { label: "WexB2B", href: "/products/wexb2b" },
-    { label: "Wexon Core", href: "/#core" },
+    { label: "Wexon Core", href: "/products/wexon-core" },
   ],
   Platform: [
-    { label: "Paketler", href: "/#pricing" },
-    { label: "Çözümler", href: "/#solutions" },
+    { label: "Paketler", href: "/packages" },
+    { label: "Çözümler", href: "/solutions" },
     { label: "Demo Talep Et", href: "/demo-request" },
-    { label: "Randevu Al", href: "/book-demo" },
+    { label: "Randevu Al", href: "/randevu-ai" },
   ],
   Şirket: [
     { label: "Hakkımızda", href: "/about" },
@@ -56,7 +56,7 @@ export default function WexonFooter() {
             </p>
             <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              WexPay Pilot Launch
+              WexPay Business Suite
             </div>
           </div>
 

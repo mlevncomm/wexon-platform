@@ -48,7 +48,7 @@ const featureCards: { icon: WexonIconName; title: string; description: string }[
   { icon: "catalog", title: "Ürün yönetimi", description: "Fiyat, kategori, stok ve aktif/pasif durumunu güncelleyin." },
   { icon: "pay", title: "QR ödeme", description: "Tam veya seçili ürün ödemesi; fiş talebi paneline düşer." },
   { icon: "invoice", title: "Fiş talebi", description: "Müşteri fiş ister; işletme paneli anlık bildirim alır." },
-  { icon: "adapter", title: "Sanal POS", description: "İlk sürümde manuel tahsilat; PayTR pilot sonrası tenant bazlı açılır." },
+  { icon: "adapter", title: "Sanal POS", description: "İlk sürümde manuel tahsilat; PayTR merchant / test-mode onayı sonrası tenant bazlı açılır." },
   { icon: "audit", title: "Raporlama", description: "Ödeme, masa ve sipariş metriklerini dönemsel takip edin." },
   { icon: "entitlement", title: "Core erişimi", description: "Lisans ve entitlement ile erişim; ödeme durumundan ayrı." },
   { icon: "bell", title: "Canlı bildirim", description: "Ödeme, sipariş ve fiş talepleri anlık bildirim olarak görünür." },
@@ -208,7 +208,7 @@ export default async function WexPayPage() {
               <div className="relative z-10 grid gap-12 lg:grid-cols-[1fr_1.05fr] lg:items-center">
                 <div>
                   <div className="mb-6 flex flex-wrap items-center gap-2">
-                    <Eyebrow>Pilot ürün</Eyebrow>
+                    <Eyebrow>WexPay Business Suite</Eyebrow>
                     <Badge tone="dark">Birincil ürün</Badge>
                   </div>
                   <h1 className="mb-5 max-w-xl text-4xl font-black leading-[1.05] tracking-[-0.02em] text-slate-950 sm:text-5xl lg:text-[3.25rem]">
@@ -496,7 +496,7 @@ export default async function WexPayPage() {
               </h2>
               <p className="text-base leading-relaxed text-slate-600">
                 İlk production sürümünde operasyonel tahsilat <strong>manuel ödeme</strong> ile yapılır. PayTR sanal
-                POS, pilot merchant doğrulaması ve <code className="text-sm">WEXPAY_PAYTR_ENABLE_API=true</code> sonrası
+                POS, merchant / test-mode onayı ve <code className="text-sm">WEXPAY_PAYTR_ENABLE_API=true</code> sonrası
                 tenant bazlı açılır. Demo ortamında ödeme akışı simüle edilir.
               </p>
             </div>
@@ -521,7 +521,7 @@ export default async function WexPayPage() {
               <div className="pointer-events-none absolute inset-0 wx-grid-overlay opacity-80" />
               <div className="relative z-10 mx-auto max-w-2xl">
                 <Badge tone="onDark" dot>
-                  WexPay Pilot
+                  WexPay Business Suite
                 </Badge>
                 <h2 className="mt-6 text-3xl font-black tracking-[-0.02em] text-white sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
                   Restoranınız için WexPay&apos;i{" "}

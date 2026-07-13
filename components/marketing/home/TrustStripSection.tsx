@@ -22,7 +22,7 @@ export default function TrustStripSection() {
           ))}
         </div>
         <p className="mt-6 text-center text-sm font-medium text-slate-500">
-          WexPay pilotu sahada canlı; WexHotel ve WexB2B aynı Core üzerinde geliştiriliyor.
+          WexPay Business Suite sahada canlı; WexHotel ve WexB2B aynı Core üzerinde geliştiriliyor.
         </p>
       </div>
     </section>

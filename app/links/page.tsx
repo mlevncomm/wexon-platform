@@ -1,9 +1,27 @@
 import Link from "next/link";
+import WexonBrandLogo from "@/components/marketing/WexonBrandLogo";
+import {
+  WEXON_PRODUCT_LOCKUPS,
+  WEXON_PRODUCT_MARKS,
+} from "@/components/marketing/wexon-brand-logo";
 import { WexPayDarkPanelHeaderBackdrop } from "@/components/wexpay/WexPayBusinessUI";
 import { customerLoginUrl, publicUrl } from "@/lib/wexon/urls";
 import { WEXON_INSTAGRAM } from "@/lib/wexon/social-links";
 
-type LinkIcon = "play" | "sparkles" | "credit-card" | "qr" | "home" | "hotel" | "building" | "user" | "shield" | "mail" | "instagram";
+type LinkIcon =
+  | "play"
+  | "sparkles"
+  | "credit-card"
+  | "qr"
+  | "home"
+  | "hotel"
+  | "building"
+  | "user"
+  | "shield"
+  | "mail"
+  | "instagram";
+
+type BrandMark = keyof typeof WEXON_PRODUCT_MARKS;
 
 type WexonLinkItem = {
   id: string;
@@ -11,6 +29,7 @@ type WexonLinkItem = {
   description: string;
   href: string;
   icon: LinkIcon;
+  brandMark?: BrandMark;
   featured?: boolean;
   external?: boolean;
   compact?: boolean;
@@ -22,7 +41,7 @@ const WEXON_LINKS = {
     {
       id: "demo-request",
       label: "Demo Talep Et",
-      description: "İşletmeniz için pilot erişim planlayın",
+      description: "İşletmeniz için erken erişim veya demo planlayın",
       href: "/demo-request?product=wexpay&source=links",
       icon: "sparkles" as const,
       featured: true,
@@ -33,6 +52,7 @@ const WEXON_LINKS = {
       description: "Özellikler, akış ve paketler",
       href: "/products/wexpay",
       icon: "credit-card" as const,
+      brandMark: "wexpay" as const,
     },
     {
       id: "book-demo",
@@ -43,11 +63,49 @@ const WEXON_LINKS = {
     },
   ],
   secondary: [
-    { id: "platform", label: "Wexon Platform", description: "Ana site", href: publicUrl("/"), icon: "home" as const, compact: true },
-    { id: "wexhotel", label: "WexHotel", description: "Yakında — otel operasyonları", href: "/products/wexhotel", icon: "hotel" as const, compact: true },
-    { id: "wexb2b", label: "WexB2B", description: "Yakında — B2B satış", href: "/products/wexb2b", icon: "building" as const, compact: true },
-    { id: "customer-portal", label: "Müşteri Girişi", description: "Lisanslı müşteri paneli", href: customerLoginUrl(), icon: "user" as const, compact: true },
-    { id: "contact", label: "İletişim", description: "Bizimle iletişime geçin", href: "/contact", icon: "mail" as const, compact: true },
+    {
+      id: "platform",
+      label: "Wexon Platform",
+      description: "Ana site",
+      href: publicUrl("/"),
+      icon: "home" as const,
+      brandMark: "wexon" as const,
+      compact: true,
+    },
+    {
+      id: "wexhotel",
+      label: "WexHotel",
+      description: "Yakında — otel operasyonları",
+      href: "/products/wexhotel",
+      icon: "hotel" as const,
+      brandMark: "wexhotel" as const,
+      compact: true,
+    },
+    {
+      id: "wexb2b",
+      label: "WexB2B",
+      description: "Yakında — B2B satış",
+      href: "/products/wexb2b",
+      icon: "building" as const,
+      brandMark: "wexb2b" as const,
+      compact: true,
+    },
+    {
+      id: "customer-portal",
+      label: "Müşteri Girişi",
+      description: "Lisanslı müşteri paneli",
+      href: customerLoginUrl(),
+      icon: "user" as const,
+      compact: true,
+    },
+    {
+      id: "contact",
+      label: "İletişim",
+      description: "Bizimle iletişime geçin",
+      href: "/contact",
+      icon: "mail" as const,
+      compact: true,
+    },
     {
       id: "instagram",
       label: WEXON_INSTAGRAM.label,
@@ -60,16 +118,18 @@ const WEXON_LINKS = {
   ],
 };
 
-function WexPayMark() {
+function ProductMark({
+  mark,
+  alt,
+  className = "h-5 w-5",
+}: {
+  mark: BrandMark;
+  alt: string;
+  className?: string;
+}) {
   return (
-    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#10b981] shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/30">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <rect x="3" y="3" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1" stroke="white" strokeWidth="1.5" />
-        <path d="M16 16h4v4h-4zM16 16l4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={WEXON_PRODUCT_MARKS[mark]} alt={alt} className={`object-contain ${className}`} decoding="async" />
   );
 }
 
@@ -153,20 +213,50 @@ function LinkIconGlyph({ icon, className = "" }: { icon: LinkIcon; className?: s
   }
 }
 
+function LinkLeadingVisual({
+  item,
+  featured,
+}: {
+  item: WexonLinkItem;
+  featured?: boolean;
+}) {
+  if (item.brandMark) {
+    return (
+      <span
+        className={`flex shrink-0 items-center justify-center rounded-2xl ${
+          featured
+            ? "h-12 w-12 bg-white/20 ring-1 ring-white/25"
+            : "h-11 w-11 bg-emerald-50 ring-1 ring-emerald-100"
+        }`}
+      >
+        <ProductMark
+          mark={item.brandMark}
+          alt=""
+          className={featured ? "h-7 w-7" : "h-6 w-6"}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-2xl ${
+        featured
+          ? "h-12 w-12 bg-white/15 text-white ring-1 ring-white/20"
+          : "h-11 w-11 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+      }`}
+    >
+      <LinkIconGlyph icon={item.icon} className="h-5 w-5" />
+    </span>
+  );
+}
+
 function FeaturedLinkCard({ item }: { item: WexonLinkItem }) {
   const isHero = item.featured;
 
   const inner = (
     <>
-      <span
-        className={`flex shrink-0 items-center justify-center rounded-2xl ${
-          isHero
-            ? "h-12 w-12 bg-white/15 text-white ring-1 ring-white/20"
-            : "h-11 w-11 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
-        }`}
-      >
-        <LinkIconGlyph icon={item.icon} className="h-5 w-5" />
-      </span>
+      <LinkLeadingVisual item={item} featured={isHero} />
       <span className="min-w-0 flex-1 text-left">
         <span className={`block truncate font-black tracking-tight ${isHero ? "text-lg text-white" : "text-[15px] text-slate-950"}`}>
           {item.label}
@@ -212,7 +302,13 @@ function FeaturedLinkCard({ item }: { item: WexonLinkItem }) {
 function CompactLinkCard({ item }: { item: WexonLinkItem }) {
   const content = (
     <>
-      <LinkIconGlyph icon={item.icon} className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-emerald-600" />
+      {item.brandMark ? (
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 ring-1 ring-emerald-100">
+          <ProductMark mark={item.brandMark} alt="" className="h-[18px] w-[18px]" />
+        </span>
+      ) : (
+        <LinkIconGlyph icon={item.icon} className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-emerald-600" />
+      )}
       <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-700 group-hover:text-slate-950">
         {item.label}
       </span>
@@ -248,9 +344,15 @@ export default function WexonLinksPage() {
           <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-5 py-6 text-center">
             <WexPayDarkPanelHeaderBackdrop />
             <div className="relative flex flex-col items-center">
-              <WexPayMark />
-              <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-300/90">WexPay</p>
-              <h1 className="mt-1 text-2xl font-black tracking-tight text-white">QR menü, sipariş ve ödeme</h1>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={WEXON_PRODUCT_LOCKUPS.wexpay}
+                alt="weX.Pay"
+                className="h-11 w-auto max-w-[250px] object-contain object-center sm:h-12"
+                decoding="async"
+                fetchPriority="high"
+              />
+              <h1 className="mt-5 text-2xl font-black tracking-tight text-white">QR menü, sipariş ve ödeme</h1>
               <p className="mt-2 max-w-[320px] text-[13px] leading-relaxed text-slate-400">
                 Restoranlar için tek QR üzerinden menü, sipariş ve ödeme akışı.
               </p>
@@ -280,7 +382,14 @@ export default function WexonLinksPage() {
           </nav>
         </div>
 
-        <p className="mt-5 text-center text-[10px] font-medium text-slate-400">© {new Date().getFullYear()} WexPay · Wexon</p>
+        <div className="mt-5 flex flex-col items-center gap-2">
+          <Link href={publicUrl("/")} prefetch={false} className="opacity-80 transition-opacity hover:opacity-100">
+            <WexonBrandLogo variant="dark" className="h-7 md:h-7" />
+          </Link>
+          <p className="text-center text-[10px] font-medium text-slate-400">
+            © {new Date().getFullYear()} weX.Pay · Wexon
+          </p>
+        </div>
       </main>
     </div>
   );

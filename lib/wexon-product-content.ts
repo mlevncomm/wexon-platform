@@ -8,9 +8,9 @@ export const WEXHOTEL_CONTENT: RoadmapProductContent = {
   heroBadge: "Roadmap · Yakında",
   heroTitle: "Otel ve konaklama işletmeleri için oda, rezervasyon ve operasyon yönetimi",
   heroDescription:
-    "WexHotel; oda durumu, rezervasyon takvimi, misafir kayıtları, ödeme ve personel süreçlerini tek operasyon paneline bağlamayı hedefleyen Wexon ürünüdür. WexPay pilotu tamamlandıktan sonra ikinci ürün olarak planlanıyor.",
+    "WexHotel; oda durumu, rezervasyon takvimi, misafir kayıtları, ödeme ve personel süreçlerini tek operasyon paneline bağlamayı hedefleyen Wexon ürünüdür. WexPay Business Suite sonrasında ikinci ürün olarak planlanıyor.",
   ecosystemNote: "WexHotel de Wexon Core'a bağlı çalışacak; lisans, abonelik ve erişim kararları merkezi olarak yönetilecek.",
-  roadmapNote: "WexPay pilotu sonrası ikinci ürün olarak planlanıyor.",
+  roadmapNote: "WexPay Business Suite sonrasında ikinci ürün olarak planlanıyor.",
   capabilities: [
     {
       icon: "table",
@@ -47,7 +47,7 @@ export const WEXHOTEL_CONTENT: RoadmapProductContent = {
     {
       question: "WexHotel ne zaman aktif olacak?",
       answer:
-        "WexHotel şu an roadmap aşamasında. WexPay pilotunun tamamlanmasının ardından geliştirme ve pilot süreci başlayacak; kesin tarih için demo talep ederek güncel durumu öğrenebilirsiniz.",
+        "WexHotel şu an roadmap aşamasında. WexPay Business Suite’in ardından geliştirme ve ön kayıt süreci başlayacak; kesin tarih için demo talep ederek güncel durumu öğrenebilirsiniz.",
     },
     {
       question: "Şu an ön kayıt yapabilir miyim?",
