@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createCustomerSessionCookie, getCurrentCustomerUser, getCustomerSession } from "@/lib/wexon-customer-auth";
 import { hashPassword, verifyPassword } from "@/lib/wexon-passwords";
 import { prisma } from "@/lib/prisma";
-import { checkoutPrice, CheckoutValidationError, parseCheckoutPayload } from "@/lib/wexon-checkout-validation";
+import { computePlanPrice, CheckoutValidationError, parseCheckoutPayload } from "@/lib/wexon-checkout-validation";
 import { normalizeSignupSlug } from "@/lib/wexon-signup-validation";
 
 function checkoutError(message: string, productKey = "wexpay", planKey = "standard"): never {
@@ -53,7 +53,13 @@ export async function createMockCheckoutSubscriptionAction(formData: FormData) {
 
   const now = new Date();
   const periodEnd = addPeriod(now, payload.billingInterval);
-  const price = checkoutPrice(payload.productKey, payload.planKey, payload.billingInterval);
+  let price;
+  try {
+    price = computePlanPrice(plan, payload.billingInterval);
+  } catch (error) {
+    if (error instanceof CheckoutValidationError) checkoutError(error.message, payload.productKey, payload.planKey);
+    throw error;
+  }
   const interval = payload.billingInterval === "yearly" ? "YEARLY" : "MONTHLY";
   const mockRef = `mock_${Date.now()}`;
 

@@ -1,7 +1,9 @@
 /**
- * Short-lived in-memory idempotency for public QR mutations.
- * Best-effort across a single process; reduces double-submit duplicates.
+ * Postgres-backed idempotency for public QR mutations.
+ * Survives serverless multi-instance runtimes (unlike in-memory maps).
  */
+
+import { prisma } from "@/lib/prisma";
 
 type IdempotencyEntry = {
   status: number;
@@ -9,7 +11,6 @@ type IdempotencyEntry = {
   expiresAt: number;
 };
 
-const store = new Map<string, IdempotencyEntry>();
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const MAX_KEY_LENGTH = 128;
 
@@ -24,25 +25,28 @@ export function readIdempotencyKeyFromRequest(request: Request) {
   return normalizeIdempotencyKey(request.headers.get("idempotency-key") ?? request.headers.get("Idempotency-Key"));
 }
 
-function pruneExpired(now = Date.now()) {
-  for (const [key, entry] of store) {
-    if (entry.expiresAt <= now) store.delete(key);
-  }
+function scopeKey(scope: string, key: string) {
+  return `${scope}:${key}`;
 }
 
-export function getIdempotentResponse(scope: string, key: string | null) {
+export async function getIdempotentResponse(scope: string, key: string | null): Promise<IdempotencyEntry | null> {
   if (!key) return null;
-  pruneExpired();
-  const entry = store.get(`${scope}:${key}`);
-  if (!entry) return null;
-  if (entry.expiresAt <= Date.now()) {
-    store.delete(`${scope}:${key}`);
+  const record = await prisma.publicIdempotencyRecord.findUnique({
+    where: { scopeKey: scopeKey(scope, key) },
+  });
+  if (!record) return null;
+  if (record.expiresAt.getTime() <= Date.now()) {
+    await prisma.publicIdempotencyRecord.delete({ where: { id: record.id } }).catch(() => undefined);
     return null;
   }
-  return entry;
+  return {
+    status: record.status,
+    body: record.bodyJson,
+    expiresAt: record.expiresAt.getTime(),
+  };
 }
 
-export function storeIdempotentResponse(
+export async function storeIdempotentResponse(
   scope: string,
   key: string | null,
   status: number,
@@ -50,15 +54,24 @@ export function storeIdempotentResponse(
   ttlMs = DEFAULT_TTL_MS,
 ) {
   if (!key) return;
-  pruneExpired();
-  store.set(`${scope}:${key}`, {
-    status,
-    body,
-    expiresAt: Date.now() + ttlMs,
+  const expiresAt = new Date(Date.now() + ttlMs);
+  await prisma.publicIdempotencyRecord.upsert({
+    where: { scopeKey: scopeKey(scope, key) },
+    update: {
+      status,
+      bodyJson: body as object,
+      expiresAt,
+    },
+    create: {
+      scopeKey: scopeKey(scope, key),
+      status,
+      bodyJson: body as object,
+      expiresAt,
+    },
   });
 }
 
-/** Test helper */
-export function clearIdempotencyStoreForTests() {
-  store.clear();
+/** Test helper — clears all idempotency rows (dev/test only). */
+export async function clearIdempotencyStoreForTests() {
+  await prisma.publicIdempotencyRecord.deleteMany({});
 }

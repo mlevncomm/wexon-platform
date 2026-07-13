@@ -78,7 +78,7 @@ export default async function DashboardSubscriptionPage({ searchParams }: { sear
             <DashboardUsageCard label="Masa limiti" used={tableCount} limit={entitlementNumber(entitlementMap, "table_limit")} />
             <DashboardUsageCard label="Ürün limiti" used={menuProductCount} limit={entitlementNumber(entitlementMap, "product_limit")} />
             <DashboardUsageCard label="Personel limiti" used={organization.memberships.length} limit={entitlementNumber(entitlementMap, "staff_limit")} />
-            <DashboardUsageCard label="Aylık işlem limiti" used={0} limit={entitlementNumber(entitlementMap, "monthly_transaction_limit")} />
+            <DashboardUsageCard label="Aylık işlem limiti" used={0} limit={entitlementNumber(entitlementMap, "monthly_order_limit")} />
             <DashboardUsageCard label="API kullanım limiti" used={0} limit={entitlementNumber(entitlementMap, "api_request_limit")} />
           </div>
         </DashboardPanel>

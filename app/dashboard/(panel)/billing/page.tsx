@@ -11,7 +11,7 @@ type DashboardSearchParams = Promise<{ organizationId?: string; organizationSlug
 
 export default async function DashboardBillingPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
-  const { organization, wexPayLicense } = await getCustomerDashboardData(params);
+  const { organization, wexPayLicense, wexPaySubscription } = await getCustomerDashboardData(params);
 
   if (!organization) {
     return (
@@ -32,10 +32,32 @@ export default async function DashboardBillingPage({ searchParams }: { searchPar
       />
       <DashboardPanel>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <DashboardInfoRow label="Abonelik durumu" value="Abonelik bilgisi bekleniyor" />
-          <DashboardInfoRow label="Lisans tipi" value={wexPayLicense ? formatCoreStatus(wexPayLicense.licenseType) : "Aylık"} />
-          <DashboardInfoRow label="Yenileme tarihi" value={wexPayLicense?.endsAt ? formatCoreDate(wexPayLicense.endsAt) : "-"} />
-          <DashboardInfoRow label="Son ödeme" value={organization.billingPayments[0] ? formatCoreStatus(organization.billingPayments[0].status) : "Henüz yok"} />
+          <DashboardInfoRow
+            label="Abonelik durumu"
+            value={wexPaySubscription ? formatCoreStatus(wexPaySubscription.status) : "Aktif abonelik yok"}
+          />
+          <DashboardInfoRow
+            label="Lisans tipi"
+            value={wexPayLicense ? formatCoreStatus(wexPayLicense.licenseType) : "Aylık"}
+          />
+          <DashboardInfoRow
+            label="Yenileme tarihi"
+            value={
+              wexPaySubscription?.currentPeriodEnd
+                ? formatCoreDate(wexPaySubscription.currentPeriodEnd)
+                : wexPayLicense?.endsAt
+                  ? formatCoreDate(wexPayLicense.endsAt)
+                  : "-"
+            }
+          />
+          <DashboardInfoRow
+            label="Son ödeme"
+            value={
+              organization.billingPayments[0]
+                ? formatCoreStatus(organization.billingPayments[0].status)
+                : "Henüz yok"
+            }
+          />
         </div>
         <div className="mt-6">
           {organization.invoices.length === 0 && organization.billingPayments.length === 0 ? (
@@ -46,17 +68,27 @@ export default async function DashboardBillingPage({ searchParams }: { searchPar
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-200">
               {organization.invoices.map((invoice) => (
-                <div key={invoice.id} className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0 sm:grid-cols-4">
+                <div
+                  key={invoice.id}
+                  className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0 sm:grid-cols-4"
+                >
                   <span className="font-black text-slate-950">{invoice.invoiceNo}</span>
-                  <span className="font-semibold text-slate-600">{String(invoice.total)} {invoice.currency}</span>
+                  <span className="font-semibold text-slate-600">
+                    {String(invoice.total)} {invoice.currency}
+                  </span>
                   <span className="font-semibold text-slate-600">{formatCoreDate(invoice.dueAt)}</span>
                   <span className="font-black text-slate-700">{formatCoreStatus(invoice.status)}</span>
                 </div>
               ))}
               {organization.billingPayments.map((payment) => (
-                <div key={payment.id} className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0 sm:grid-cols-4">
+                <div
+                  key={payment.id}
+                  className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0 sm:grid-cols-4"
+                >
                   <span className="font-black text-slate-950">Ödeme</span>
-                  <span className="font-semibold text-slate-600">{String(payment.amount)} {payment.currency}</span>
+                  <span className="font-semibold text-slate-600">
+                    {String(payment.amount)} {payment.currency}
+                  </span>
                   <span className="font-semibold text-slate-600">{formatCoreDate(payment.paidAt)}</span>
                   <span className="font-black text-slate-700">{formatCoreStatus(payment.status)}</span>
                 </div>

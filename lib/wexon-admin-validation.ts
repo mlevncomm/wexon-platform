@@ -295,6 +295,26 @@ export function parseProductUpdatePayload(formData: FormData) {
   };
 }
 
+function nullableMoney(formData: FormData, key: string, label: string) {
+  const raw = readString(formData, key);
+  if (!raw) return null;
+  const value = Number(raw.replace(",", "."));
+  if (!Number.isFinite(value) || value < 0) {
+    throw new AdminValidationError(`${label} geçerli bir tutar olmalıdır.`);
+  }
+  return value;
+}
+
+function parseTaxRatePct(formData: FormData) {
+  const raw = readString(formData, "taxRatePct");
+  if (!raw) return 20;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 100) {
+    throw new AdminValidationError("KDV oranı 0-100 arasında olmalıdır.");
+  }
+  return Math.round(value);
+}
+
 export function parsePlanCreatePayload(formData: FormData) {
   const sortOrderRaw = readString(formData, "sortOrder");
   const sortOrder = sortOrderRaw ? Number(sortOrderRaw) : 0;
@@ -307,6 +327,11 @@ export function parsePlanCreatePayload(formData: FormData) {
     isPublic: parseBoolean(formData, "isPublic"),
     isActive: parseBoolean(formData, "isActive"),
     sortOrder: Number.isNaN(sortOrder) ? 0 : sortOrder,
+    priceMonthly: nullableMoney(formData, "priceMonthly", "Aylık fiyat"),
+    priceYearly: nullableMoney(formData, "priceYearly", "Yıllık fiyat"),
+    priceOneTime: nullableMoney(formData, "priceOneTime", "Tek seferlik fiyat"),
+    currency: (readString(formData, "currency") || "TRY").toUpperCase(),
+    taxRatePct: parseTaxRatePct(formData),
   };
 }
 
@@ -320,6 +345,11 @@ export function parsePlanUpdatePayload(formData: FormData) {
     isPublic: parseBoolean(formData, "isPublic"),
     isActive: parseBoolean(formData, "isActive"),
     sortOrder: Number.isNaN(sortOrder) ? 0 : sortOrder,
+    priceMonthly: nullableMoney(formData, "priceMonthly", "Aylık fiyat"),
+    priceYearly: nullableMoney(formData, "priceYearly", "Yıllık fiyat"),
+    priceOneTime: nullableMoney(formData, "priceOneTime", "Tek seferlik fiyat"),
+    currency: (readString(formData, "currency") || "TRY").toUpperCase(),
+    taxRatePct: parseTaxRatePct(formData),
   };
 }
 

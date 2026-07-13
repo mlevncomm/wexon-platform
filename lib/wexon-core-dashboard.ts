@@ -24,12 +24,12 @@ export const entitlementLabels: Record<string, string> = {
   table_limit: "Masa limiti",
   product_limit: "Ürün limiti",
   staff_limit: "Personel limiti",
+  monthly_order_limit: "Aylık işlem limiti",
+  api_request_limit: "API kullanım limiti",
   reporting_level: "Rapor seviyesi",
   integration_level: "Entegrasyon seviyesi",
   support_level: "Destek seviyesi",
   role_level: "Rol seviyesi",
-  monthly_transaction_limit: "Aylık işlem limiti",
-  api_request_limit: "API kullanım limiti",
 };
 
 export const roleDescriptions = [
@@ -103,6 +103,16 @@ const organizationDashboardInclude = {
   billingPayments: {
     orderBy: { createdAt: "desc" as const },
     take: 5,
+  },
+  subscriptions: {
+    include: {
+      plan: {
+        include: {
+          product: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" as const },
   },
   memberships: {
     include: {
@@ -200,6 +210,7 @@ export async function getOrganizationDashboardData(
       wexPayAccess: null,
       wexPayLicense: null,
       wexPayInstallation: null,
+      wexPaySubscription: null,
       upcomingProducts: products.filter((product) => product.status === "UPCOMING"),
       linkedRestaurant: null,
       branchCount: 0,
@@ -212,6 +223,8 @@ export async function getOrganizationDashboardData(
   const wexPayLicense = organization.licenses.find((license) => license.product.key === "wexpay") ?? null;
   const wexPayInstallation =
     organization.appInstallations.find((installation) => installation.product.key === "wexpay") ?? null;
+  const wexPaySubscription =
+    organization.subscriptions.find((subscription) => subscription.plan.product.key === "wexpay") ?? null;
   const wexPayAccess = await evaluateProductAccess({
     organizationId: organization.id,
     productKey: "wexpay",
@@ -240,6 +253,7 @@ export async function getOrganizationDashboardData(
     wexPayAccess,
     wexPayLicense: wexPayAccess.license ?? wexPayLicense,
     wexPayInstallation: wexPayAccess.installation ?? wexPayInstallation,
+    wexPaySubscription,
     upcomingProducts: products.filter((product) => product.status === "UPCOMING"),
     linkedRestaurant,
     branchCount,
