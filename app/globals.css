@@ -764,10 +764,20 @@ input[type="password"]::-webkit-password-toggle-button {
 
 .wx-hero-marquee-track {
   animation: wx-hero-marquee 36s linear infinite;
+  will-change: transform;
 }
 
-.wx-hero-marquee-track:hover {
-  animation-play-state: paused;
+/* Touch devices keep sticky :hover after tap — that would freeze the marquee. */
+@media (hover: hover) and (pointer: fine) {
+  .wx-hero-marquee-track:hover {
+    animation-play-state: paused;
+  }
+}
+
+@media (max-width: 640px) {
+  .wx-hero-marquee-track {
+    animation-duration: 28s;
+  }
 }
 
 .wx-card-enter:nth-child(2) {
