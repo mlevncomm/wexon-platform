@@ -68,7 +68,7 @@ export async function getPublicWexPayPricingPlans(): Promise<PricingPlan[]> {
         isPublic: true,
         product: { key: "wexpay", isActive: true },
       },
-      include: { entitlements: true },
+      include: { entitlements: { where: { isActive: true } } },
       orderBy: { sortOrder: "asc" },
     });
 

@@ -143,3 +143,20 @@ Reasons:
 - Callback fail-closed (no `OK` / no activate on invalid hash or missing credentials).
 - Ready for test mode after merchant credentials + PayTR callback panel setup.
 - `WEXPAY_PAYTR_ENABLE_API` left untouched; fixture QR/users remain disabled.
+
+## 7. WexPay tiered pricing gating (2026-07-15)
+
+Branch: `cursor/wexpay-tiered-pricing-gating-implementation`
+
+| Check | Result |
+|-------|--------|
+| Public pricing tiers | Essential ₺7.000 / Growth ₺15.000 / Scale ₺35.000 + Business Suite |
+| DB source of truth | `getPublicWexPayPricingPlans()` + admin `/admin/plans` |
+| Entitlement soft-deactivate | Admin toggle; resolvers filter `isActive: true` |
+| Migration preview | `/admin/plans/wexpay-migration` — no auto remap |
+| Dashboard products | No `/checkout`; eligibility + packages CTAs |
+| Billing success/fail | Links to packages + eligibility, not checkout |
+| PayTR flags | Unchanged; closed by default |
+| Unit tests | `npm run test -- lib/wexon-entitlement-lifecycle.test.ts lib/wexpay-tiered-pricing.test.ts` |
+
+Optional read-only audit: `node scripts/audit-wexpay-plan-safety.mjs`

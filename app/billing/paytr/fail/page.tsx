@@ -44,10 +44,10 @@ export default async function PaytrBillingFailPage({ searchParams }: { searchPar
       ) : null}
       <div className="mt-8 flex flex-wrap gap-3">
         <Link
-          href={`/checkout?product=wexpay${payment ? `&plan=${encodeURIComponent(payment.plan.key.replace(/^wexpay_/, ""))}` : ""}`}
+          href="/demo-request?product=wexpay&intent=eligibility"
           className="rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
         >
-          Tekrar dene
+          Uygunluğunu Kontrol Et
         </Link>
         <Link href="/dashboard" className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50">
           Dashboard

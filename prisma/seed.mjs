@@ -319,10 +319,35 @@ async function seedProductsAndPlans() {
   }
 
   for (const legacyKey of legacyWexPayPlansToRetire) {
-    await prisma.plan.updateMany({
+    const legacyPlans = await prisma.plan.findMany({
       where: { key: legacyKey },
-      data: { isPublic: false, isActive: false },
+      select: { id: true },
     });
+
+    for (const legacyPlan of legacyPlans) {
+      const [activeLicenseCount, activeSubscriptionCount] = await Promise.all([
+        prisma.license.count({
+          where: {
+            planId: legacyPlan.id,
+            status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] },
+          },
+        }),
+        prisma.subscription.count({
+          where: {
+            planId: legacyPlan.id,
+            status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] },
+          },
+        }),
+      ]);
+
+      await prisma.plan.update({
+        where: { id: legacyPlan.id },
+        data: {
+          isPublic: false,
+          isActive: activeLicenseCount > 0 || activeSubscriptionCount > 0,
+        },
+      });
+    }
   }
 
   return { productByKey, planByKey };

@@ -1,8 +1,9 @@
-import { parseDemoRequestPayload } from "@/lib/wexon-public-validation";
+import { parseDemoRequestPayload, PublicValidationError } from "@/lib/wexon-public-validation";
 import {
   applicantFacingEligibilityMessage,
   evaluateWexPayEligibility,
 } from "@/lib/wexpay-eligibility";
+import { resolveWexPayTierKey } from "@/lib/wexpay-tier-config";
 
 export type PreApplicationPayload = ReturnType<typeof parseDemoRequestPayload>;
 
@@ -16,7 +17,25 @@ export async function savePreApplicationLead(
 ): Promise<SavePreApplicationResult> {
   try {
     const { writeAuditLog } = await import("@/lib/wexon-audit");
+    const { prisma } = await import("@/lib/prisma");
     const submissionLabel = payload.source === "on-basvuru" ? "ön başvuru" : "demo talebi";
+
+    if (payload.preferredTier) {
+      const tierKey = resolveWexPayTierKey(payload.preferredTier);
+      if (tierKey) {
+        const plan = await prisma.plan.findFirst({
+          where: {
+            product: { key: "wexpay" },
+            OR: [{ tierKey }, { key: `wexpay_${tierKey}` }, { key: payload.preferredTier }],
+          },
+        });
+        if (plan && (!plan.isActive || !plan.isPublic)) {
+          throw new PublicValidationError(
+            "Seçilen paket şu anda başvuruya açık değil. Lütfen başka bir paket seçin veya ekibimizle iletişime geçin.",
+          );
+        }
+      }
+    }
 
     const eligibility =
       payload.product === "WexPay" || payload.intent === "eligibility"
@@ -73,6 +92,9 @@ export async function savePreApplicationLead(
 
     return { ok: true, id: row.id, applicantMessage };
   } catch (error) {
+    if (error instanceof PublicValidationError) {
+      throw error;
+    }
     console.error("[pre-application] primary database save failed", error);
     return { ok: false, error };
   }

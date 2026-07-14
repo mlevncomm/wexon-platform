@@ -5,6 +5,10 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { adminDebug, assertAdminAccess, type AdminSession } from "@/lib/wexon-admin-auth";
+import {
+  assertEntitlementPhysicalDeleteForbidden,
+  setEntitlementActiveState,
+} from "@/lib/wexon-entitlement-lifecycle";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { hashApiKey } from "@/lib/wexon-api-key-hash";
 import { resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
@@ -1607,24 +1611,30 @@ export async function upsertAdminEntitlementAction(planId: string, formData: For
   }
 }
 
-export async function deleteAdminEntitlementAction(planId: string, entitlementId: string, formData: FormData) {
+export async function setAdminEntitlementActiveAction(planId: string, entitlementId: string, formData: FormData) {
   const returnTo = readReturnTo(formData, "/admin/plans");
   try {
     const actor = await assertAdminAccess();
-    await prisma.$transaction(async (tx) => {
-      const entitlement = await tx.entitlement.findFirst({ where: { id: entitlementId, planId } });
-      if (!entitlement) throw new AdminValidationError("Limit kaydı bulunamadı.");
-      await tx.entitlement.delete({ where: { id: entitlementId } });
-      await writeAdminAuditLog(
-        { action: "admin.entitlement.deleted", actor, entityType: "Entitlement", entityId: entitlementId, metadata: { planId, key: entitlement.key } },
-        tx,
-      );
-    });
+    const isActive = String(formData.get("isActive") ?? "").trim() === "true";
+    const note = String(formData.get("note") ?? "").trim() || null;
+    await setEntitlementActiveState({ actor, planId, entitlementId, isActive, note });
     revalidateCatalogRoutes();
     redirect(returnTo);
   } catch (error) {
     throwIfRedirectError(error);
-    redirectWithError(formData, returnTo, error, "Limit silinemedi.");
+    redirectWithError(formData, returnTo, error, "Limit durumu güncellenemedi.");
+  }
+}
+
+/** @deprecated Physical delete is forbidden — use setAdminEntitlementActiveAction. */
+export async function deleteAdminEntitlementAction(planId: string, entitlementId: string, formData: FormData) {
+  const returnTo = readReturnTo(formData, "/admin/plans");
+  try {
+    await assertAdminAccess();
+    assertEntitlementPhysicalDeleteForbidden();
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, returnTo, error, "Limit silinemez; devre dışı bırakın.");
   }
 }
 

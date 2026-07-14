@@ -59,10 +59,16 @@ export default async function PaytrBillingSuccessPage({ searchParams }: { search
           Aboneliğe git
         </Link>
         <Link
-          href="/checkout?product=wexpay"
+          href="/packages"
           className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
         >
-          Checkout’a dön
+          Paketleri incele
+        </Link>
+        <Link
+          href="/demo-request?product=wexpay&intent=eligibility"
+          className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+        >
+          Uygunluğunu kontrol et
         </Link>
       </div>
       </div>

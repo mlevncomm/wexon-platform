@@ -16,9 +16,10 @@ test.describe.serial("public journey", () => {
 
     await page.goto("/products/wexpay");
     await expect(page.getByText("WexPay").first()).toBeVisible();
-    await expect(page.getByText(/₺1\.490\/ay|₺1490\/ay/i).first()).toBeVisible();
-    await expect(page.getByText(/₺2\.990\/ay|₺2990\/ay/i).first()).toBeVisible();
-    await expect(page.getByText(/₺5\.990\/ay|₺5990\/ay/i).first()).toBeVisible();
+    await expect(page.getByText(/₺7\.000\/ay|₺7000\/ay/i).first()).toBeVisible();
+    await expect(page.getByText(/₺15\.000\/ay|₺15000\/ay/i).first()).toBeVisible();
+    await expect(page.getByText(/₺35\.000\/ay|₺35000\/ay/i).first()).toBeVisible();
+    await expect(page.getByText(/Business Suite/i).first()).toBeVisible();
 
     const demoGone = await page.goto("/demo/wexpay");
     expect(demoGone?.status()).toBeGreaterThanOrEqual(400);
@@ -65,7 +66,9 @@ test.describe.serial("public journey", () => {
     await page.getByRole("button", { name: /Demo Talebi Gönder/i }).click();
 
     await expect(page.getByText("Talebiniz alındı")).toBeVisible();
-    await expect(page.getByText(/Demo talebiniz Wexon ekibine iletildi/i)).toBeVisible();
+    await expect(
+      page.getByText(/Demo talebiniz Wexon ekibine iletildi|Ön değerlendirme tamamlandı|Önerilen paket kaydedildi|Başvurunuz şu an ilerletilemiyor/i),
+    ).toBeVisible();
   });
 
   test("unknown public route returns 404 page", async ({ page }) => {

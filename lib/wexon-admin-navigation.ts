@@ -13,6 +13,7 @@ export const adminNavigation = [
 export const adminSecondaryNavigation = [
   { label: "Ürün Kataloğu", href: "/admin/products" },
   { label: "Paketler", href: "/admin/plans" },
+  { label: "WexPay geçiş önizlemesi", href: "/admin/plans/wexpay-migration" },
   { label: "Abonelikler", href: "/admin/subscriptions" },
   { label: "Entegrasyonlar", href: "/admin/integrations" },
   { label: "Müşteri Özeti", href: "/admin/customers" },

@@ -3,7 +3,7 @@ import { AdminActionNotice, AdminFormPanel, AdminSelectField, AdminSubmitButton,
 import { AdminInlineToggleForm, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import {
   createAdminPlanAction,
-  deleteAdminEntitlementAction,
+  setAdminEntitlementActiveAction,
   updateAdminPlanAction,
   updateAdminPlanActiveAction,
   upsertAdminEntitlementAction,
@@ -34,6 +34,7 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
         />
         <AdminQuickLinks
           links={[
+            { label: "Geçiş önizlemesi", href: "/admin/plans/wexpay-migration" },
             { label: "Lisans ata", href: "/admin/licenses" },
             { label: "Ürün kataloğu", href: "/admin/products" },
             { label: "Abonelikler", href: "/admin/subscriptions" },
@@ -228,17 +229,32 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
               <div className="mt-6 space-y-3 border-t border-slate-100 pt-5">
                 <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Limitler (entitlement)</p>
                 {plan.entitlements.map((item) => {
-                  const deleteEntitlement = deleteAdminEntitlementAction.bind(null, plan.id, item.id);
+                  const toggleEntitlement = setAdminEntitlementActiveAction.bind(null, plan.id, item.id);
+                  const entitlementActive = item.isActive !== false;
                   return (
-                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
-                      <span className="text-xs font-bold text-slate-700">
-                        {item.key}: {item.valueString ?? item.valueInt ?? (item.valueBool ? "true" : "false")}
-                      </span>
-                      <form action={deleteEntitlement}>
+                    <div key={item.id} className="rounded-xl bg-slate-50 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-700">
+                          {item.key}: {item.valueString ?? item.valueInt ?? (item.valueBool ? "true" : "false")}
+                          {!entitlementActive ? " · devre dışı" : ""}
+                        </span>
+                        <AdminStatusPill active={entitlementActive}>
+                          {entitlementActive ? "Aktif" : "Pasif"}
+                        </AdminStatusPill>
+                      </div>
+                      <form action={toggleEntitlement} className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
                         <input type="hidden" name="returnTo" value="/admin/plans" />
-                        <button type="submit" className="text-xs font-bold text-rose-600 hover:underline">
-                          Sil
-                        </button>
+                        <input type="hidden" name="isActive" value={entitlementActive ? "false" : "true"} />
+                        <AdminTextField
+                          label="Not (isteğe bağlı)"
+                          name="note"
+                          placeholder="Devre dışı bırakma veya yeniden etkinleştirme gerekçesi"
+                        />
+                        <div className="flex items-end">
+                          <AdminSubmitButton>
+                            {entitlementActive ? "Devre Dışı Bırak" : "Yeniden Etkinleştir"}
+                          </AdminSubmitButton>
+                        </div>
                       </form>
                     </div>
                   );
