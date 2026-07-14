@@ -21,12 +21,13 @@ function failureState(message: string): DemoRequestFormState {
   };
 }
 
-function successState(): DemoRequestFormState {
+function successState(applicantMessage?: string | null): DemoRequestFormState {
   return {
     success: true,
     submitted: true,
     error: null,
     message: null,
+    applicantMessage: applicantMessage ?? null,
   };
 }
 
@@ -54,7 +55,7 @@ export async function createDemoRequestAction(
 
     void runPreApplicationSideEffects(payload, ip, saved.id);
 
-    return successState();
+    return successState(saved.applicantMessage);
   } catch (error) {
     console.error("[pre-application] unhandled submission error", error);
 

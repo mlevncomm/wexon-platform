@@ -7,11 +7,13 @@ import { normalizeDemoRequestSource, resolveDemoProductFromQuery } from "@/lib/w
 export default async function DemoRequestPage({
   searchParams,
 }: {
-  searchParams: Promise<{ product?: string; source?: string }>;
+  searchParams: Promise<{ product?: string; source?: string; plan?: string; intent?: string }>;
 }) {
   const params = await searchParams;
   const defaultProduct = resolveDemoProductFromQuery(params.product) ?? undefined;
   const defaultSource = normalizeDemoRequestSource(params.source);
+  const defaultPlan = params.plan?.trim() || undefined;
+  const intent = params.intent?.trim() || (defaultPlan ? "eligibility" : undefined);
   const demoCards = [
     "WexPay müşteri QR deneyimi",
     "WexPay işletme paneli",
@@ -81,7 +83,12 @@ export default async function DemoRequestPage({
             "Kurulum yol haritası",
           ]}
         />
-        <DemoRequestForm defaultProduct={defaultProduct} defaultSource={defaultSource} />
+        <DemoRequestForm
+          defaultProduct={defaultProduct}
+          defaultSource={defaultSource}
+          defaultPlan={defaultPlan}
+          intent={intent}
+        />
       </section>
     </WexonFormShell>
   );

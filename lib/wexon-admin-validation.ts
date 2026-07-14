@@ -338,6 +338,12 @@ export function parsePlanCreatePayload(formData: FormData) {
     priceOneTime: nullableMoney(formData, "priceOneTime", "Tek seferlik fiyat"),
     currency: (readString(formData, "currency") || "TRY").toUpperCase(),
     taxRatePct: parseTaxRatePct(formData),
+    tierKey: nullableString(formData, "tierKey"),
+    setupFee: nullableMoney(formData, "setupFee", "Kurulum ücreti"),
+    processingFeePct: nullableMoney(formData, "processingFeePct", "İşlem ücreti %"),
+    minimumTransactionCommitment: nullableMoney(formData, "minimumTransactionCommitment", "Aylık minimum işlem taahhüdü"),
+    requiresManualReview: parseBoolean(formData, "requiresManualReview"),
+    settlementDisplay: nullableString(formData, "settlementDisplay"),
   };
 }
 
@@ -356,6 +362,12 @@ export function parsePlanUpdatePayload(formData: FormData) {
     priceOneTime: nullableMoney(formData, "priceOneTime", "Tek seferlik fiyat"),
     currency: (readString(formData, "currency") || "TRY").toUpperCase(),
     taxRatePct: parseTaxRatePct(formData),
+    tierKey: nullableString(formData, "tierKey"),
+    setupFee: nullableMoney(formData, "setupFee", "Kurulum ücreti"),
+    processingFeePct: nullableMoney(formData, "processingFeePct", "İşlem ücreti %"),
+    minimumTransactionCommitment: nullableMoney(formData, "minimumTransactionCommitment", "Aylık minimum işlem taahhüdü"),
+    requiresManualReview: parseBoolean(formData, "requiresManualReview"),
+    settlementDisplay: nullableString(formData, "settlementDisplay"),
   };
 }
 

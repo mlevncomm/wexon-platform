@@ -1,9 +1,13 @@
 import { parseDemoRequestPayload } from "@/lib/wexon-public-validation";
+import {
+  applicantFacingEligibilityMessage,
+  evaluateWexPayEligibility,
+} from "@/lib/wexpay-eligibility";
 
 export type PreApplicationPayload = ReturnType<typeof parseDemoRequestPayload>;
 
 type SavePreApplicationResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; applicantMessage?: string }
   | { ok: false; error: unknown };
 
 export async function savePreApplicationLead(
@@ -13,6 +17,25 @@ export async function savePreApplicationLead(
   try {
     const { writeAuditLog } = await import("@/lib/wexon-audit");
     const submissionLabel = payload.source === "on-basvuru" ? "ön başvuru" : "demo talebi";
+
+    const eligibility =
+      payload.product === "WexPay" || payload.intent === "eligibility"
+        ? evaluateWexPayEligibility({
+            companyType: payload.companyType,
+            sector: payload.sector,
+            monthlyGmvBand: payload.monthlyGmvBand,
+            locationCount: payload.locationCount,
+            avgTicket: payload.avgTicket,
+            onlineOfflineSplit: payload.onlineOfflineSplit,
+            needsSubscriptions: payload.needsSubscriptions,
+            needsQr: payload.needsQr,
+            needsIntegration: payload.needsIntegration,
+            needsMarketplaceOrPayout: payload.needsMarketplaceOrPayout,
+            preferredTier: payload.preferredTier,
+          })
+        : null;
+
+    const applicantMessage = eligibility ? applicantFacingEligibilityMessage(eligibility) : undefined;
 
     const row = await writeAuditLog({
       action: "public.demo_request.created",
@@ -28,12 +51,27 @@ export async function savePreApplicationLead(
         product: payload.product,
         message: payload.message,
         source: payload.source,
+        plan: payload.preferredTier,
+        intent: payload.intent,
+        companyType: payload.companyType,
+        sector: payload.sector,
+        monthlyGmvBand: payload.monthlyGmvBand,
+        locationCount: payload.locationCount,
+        avgTicket: payload.avgTicket,
+        onlineOfflineSplit: payload.onlineOfflineSplit,
+        needsSubscriptions: payload.needsSubscriptions,
+        needsQr: payload.needsQr,
+        needsIntegration: payload.needsIntegration,
+        needsMarketplaceOrPayout: payload.needsMarketplaceOrPayout,
+        recommendedTier: eligibility?.recommendedTier ?? null,
+        reviewStatus: eligibility?.reviewStatus ?? null,
+        riskReasons: eligibility?.riskReasons ?? null,
         leadStatus: "new",
         status: "NEW",
       },
     });
 
-    return { ok: true, id: row.id };
+    return { ok: true, id: row.id, applicantMessage };
   } catch (error) {
     console.error("[pre-application] primary database save failed", error);
     return { ok: false, error };

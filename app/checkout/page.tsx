@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import PaytrCheckoutPanel from "@/components/billing/PaytrCheckoutPanel";
 import { createMockCheckoutSubscriptionAction } from "@/lib/wexon-checkout-actions";
 import {
+  checkoutPrice,
   computePlanPrice,
   type CheckoutBillingInterval,
   type CheckoutPlanKey,
@@ -10,13 +11,18 @@ import {
 import { getCurrentCustomerUser } from "@/lib/wexon-customer-auth";
 import { isPaytrSubscriptionEnabled } from "@/lib/paytr/paytr-client";
 import { prisma } from "@/lib/prisma";
+import { resolveWexPayTierKey } from "@/lib/wexpay-tier-config";
 
 type CheckoutSearchParams = Promise<{ product?: string; plan?: string; interval?: string; checkoutError?: string }>;
 
 const planLabels: Record<CheckoutPlanKey, string> = {
-  basic: "Basic",
-  standard: "Standard",
-  pro: "Pro",
+  essential: "WexPay Essential",
+  growth: "WexPay Growth",
+  scale: "WexPay Scale",
+  business_suite: "WexPay Business Suite",
+  basic: "WexPay Essential (legacy)",
+  standard: "WexPay Growth (legacy)",
+  pro: "WexPay Scale (legacy)",
 };
 
 function money(value: number, currency = "TRY") {
@@ -26,9 +32,7 @@ function money(value: number, currency = "TRY") {
 export default async function CheckoutPage({ searchParams }: { searchParams: CheckoutSearchParams }) {
   const params = await searchParams;
   const productKey = (params.product ?? "wexpay").toLowerCase();
-  const planKey = (["basic", "standard", "pro"].includes((params.plan ?? "").toLowerCase())
-    ? (params.plan ?? "standard").toLowerCase()
-    : "standard") as CheckoutPlanKey;
+  const planKey = (resolveWexPayTierKey(params.plan) ?? "growth") as CheckoutPlanKey;
   const billingInterval = ((params.interval ?? "monthly").toLowerCase() === "yearly"
     ? "yearly"
     : "monthly") as CheckoutBillingInterval;
@@ -38,21 +42,14 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Che
       isActive: true,
       isPublic: true,
       product: { key: "wexpay", isActive: true, status: "ACTIVE" },
-      OR: [{ key: `wexpay_${planKey}` }, { name: { equals: planKey, mode: "insensitive" } }],
+      OR: [{ tierKey: planKey }, { key: `wexpay_${planKey}` }],
     },
+    orderBy: { sortOrder: "asc" },
   });
 
   const price = dbPlan
     ? computePlanPrice(dbPlan, billingInterval)
-    : computePlanPrice(
-        {
-          priceMonthly: planKey === "basic" ? 1490 : planKey === "pro" ? 5990 : 2990,
-          priceYearly: planKey === "basic" ? 14900 : planKey === "pro" ? 59900 : 29900,
-          currency: "TRY",
-          taxRatePct: 20,
-        },
-        billingInterval,
-      );
+    : checkoutPrice("wexpay", planKey, billingInterval);
 
   const currentUser = await getCurrentCustomerUser();
   const paytrEnabled = isPaytrSubscriptionEnabled();

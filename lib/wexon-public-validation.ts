@@ -88,6 +88,42 @@ export function parseDemoRequestPayload(formData: FormData) {
   }
 
   const source = normalizeDemoRequestSource(readString(formData, "source"));
+  const preferredTier = readString(formData, "plan") || readString(formData, "preferredTier") || null;
+  const intent = readString(formData, "intent") || null;
+  const companyType = readString(formData, "companyType") || null;
+  const sector = readString(formData, "sector") || null;
+  const monthlyGmvBand = readString(formData, "monthlyGmvBand") || null;
+  const locationCountRaw = readString(formData, "locationCount");
+  const locationCount = locationCountRaw ? Number(locationCountRaw) : null;
+  const avgTicketRaw = readString(formData, "avgTicket");
+  const avgTicket = avgTicketRaw ? Number(avgTicketRaw) : null;
+  const onlineOfflineSplit = readString(formData, "onlineOfflineSplit") || null;
+  const needsSubscriptions = readString(formData, "needsSubscriptions") === "true" || readString(formData, "needsSubscriptions") === "on";
+  const needsQr = readString(formData, "needsQr") === "true" || readString(formData, "needsQr") === "on";
+  const needsIntegration = readString(formData, "needsIntegration") === "true" || readString(formData, "needsIntegration") === "on";
+  const needsMarketplaceOrPayout =
+    readString(formData, "needsMarketplaceOrPayout") === "true" ||
+    readString(formData, "needsMarketplaceOrPayout") === "on";
 
-  return { fullName, company, email, phone, product, message, source };
+  return {
+    fullName,
+    company,
+    email,
+    phone,
+    product,
+    message,
+    source,
+    preferredTier,
+    intent,
+    companyType,
+    sector,
+    monthlyGmvBand,
+    locationCount: locationCount != null && Number.isFinite(locationCount) ? locationCount : null,
+    avgTicket: avgTicket != null && Number.isFinite(avgTicket) ? avgTicket : null,
+    onlineOfflineSplit,
+    needsSubscriptions,
+    needsQr,
+    needsIntegration,
+    needsMarketplaceOrPayout,
+  };
 }

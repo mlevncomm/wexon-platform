@@ -3,6 +3,7 @@ export type DemoRequestFormState = {
   submitted: boolean;
   error: string | null;
   message: string | null;
+  applicantMessage?: string | null;
 };
 
 export const initialDemoRequestState: DemoRequestFormState = {
@@ -10,4 +11,5 @@ export const initialDemoRequestState: DemoRequestFormState = {
   submitted: false,
   error: null,
   message: null,
+  applicantMessage: null,
 };

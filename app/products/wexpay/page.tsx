@@ -473,14 +473,13 @@ export default async function WexPayPage() {
               ))}
             </div>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {plans.map((plan) => (
               <PricingCard
                 key={plan.id}
                 plan={plan}
-                href={`/checkout?product=wexpay&plan=${plan.id}`}
+                href={plan.ctaHref ?? `/demo-request?product=wexpay&plan=${plan.id}&intent=eligibility`}
                 tone="light"
-                className={plan.id === "pro" ? "sm:col-span-2 lg:col-span-1" : undefined}
               />
             ))}
           </div>

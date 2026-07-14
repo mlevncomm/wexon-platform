@@ -267,6 +267,13 @@ export interface PricingPlan {
   features: string[];
   cta: string;
   highlighted?: boolean;
+  setupFeeLabel?: string;
+  processingFeeLabel?: string;
+  commitmentLabel?: string;
+  commitmentNote?: string;
+  processingDisclaimer?: string;
+  settlementDisplay?: string;
+  ctaHref?: string;
 }
 
 export interface SecurityItem {
