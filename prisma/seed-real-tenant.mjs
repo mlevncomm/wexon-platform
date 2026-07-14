@@ -135,33 +135,35 @@ async function ensureWexPayPlan() {
   });
 
   const plan = await prisma.plan.upsert({
-    where: { key: "wexpay_standard" },
+    where: { key: "wexpay_growth" },
     update: {
       productId: product.id,
-      name: "Standard",
-      description: "Standard operations package for growing restaurants.",
+      name: "WexPay Growth",
+      description: "Growth operations package for expanding venues.",
       billingInterval: "MONTHLY",
       isPublic: true,
       isActive: true,
       sortOrder: 2,
-      priceMonthly: 2990,
-      priceYearly: 29900,
+      priceMonthly: 15000,
+      priceYearly: 150000,
       currency: "TRY",
       taxRatePct: 20,
+      tierKey: "growth",
     },
     create: {
       productId: product.id,
-      key: "wexpay_standard",
-      name: "Standard",
-      description: "Standard operations package for growing restaurants.",
+      key: "wexpay_growth",
+      name: "WexPay Growth",
+      description: "Growth operations package for expanding venues.",
       billingInterval: "MONTHLY",
       isPublic: true,
       isActive: true,
       sortOrder: 2,
-      priceMonthly: 2990,
-      priceYearly: 29900,
+      priceMonthly: 15000,
+      priceYearly: 150000,
       currency: "TRY",
       taxRatePct: 20,
+      tierKey: "growth",
     },
   });
 
@@ -596,7 +598,7 @@ async function main() {
       entityId: organization.id,
       metadataJson: {
         productKey: "wexpay",
-        planKey: "wexpay_standard",
+        planKey: "wexpay_growth",
       },
     },
   });

@@ -22,9 +22,15 @@ describe("paytr subscription callback service", () => {
     process.env.PAYTR_MERCHANT_SALT = MERCHANT.salt;
 
     const product = await prisma.product.findFirst({ where: { key: "wexpay" } });
-    const plan = await prisma.plan.findFirst({ where: { key: "wexpay_standard", isActive: true } });
+    const plan = await prisma.plan.findFirst({
+      where: {
+        isActive: true,
+        OR: [{ key: "wexpay_growth" }, { tierKey: "growth" }, { key: "wexpay_standard" }],
+      },
+      orderBy: { createdAt: "asc" },
+    });
     if (!product || !plan) {
-      throw new Error("Seed required: wexpay product + wexpay_standard plan");
+      throw new Error("Seed required: wexpay product + active Growth (or legacy Standard) plan");
     }
     planId = plan.id;
 
