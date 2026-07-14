@@ -62,6 +62,7 @@ const organizationDashboardInclude = {
       plan: {
         include: {
           entitlements: {
+            where: { isActive: true },
             orderBy: { key: "asc" as const },
           },
         },

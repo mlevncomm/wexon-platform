@@ -1,3 +1,5 @@
+import { resolveWexPayTierKey } from "@/lib/wexpay-tier-config";
+
 export class CheckoutValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -5,7 +7,14 @@ export class CheckoutValidationError extends Error {
   }
 }
 
-export type CheckoutPlanKey = "basic" | "standard" | "pro";
+export type CheckoutPlanKey =
+  | "essential"
+  | "growth"
+  | "scale"
+  | "business_suite"
+  | "basic"
+  | "standard"
+  | "pro";
 export type CheckoutBillingInterval = "monthly" | "yearly";
 
 export type PlanPriceSource = {
@@ -34,9 +43,11 @@ function normalizeProduct(value: string): "wexpay" {
 }
 
 function normalizePlan(value: string): CheckoutPlanKey {
+  const resolved = resolveWexPayTierKey(value);
+  if (resolved) return resolved;
   const planKey = value.toLowerCase();
-  if (!["basic", "standard", "pro"].includes(planKey)) throw new CheckoutValidationError("Geçersiz paket seçimi.");
-  return planKey as CheckoutPlanKey;
+  if (["basic", "standard", "pro"].includes(planKey)) return planKey as CheckoutPlanKey;
+  throw new CheckoutValidationError("Geçersiz paket seçimi.");
 }
 
 function normalizeInterval(value: string): CheckoutBillingInterval {
@@ -81,15 +92,20 @@ export function checkoutPrice(
   planKey: CheckoutPlanKey,
   interval: CheckoutBillingInterval,
 ) {
-  const fallback: Record<CheckoutPlanKey, { monthly: number; yearly: number }> = {
-    basic: { monthly: 1490, yearly: 14900 },
-    standard: { monthly: 2990, yearly: 29900 },
-    pro: { monthly: 5990, yearly: 59900 },
+  const fallback: Record<string, { monthly: number; yearly: number }> = {
+    essential: { monthly: 7000, yearly: 70000 },
+    growth: { monthly: 15000, yearly: 150000 },
+    scale: { monthly: 35000, yearly: 350000 },
+    business_suite: { monthly: 99000, yearly: 990000 },
+    basic: { monthly: 7000, yearly: 70000 },
+    standard: { monthly: 15000, yearly: 150000 },
+    pro: { monthly: 35000, yearly: 350000 },
   };
+  const prices = fallback[planKey] ?? fallback.essential;
   return computePlanPrice(
     {
-      priceMonthly: fallback[planKey].monthly,
-      priceYearly: fallback[planKey].yearly,
+      priceMonthly: prices.monthly,
+      priceYearly: prices.yearly,
       currency: "TRY",
       taxRatePct: 20,
     },

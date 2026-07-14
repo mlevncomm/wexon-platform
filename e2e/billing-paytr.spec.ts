@@ -37,6 +37,6 @@ test.describe("billing paytr subscription", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await page.goto("/billing/paytr/fail");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Tekrar dene/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Uygunluğunu Kontrol Et/i })).toBeVisible();
   });
 });

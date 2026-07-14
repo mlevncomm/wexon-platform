@@ -1,12 +1,12 @@
 import SectionShell from "@/components/ui/SectionShell";
 import PricingCard from "@/components/ui/PricingCard";
 import SectionHeading from "./SectionHeading";
-import { getPublicWexPayPricingPlans, startingPriceLabel, ENTERPRISE_PRICING_PLAN } from "@/lib/wexon-public-pricing";
+import { getPublicWexPayPricingPlans, startingPriceLabel } from "@/lib/wexon-public-pricing";
+import { WEXPAY_PROCESSING_DISCLAIMER } from "@/lib/wexpay-tier-config";
 
 export default async function PricingPreviewSection() {
-  const wexPayPlans = await getPublicWexPayPricingPlans();
-  const plans = [...wexPayPlans, ENTERPRISE_PRICING_PLAN];
-  const startLabel = startingPriceLabel(wexPayPlans);
+  const plans = await getPublicWexPayPricingPlans();
+  const startLabel = startingPriceLabel(plans);
 
   return (
     <SectionShell id="pricing" tone="dark" width="wide" className="relative">
@@ -23,11 +23,12 @@ export default async function PricingPreviewSection() {
               </span>
             </>
           }
-          subtitle={`WexPay Basic, Standard ve Pro paketleri Wexon Core üzerinden lisanslanır. Fiyatlar ${startLabel}'dan başlar; Enterprise ihtiyaçları için teklif alın.`}
+          subtitle={`WexPay Essential, Growth, Scale ve Business Suite. Fiyatlar ${startLabel}'dan başlar; uygunluk ve görüşme ile ilerlenir.`}
         />
 
-        <p className="mt-8 text-center text-xs font-semibold text-slate-400">
-          Aylık · Yıllık lisans seçenekleri · KDV hariç liste fiyatları (DB kaynaklı)
+        <p className="mt-6 text-center text-xs font-semibold text-slate-400">{WEXPAY_PROCESSING_DISCLAIMER}</p>
+        <p className="mt-3 text-center text-xs font-semibold text-slate-500">
+          Aylık lisans · KDV hariç liste fiyatları (DB kaynaklı) · Canlı satınalma kapalı
         </p>
 
         <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 lg:items-stretch">
@@ -35,7 +36,7 @@ export default async function PricingPreviewSection() {
             <PricingCard
               key={plan.id}
               plan={plan}
-              href={plan.id === "enterprise" ? `/demo-request?plan=${plan.id}` : `/checkout?product=wexpay&plan=${plan.id}`}
+              href={plan.ctaHref ?? `/demo-request?product=wexpay&plan=${plan.id}&intent=eligibility`}
               tone="dark"
             />
           ))}

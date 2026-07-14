@@ -12,6 +12,15 @@ import { wexpayHref } from "@/lib/wexon-organization-context";
 
 type DashboardSearchParams = Promise<{ organizationId?: string; organizationSlug?: string }>;
 
+function dashboardCtaClass(variant: "primary" | "secondary" = "secondary") {
+  const base =
+    "inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-bold transition-colors";
+  if (variant === "primary") {
+    return `${base} bg-emerald-500 text-white hover:bg-emerald-600`;
+  }
+  return `${base} border border-slate-200 bg-white text-slate-900 hover:bg-slate-50`;
+}
+
 export default async function DashboardProductsPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
   const { organization, organizationContext, products, wexPayAccess, wexPayLicense, wexPayInstallation } =
@@ -26,6 +35,7 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
     );
   }
   const hasActiveWexPay = wexPayAccess?.allowed === true;
+  const hasWexPayLicense = Boolean(wexPayLicense);
   const wexPayDenialMessage =
     wexPayAccess && !wexPayAccess.allowed && wexPayAccess.reason
       ? coreAccessDenialMessage(wexPayAccess.reason)
@@ -61,8 +71,10 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
                 {isWexPay
                   ? hasActiveWexPay
                     ? "WexPay erişiminiz aktif. Restoran operasyonlarınızı Wexon Core üzerinden yönetilen lisans ile kullanabilirsiniz."
-                    : wexPayDenialMessage ??
-                      "WexPay erişiminiz şu anda aktif değil. Lisans ve kurulum durumunu kontrol edin veya abonelik başlatın."
+                    : hasWexPayLicense
+                      ? wexPayDenialMessage ??
+                        "Lisansınız kayıtlı ancak erişim şu anda kapalı. Paket değişikliği veya ticari görüşme ile ilerleyebilirsiniz."
+                      : "WexPay için önce uygunluk değerlendirmesi ve satış onayı gereklidir. Canlı online ödeme kapalıdır; başvuru veya görüşme ile ilerlersiniz."
                   : "Bu ürün yakında Wexon ekosistemine eklenecek."}
               </p>
               {isWexPay && (
@@ -79,6 +91,10 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
                   {wexPayAccess?.billingState && wexPayAccess.billingState !== "ok" && (
                     <p className="mt-1 text-slate-500">Fatura durumu: {wexPayAccess.billingState}</p>
                   )}
+                  <p className="mt-2 text-slate-500">
+                    Paket ve fiyatlar veritabanındaki güncel planlardan gelir. Uygunluk ve ticari onay olmadan erişim
+                    açılmaz.
+                  </p>
                 </div>
               )}
               {isWexPay ? (
@@ -91,15 +107,61 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
                       Kurulum süreci devam ediyor. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçecektir.
                     </p>
                   )}
-                  <Link href={hasActiveWexPay ? wexpayAppHref : "/checkout?product=wexpay&plan=standard"} className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-600">
-                    {hasActiveWexPay ? "Uygulamaya git" : "Abonelik başlat"}
-                  </Link>
-                  <Link href={dashboardHref("/dashboard/subscription", organizationContext)} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-900 hover:bg-slate-50">
+                  {hasActiveWexPay ? (
+                    <>
+                      <Link href={wexpayAppHref} className={dashboardCtaClass("primary")}>
+                        Uygulamaya git
+                      </Link>
+                      <Link
+                        href="/demo-request?product=wexpay&intent=plan_change"
+                        className={dashboardCtaClass("secondary")}
+                      >
+                        Paket Değişikliği Talep Et
+                      </Link>
+                      <Link href="/book-demo?product=wexpay" className={dashboardCtaClass("secondary")}>
+                        Üst Pakete / Ticari Görüşme
+                      </Link>
+                    </>
+                  ) : hasWexPayLicense ? (
+                    <>
+                      <Link
+                        href="/demo-request?product=wexpay&intent=plan_change"
+                        className={dashboardCtaClass("primary")}
+                      >
+                        Paket Değişikliği Talep Et
+                      </Link>
+                      <Link href="/book-demo?product=wexpay" className={dashboardCtaClass("secondary")}>
+                        Ticari Görüşme
+                      </Link>
+                      <Link href="/packages" className={dashboardCtaClass("secondary")}>
+                        Paketleri İncele
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href="/demo-request?product=wexpay&intent=eligibility"
+                        className={dashboardCtaClass("primary")}
+                      >
+                        Uygunluğunu Kontrol Et
+                      </Link>
+                      <Link href="/on-basvuru?product=wexpay" className={dashboardCtaClass("secondary")}>
+                        WexPay&apos;e Başvur
+                      </Link>
+                      <Link href="/packages" className={dashboardCtaClass("secondary")}>
+                        Paketleri İncele
+                      </Link>
+                    </>
+                  )}
+                  <Link
+                    href={dashboardHref("/dashboard/subscription", organizationContext)}
+                    className={dashboardCtaClass("secondary")}
+                  >
                     Paket detaylarını görüntüle
                   </Link>
                 </div>
               ) : (
-                <Link href={`/products/${product.key}`} className="mt-7 inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-900 hover:bg-slate-50">
+                <Link href={`/products/${product.key}`} className={`mt-7 ${dashboardCtaClass("secondary")}`}>
                   Ürün sayfası
                 </Link>
               )}

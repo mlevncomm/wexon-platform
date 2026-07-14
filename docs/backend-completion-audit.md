@@ -102,3 +102,19 @@ Core customer, admin, and WexPay QR backends are real (DB-backed, server-priced,
 - `WEXPAY_PAYTR_ENABLE_API=false` until pilot  
 - Production fixture accounts disabled (completed + re-verified 2026-07-13)
 - Subscription org payments remain mock/admin-manual (no live gateway)
+
+## WexPay tiered pricing gating (2026-07-15)
+
+Branch: `cursor/wexpay-tiered-pricing-gating-implementation`
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Four-tier public catalog (DB SoT) | OK | Essential / Growth / Scale / Business Suite |
+| Legacy Basic/Standard/Pro retire | OK | `isPublic: false`; `isActive` only with live license/sub refs |
+| Entitlement soft-deactivate | OK | `isActive` + `deactivatedAt`; no physical admin delete |
+| Active entitlement filter | OK | Core access, dashboard, public pricing |
+| Admin migration preview | OK | `/admin/plans/wexpay-migration` read-only |
+| Dashboard WexPay CTAs | OK | Eligibility / başvuru / görüşme — no `/checkout` |
+| Pre-application tier guard | OK | Rejects inactive/private `preferredTier` |
+| PayTR env flags | Unchanged | No production remap; subscription flags still default false |
+| Unit tests | OK | `lib/wexon-entitlement-lifecycle.test.ts`, `lib/wexpay-tiered-pricing.test.ts` |

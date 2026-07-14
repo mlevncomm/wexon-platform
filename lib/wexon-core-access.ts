@@ -142,6 +142,7 @@ export async function evaluateProductAccess({ organizationId, productKey, at }: 
         plan: {
           include: {
             entitlements: {
+              where: { isActive: true },
               orderBy: { key: "asc" },
             },
           },

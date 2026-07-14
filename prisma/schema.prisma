@@ -257,6 +257,16 @@ model Plan {
   priceOneTime    Decimal?        @db.Decimal(10, 2)
   currency        String          @default("TRY")
   taxRatePct      Int             @default(20)
+  /// Commercial tier key: essential | growth | scale | business_suite
+  tierKey                       String?
+  setupFee                      Decimal? @db.Decimal(10, 2)
+  /// Starting processing fee percent shown publicly (e.g. 2.89). Final rate underwriting-bound.
+  processingFeePct              Decimal? @db.Decimal(5, 2)
+  /// Transaction-fee floor (₺). Invoice: planFee + max(actualTxnFees, this). Not an extra mystery fee.
+  minimumTransactionCommitment  Decimal? @db.Decimal(10, 2)
+  requiresManualReview          Boolean  @default(false)
+  /// Non-guarantee settlement copy for public/admin display
+  settlementDisplay             String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -269,23 +279,27 @@ model Plan {
   @@index([productId])
   @@index([billingInterval])
   @@index([isActive])
+  @@index([tierKey])
 }
 
 model Entitlement {
-  id          String               @id @default(cuid())
-  planId      String
-  key         String
-  valueType   EntitlementValueType
-  valueBool   Boolean?
-  valueInt    Int?
-  valueString String?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id            String               @id @default(cuid())
+  planId        String
+  key           String
+  valueType     EntitlementValueType
+  valueBool     Boolean?
+  valueInt      Int?
+  valueString   String?
+  isActive      Boolean              @default(true)
+  deactivatedAt DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
   plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, key])
   @@index([planId])
+  @@index([isActive])
 }
 
 model License {

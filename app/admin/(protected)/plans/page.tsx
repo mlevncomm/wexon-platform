@@ -3,7 +3,7 @@ import { AdminActionNotice, AdminFormPanel, AdminSelectField, AdminSubmitButton,
 import { AdminInlineToggleForm, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import {
   createAdminPlanAction,
-  deleteAdminEntitlementAction,
+  setAdminEntitlementActiveAction,
   updateAdminPlanAction,
   updateAdminPlanActiveAction,
   upsertAdminEntitlementAction,
@@ -34,6 +34,7 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
         />
         <AdminQuickLinks
           links={[
+            { label: "Geçiş önizlemesi", href: "/admin/plans/wexpay-migration" },
             { label: "Lisans ata", href: "/admin/licenses" },
             { label: "Ürün kataloğu", href: "/admin/products" },
             { label: "Abonelikler", href: "/admin/subscriptions" },
@@ -68,8 +69,17 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
             <option value="ONE_TIME">Tek seferlik</option>
           </AdminSelectField>
           <AdminTextField label="Sıra" name="sortOrder" type="number" defaultValue="0" />
-          <AdminTextField label="Aylık fiyat (TRY)" name="priceMonthly" type="number" placeholder="1490" />
-          <AdminTextField label="Yıllık fiyat (TRY)" name="priceYearly" type="number" placeholder="14900" />
+          <AdminTextField label="Aylık fiyat (TRY)" name="priceMonthly" type="number" placeholder="7000" />
+          <AdminTextField label="Yıllık fiyat (TRY)" name="priceYearly" type="number" placeholder="70000" />
+          <AdminTextField label="Kurulum ücreti (TRY)" name="setupFee" type="number" placeholder="12000" />
+          <AdminTextField label="İşlem ücreti başlangıç %" name="processingFeePct" type="number" placeholder="2.89" />
+          <AdminTextField label="Aylık minimum işlem taahhüdü (TRY)" name="minimumTransactionCommitment" type="number" placeholder="10000" />
+          <AdminTextField label="Tier key" name="tierKey" placeholder="essential" />
+          <AdminTextField label="Settlement metni" name="settlementDisplay" placeholder="Standart · onay bağlı" />
+          <AdminSelectField label="Manuel inceleme" name="requiresManualReview" defaultValue="false">
+            <option value="false">Hayır</option>
+            <option value="true">Evet</option>
+          </AdminSelectField>
           <AdminTextField label="Tek seferlik fiyat (TRY)" name="priceOneTime" type="number" />
           <AdminTextField label="Para birimi" name="currency" defaultValue="TRY" />
           <AdminTextField label="KDV (%)" name="taxRatePct" type="number" defaultValue="20" />
@@ -112,6 +122,18 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <AdminInfoRow label="Aylık fiyat" value={moneyLabel(plan.priceMonthly, plan.currency)} />
                 <AdminInfoRow label="Yıllık fiyat" value={moneyLabel(plan.priceYearly, plan.currency)} />
+                <AdminInfoRow label="Kurulum" value={moneyLabel(plan.setupFee, plan.currency)} />
+                <AdminInfoRow
+                  label="İşlem ücreti (başlangıç)"
+                  value={plan.processingFeePct != null ? `%${Number(plan.processingFeePct)}` : "-"}
+                />
+                <AdminInfoRow
+                  label="Aylık min. işlem taahhüdü"
+                  value={moneyLabel(plan.minimumTransactionCommitment, plan.currency)}
+                />
+                <AdminInfoRow label="Tier key" value={plan.tierKey ?? "-"} />
+                <AdminInfoRow label="Manuel inceleme" value={plan.requiresManualReview ? "Evet" : "Hayır"} />
+                <AdminInfoRow label="Settlement" value={plan.settlementDisplay ?? "-"} />
                 <AdminInfoRow label="Tek seferlik" value={moneyLabel(plan.priceOneTime, plan.currency)} />
                 <AdminInfoRow label="KDV" value={`%${plan.taxRatePct}`} />
                 <AdminInfoRow label="Şube limiti" value={entitlementValue(plan, "branch_limit")} />
@@ -132,6 +154,7 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
                   <option value="ONE_TIME">Tek seferlik</option>
                 </AdminSelectField>
                 <AdminTextField label="Sıra" name="sortOrder" type="number" defaultValue={String(plan.sortOrder)} />
+                <AdminTextField label="Tier key" name="tierKey" defaultValue={plan.tierKey ?? ""} />
                 <AdminTextField
                   label="Aylık fiyat (TRY)"
                   name="priceMonthly"
@@ -144,6 +167,41 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
                   type="number"
                   defaultValue={plan.priceYearly != null ? String(Number(plan.priceYearly)) : ""}
                 />
+                <AdminTextField
+                  label="Kurulum ücreti (TRY)"
+                  name="setupFee"
+                  type="number"
+                  defaultValue={plan.setupFee != null ? String(Number(plan.setupFee)) : ""}
+                />
+                <AdminTextField
+                  label="İşlem ücreti başlangıç %"
+                  name="processingFeePct"
+                  type="number"
+                  defaultValue={plan.processingFeePct != null ? String(Number(plan.processingFeePct)) : ""}
+                />
+                <AdminTextField
+                  label="Aylık minimum işlem taahhüdü (TRY)"
+                  name="minimumTransactionCommitment"
+                  type="number"
+                  defaultValue={
+                    plan.minimumTransactionCommitment != null
+                      ? String(Number(plan.minimumTransactionCommitment))
+                      : ""
+                  }
+                />
+                <AdminTextField
+                  label="Settlement metni"
+                  name="settlementDisplay"
+                  defaultValue={plan.settlementDisplay ?? ""}
+                />
+                <AdminSelectField
+                  label="Manuel inceleme"
+                  name="requiresManualReview"
+                  defaultValue={plan.requiresManualReview ? "true" : "false"}
+                >
+                  <option value="false">Hayır</option>
+                  <option value="true">Evet</option>
+                </AdminSelectField>
                 <AdminTextField
                   label="Tek seferlik fiyat (TRY)"
                   name="priceOneTime"
@@ -171,17 +229,32 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
               <div className="mt-6 space-y-3 border-t border-slate-100 pt-5">
                 <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Limitler (entitlement)</p>
                 {plan.entitlements.map((item) => {
-                  const deleteEntitlement = deleteAdminEntitlementAction.bind(null, plan.id, item.id);
+                  const toggleEntitlement = setAdminEntitlementActiveAction.bind(null, plan.id, item.id);
+                  const entitlementActive = item.isActive !== false;
                   return (
-                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
-                      <span className="text-xs font-bold text-slate-700">
-                        {item.key}: {item.valueString ?? item.valueInt ?? (item.valueBool ? "true" : "false")}
-                      </span>
-                      <form action={deleteEntitlement}>
+                    <div key={item.id} className="rounded-xl bg-slate-50 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-700">
+                          {item.key}: {item.valueString ?? item.valueInt ?? (item.valueBool ? "true" : "false")}
+                          {!entitlementActive ? " · devre dışı" : ""}
+                        </span>
+                        <AdminStatusPill active={entitlementActive}>
+                          {entitlementActive ? "Aktif" : "Pasif"}
+                        </AdminStatusPill>
+                      </div>
+                      <form action={toggleEntitlement} className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
                         <input type="hidden" name="returnTo" value="/admin/plans" />
-                        <button type="submit" className="text-xs font-bold text-rose-600 hover:underline">
-                          Sil
-                        </button>
+                        <input type="hidden" name="isActive" value={entitlementActive ? "false" : "true"} />
+                        <AdminTextField
+                          label="Not (isteğe bağlı)"
+                          name="note"
+                          placeholder="Devre dışı bırakma veya yeniden etkinleştirme gerekçesi"
+                        />
+                        <div className="flex items-end">
+                          <AdminSubmitButton>
+                            {entitlementActive ? "Devre Dışı Bırak" : "Yeniden Etkinleştir"}
+                          </AdminSubmitButton>
+                        </div>
                       </form>
                     </div>
                   );

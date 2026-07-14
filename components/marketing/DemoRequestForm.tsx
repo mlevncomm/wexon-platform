@@ -2,9 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import {
-  createDemoRequestAction,
-} from "@/lib/wexon-public-actions";
+import { createDemoRequestAction } from "@/lib/wexon-public-actions";
 import {
   initialDemoRequestState,
   type DemoRequestFormState,
@@ -21,12 +19,19 @@ type DemoRequestMode = "demo" | "application";
 function SubmitButton({
   pending,
   mode,
+  eligibilityMode,
   minimal,
 }: {
   pending: boolean;
   mode: DemoRequestMode;
+  eligibilityMode?: boolean;
   minimal?: boolean;
 }) {
+  const label = eligibilityMode
+    ? "Uygunluğunu Kontrol Et"
+    : mode === "application"
+      ? "Ön Başvuru Gönder"
+      : "Demo Talebi Gönder";
   return (
     <button
       type="submit"
@@ -35,7 +40,7 @@ function SubmitButton({
         minimal ? "" : "shadow-sm shadow-emerald-500/20"
       }`}
     >
-      {pending ? "Gönderiliyor..." : mode === "application" ? "Ön Başvuru Gönder" : "Demo Talebi Gönder"}
+      {pending ? "Gönderiliyor..." : label}
     </button>
   );
 }
@@ -70,9 +75,13 @@ function SuccessPanel({
       </div>
       <h3 className="mt-4 text-xl font-black tracking-tight text-slate-950">Talebiniz alındı</h3>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        {mode === "application"
-          ? "Ön başvurunuz Wexon ekibine iletildi. En kısa sürede sizinle iletişime geçeceğiz."
-          : "Demo talebiniz Wexon ekibine iletildi. En kısa sürede sizinle iletişime geçeceğiz."}
+        {state.applicantMessage ??
+          (mode === "application"
+            ? "Ön başvurunuz Wexon ekibine iletildi. En kısa sürede sizinle iletişime geçeceğiz."
+            : "Demo talebiniz Wexon ekibine iletildi. En kısa sürede sizinle iletişime geçeceğiz.")}
+      </p>
+      <p className="mt-2 text-xs font-semibold text-slate-500">
+        Öneri nihai ticari onay değildir; ekibimiz uygunluğu doğrular.
       </p>
       {mode === "demo" ? (
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -97,6 +106,8 @@ function SuccessPanel({
 type DemoRequestFormProps = {
   defaultProduct?: string;
   defaultSource?: string;
+  defaultPlan?: string;
+  intent?: string;
   mode?: DemoRequestMode;
   productOptions?: string[];
   appearance?: "default" | "minimal";
@@ -110,6 +121,8 @@ const SURFACE_CLASS = {
 export default function DemoRequestForm({
   defaultProduct,
   defaultSource,
+  defaultPlan,
+  intent,
   mode = "demo",
   productOptions = DEFAULT_PRODUCT_OPTIONS,
   appearance = "default",
@@ -119,6 +132,7 @@ export default function DemoRequestForm({
   const selectedProduct =
     defaultProduct && productOptions.includes(defaultProduct) ? defaultProduct : undefined;
   const minimal = appearance === "minimal";
+  const eligibilityMode = intent === "eligibility" || Boolean(defaultPlan);
 
   return (
     <section className={SURFACE_CLASS[appearance]}>
@@ -127,12 +141,18 @@ export default function DemoRequestForm({
           Form
         </span>
         <h2 className="text-2xl font-black tracking-[-0.02em] text-slate-950">
-          {mode === "application" ? "Ön başvuru bilgileri" : "Demo talebinizi oluşturun"}
+          {eligibilityMode
+            ? "WexPay uygunluğunu kontrol edin"
+            : mode === "application"
+              ? "Ön başvuru bilgileri"
+              : "Demo talebinizi oluşturun"}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          {mode === "application"
-            ? "İletişim ve işletme bilgilerinizi paylaşın; Wexon ekibi başvurunuzu inceleyip sizinle iletişime geçsin."
-            : "İletişim ve işletme bilgilerinizi paylaşın; size en uygun demo akışını hazırlayalım."}
+          {eligibilityMode
+            ? "Form öneri üretir; nihai paket onayı Wexon ekibi tarafından verilir. Dahili risk gerekçeleri paylaşılmaz."
+            : mode === "application"
+              ? "İletişim ve işletme bilgilerinizi paylaşın; Wexon ekibi başvurunuzu inceleyip sizinle iletişime geçsin."
+              : "İletişim ve işletme bilgilerinizi paylaşın; size en uygun demo akışını hazırlayalım."}
         </p>
       </div>
 
@@ -147,6 +167,8 @@ export default function DemoRequestForm({
       {!state.submitted ? (
         <form action={formAction} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="source" value={sourceValue} />
+          {intent ? <input type="hidden" name="intent" value={intent} /> : null}
+          {defaultPlan ? <input type="hidden" name="plan" value={defaultPlan} /> : null}
           {productOptions.length > 0 ? (
             <input type="hidden" name="_allowedProducts" value={productOptions.join("|")} />
           ) : null}
@@ -163,14 +185,57 @@ export default function DemoRequestForm({
               required
             />
           </div>
+
+          {eligibilityMode ? (
+            <>
+              <WexonSelect
+                name="companyType"
+                label="Şirket tipi"
+                options={["limited", "anonim", "sahis", "diger"]}
+                defaultValue=""
+              />
+              <WexonInput name="sector" label="Sektör" placeholder="Restoran, otel, perakende..." />
+              <WexonSelect
+                name="monthlyGmvBand"
+                label="Aylık GMV bandı"
+                options={["150k-750k", "750k-3m", "3m-15m", "15m+"]}
+                defaultValue=""
+              />
+              <WexonInput name="locationCount" type="number" label="Lokasyon sayısı" defaultValue="1" />
+              <WexonInput name="avgTicket" type="number" label="Ortalama sepet (₺)" />
+              <WexonSelect
+                name="onlineOfflineSplit"
+                label="Online / offline dağılım"
+                options={["cogunlukla_offline", "karma", "cogunlukla_online"]}
+                defaultValue=""
+              />
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input type="checkbox" name="needsSubscriptions" className="h-4 w-4 rounded border-slate-300" />
+                Abonelik / tekrarlayan tahsilat ihtiyacı
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input type="checkbox" name="needsQr" className="h-4 w-4 rounded border-slate-300" defaultChecked />
+                QR sipariş / ödeme ihtiyacı
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 sm:col-span-2">
+                <input type="checkbox" name="needsIntegration" className="h-4 w-4 rounded border-slate-300" />
+                Özel entegrasyon / ERP ihtiyacı
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 sm:col-span-2">
+                <input type="checkbox" name="needsMarketplaceOrPayout" className="h-4 w-4 rounded border-slate-300" />
+                Marketplace / split payout / fon dağıtımı talebi
+              </label>
+            </>
+          ) : null}
+
           <div className="sm:col-span-2">
             <WexonTextarea name="message" rows={5} label="Kullanım amacı / not" required />
           </div>
           <p className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold leading-relaxed text-slate-600">
-            Talepler güvenli şekilde Wexon admin paneline kaydedilir. Gerçek ödeme veya hesap oluşturma yapılmaz.
+            Talepler güvenli şekilde Wexon admin paneline kaydedilir. Canlı ödeme veya hesap otomatik açılmaz.
           </p>
           <div className="sm:col-span-2">
-            <SubmitButton pending={pending} mode={mode} minimal={minimal} />
+            <SubmitButton pending={pending} mode={mode} eligibilityMode={eligibilityMode} minimal={minimal} />
           </div>
         </form>
       ) : null}

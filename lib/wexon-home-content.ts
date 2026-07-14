@@ -425,10 +425,10 @@ export const WEXPAY_FLOW_STEPS: FlowStep[] = [
 /* Pricing / Security / FAQ                                                    */
 /* -------------------------------------------------------------------------- */
 
-import { WEXPAY_PRICING_FALLBACK, ENTERPRISE_PRICING_PLAN } from "@/lib/wexon-public-pricing-fallback";
+import { WEXPAY_PRICING_FALLBACK } from "@/lib/wexon-public-pricing-fallback";
 
 /** @deprecated Prefer getPublicWexPayPricingPlans() — static fallback for client-safe imports. */
-export const PRICING_PLANS: PricingPlan[] = [...WEXPAY_PRICING_FALLBACK, ENTERPRISE_PRICING_PLAN];
+export const PRICING_PLANS: PricingPlan[] = [...WEXPAY_PRICING_FALLBACK];
 
 export const SECURITY_ITEMS: SecurityItem[] = [
   {
