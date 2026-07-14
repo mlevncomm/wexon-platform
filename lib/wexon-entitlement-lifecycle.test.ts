@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import type { AdminSession } from "@/lib/wexon-admin-auth";
 import { AdminValidationError } from "@/lib/wexon-admin-validation";
 import { isEntitlementEnabled } from "@/lib/wexon-core-access";
 import {
@@ -11,7 +12,10 @@ import { prisma } from "@/lib/prisma";
 describe("wexon entitlement lifecycle", () => {
   let planId = "";
   let entitlementId = "";
-  const actor = { email: "lifecycle-test@wexon.dev" };
+  const actor: AdminSession = {
+    email: "lifecycle-test@wexon.dev",
+    expiresAt: Date.now() + 60 * 60 * 1000,
+  };
 
   before(async () => {
     const product = await prisma.product.findFirst({ where: { key: "wexpay" } });
