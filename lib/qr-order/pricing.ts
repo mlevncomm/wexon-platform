@@ -1,4 +1,5 @@
 import type { QrCartLine, QrProduct } from "@/lib/qr-order/types";
+import { buildModifierCartIdentity } from "@/lib/wexpay-cart-identity";
 
 export function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
@@ -21,8 +22,8 @@ export function cartItemCount(lines: QrCartLine[]) {
   return lines.reduce((sum, line) => sum + line.quantity, 0);
 }
 
-export function buildCartLineKey(productId: string, note: string) {
-  return `${productId}::${note.trim().toLowerCase()}`;
+export function buildCartLineKey(productId: string, note: string, modifierOptionIds: string[] = []) {
+  return buildModifierCartIdentity(productId, modifierOptionIds, note);
 }
 
 export function buildOrderNote(lines: QrCartLine[], generalNote: string) {
