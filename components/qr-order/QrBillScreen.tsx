@@ -134,22 +134,57 @@ export default function QrBillScreen({
             </div>
           ) : (
             <>
-              <div className="space-y-2">
-                {bill.lines.map((line) => (
-                  <div key={line.id} className={`${qrCard} flex items-start justify-between gap-3 px-4 py-3.5`}>
-                    <div className="min-w-0">
-                      <p className="text-sm font-black text-slate-950">
-                        {line.quantity}× {line.name}
-                      </p>
-                      <p className="mt-0.5 text-xs font-semibold text-slate-400">
-                        {line.orderNo} · {orderStatusLabel(line.status)}
+              <div className="space-y-3" data-testid="qr-bill-waves">
+                {(() => {
+                  const waves = new Map<
+                    string,
+                    { orderNo: string; status: string; lines: typeof bill.lines; total: number }
+                  >();
+                  for (const line of bill.lines) {
+                    const current = waves.get(line.orderNo);
+                    if (current) {
+                      current.lines.push(line);
+                      current.total += line.lineTotal;
+                    } else {
+                      waves.set(line.orderNo, {
+                        orderNo: line.orderNo,
+                        status: line.status,
+                        lines: [line],
+                        total: line.lineTotal,
+                      });
+                    }
+                  }
+                  return [...waves.values()].map((wave, index) => (
+                    <div key={wave.orderNo} className={`${qrCard} p-4`} data-testid="qr-bill-wave">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+                          Sipariş {index + 1} · {wave.orderNo}
+                        </p>
+                        <p className="text-xs font-bold text-slate-500">{orderStatusLabel(wave.status)}</p>
+                      </div>
+                      <ul className="space-y-2">
+                        {wave.lines.map((line) => (
+                          <li key={line.id} className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-slate-950">
+                                {line.quantity}× {line.name}
+                              </p>
+                              <p className="mt-0.5 text-xs font-semibold text-slate-400">
+                                @{formatTry(line.unitPrice)}
+                              </p>
+                            </div>
+                            <p className="shrink-0 text-sm font-black tabular-nums text-slate-950">
+                              {formatTry(line.lineTotal)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-3 text-right text-sm font-black text-slate-950">
+                        {formatTry(wave.total)}
                       </p>
                     </div>
-                    <p className="shrink-0 text-sm font-black tabular-nums text-slate-950">
-                      {formatTry(line.lineTotal)}
-                    </p>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
 
               <div className={`${qrGlassSoft} rounded-[28px] p-5`}>

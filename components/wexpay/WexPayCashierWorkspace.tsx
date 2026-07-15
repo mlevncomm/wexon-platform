@@ -290,15 +290,16 @@ function CashierTableBody({
   const pendingPaytr = table.payments.filter((payment) => isPaytrPendingPayment(payment.provider, payment.status));
   const waiterAlerts = notifications.filter((n) => notificationMatchesTable(n, table.label, "waiter"));
   const payAskAlerts = notifications.filter((n) => notificationMatchesTable(n, table.label, "pay"));
-  const isEmpty = table.status === "EMPTY" && table.activeOrders.length === 0;
+  const isEmpty = table.status === "EMPTY" && table.billOrders.length === 0 && table.activeOrders.length === 0;
+  const billOrders = table.billOrders.length > 0 ? table.billOrders : table.activeOrders;
 
   return (
     <div className="space-y-6">
-      <section className="grid grid-cols-2 gap-3">
+      <section className="grid grid-cols-2 gap-3" data-testid="cashier-table-account">
         <SummaryStat label="Toplam" value={formatLira(table.totalAmount)} />
         <SummaryStat label="Ödenen" value={formatLira(table.paidAmount)} />
         <SummaryStat label="Kalan" value={formatLira(table.remainingAmount)} accent={table.remainingAmount > 0} />
-        <SummaryStat label="Aktif sipariş" value={String(table.activeOrders.length)} />
+        <SummaryStat label="Sipariş dalgası" value={String(billOrders.length)} />
       </section>
 
       {waiterAlerts.length > 0 ? (
@@ -340,36 +341,53 @@ function CashierTableBody({
         </form>
       ) : null}
 
-      <section>
+      <section data-testid="cashier-bill-waves">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-black text-slate-950">Açık siparişler</h3>
-          <span className="text-xs font-bold text-slate-500">{table.activeOrders.length}</span>
+          <div>
+            <h3 className="text-sm font-black text-slate-950">Masa hesabı · sipariş dalgaları</h3>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              Her dalga ayrı CustomerOrder’dır. Eski PREPARING/SERVED dalgaların durumu yeni eklemeyle değişmez.
+            </p>
+          </div>
+          <span className="text-xs font-bold text-slate-500">{billOrders.length}</span>
         </div>
-        {table.activeOrders.length === 0 ? (
+        {billOrders.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-            Açık sipariş yok.
+            Hesapta sipariş yok.
           </p>
         ) : (
           <div className="space-y-3">
-            {table.activeOrders.map((order) => (
-              <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+            {billOrders.map((order, index) => (
+              <div
+                key={order.id}
+                className="rounded-2xl border border-slate-200 bg-white p-4"
+                data-testid="cashier-order-wave"
+                data-order-status={order.status}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                      Dalga {index + 1}
+                    </p>
                     <p className="text-sm font-black text-slate-950">{order.orderNo}</p>
                     <p className="text-xs font-semibold text-slate-500">{elapsedLabel(order.createdAt)}</p>
                   </div>
                   <OrderStatusBadge status={order.status} />
                 </div>
-                <ul className="mt-3 space-y-1 text-xs font-semibold text-slate-600">
+                <ul className="mt-3 space-y-1.5 text-xs font-semibold text-slate-600">
                   {order.items.map((item) => (
-                    <li key={item.id}>
-                      {item.quantity}× {item.name}
+                    <li key={item.id} className="flex justify-between gap-3">
+                      <span>
+                        {item.quantity}× {item.name}
+                        <span className="ml-1 font-medium text-slate-400">@{formatLira(item.unitPrice)}</span>
+                      </span>
+                      <span className="tabular-nums text-slate-800">{formatLira(item.lineTotal)}</span>
                     </li>
                   ))}
                 </ul>
                 {order.note ? <p className="mt-2 text-xs font-medium text-slate-500">Not: {order.note}</p> : null}
                 <p className="mt-2 text-sm font-black text-slate-950">{formatLira(order.subtotal)}</p>
-                {canManage ? (
+                {canManage && (order.status === "NEW" || order.status === "PREPARING") ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {order.status === "NEW" ? (
                       <form action={updateOrderStatusAction}>
@@ -381,29 +399,25 @@ function CashierTableBody({
                         </button>
                       </form>
                     ) : null}
-                    {order.status === "NEW" || order.status === "PREPARING" ? (
-                      <form action={updateOrderStatusAction}>
-                        <input type="hidden" name="orderId" value={order.id} />
-                        <input type="hidden" name="redirectTo" value={redirectTo} />
-                        <input type="hidden" name="status" value="SERVED" />
-                        <button type="submit" className="min-h-11 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">
-                          Servis edildi
-                        </button>
-                      </form>
-                    ) : null}
-                    {order.status !== "CANCELLED" && order.status !== "SERVED" ? (
-                      <form action={updateOrderStatusAction}>
-                        <input type="hidden" name="orderId" value={order.id} />
-                        <input type="hidden" name="redirectTo" value={redirectTo} />
-                        <input type="hidden" name="status" value="CANCELLED" />
-                        <button
-                          type="submit"
-                          className="min-h-11 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
-                        >
-                          İptal
-                        </button>
-                      </form>
-                    ) : null}
+                    <form action={updateOrderStatusAction}>
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="redirectTo" value={redirectTo} />
+                      <input type="hidden" name="status" value="SERVED" />
+                      <button type="submit" className="min-h-11 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">
+                        Servis edildi
+                      </button>
+                    </form>
+                    <form action={updateOrderStatusAction}>
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="redirectTo" value={redirectTo} />
+                      <input type="hidden" name="status" value="CANCELLED" />
+                      <button
+                        type="submit"
+                        className="min-h-11 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
+                      >
+                        İptal
+                      </button>
+                    </form>
                   </div>
                 ) : null}
               </div>
@@ -412,16 +426,16 @@ function CashierTableBody({
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+      <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" data-testid="cashier-new-wave">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-black text-slate-950">
-              {isEmpty ? "Masayı aç ve ilk siparişi oluştur" : "Masaya yeni sipariş ekle"}
+              {isEmpty ? "Masayı aç · ilk sipariş dalgası" : "Yeni sipariş dalgası ekle"}
             </h3>
             <p className="mt-1 text-xs font-semibold text-slate-500">
               {isEmpty
                 ? "Boş masada ilk createOrder servisi başlatır. Ayrı bir masa-aç mutation’ı yoktur."
-                : "Bu işlem mevcut siparişe ürün eklemez; aynı masada yeni bir sipariş oluşturur."}
+                : "Mevcut PREPARING/SERVED dalgalarına ürün eklenmez; mutfakta yeni NEW bileti oluşur."}
             </p>
           </div>
           {canManage && !showComposer ? (
@@ -441,7 +455,7 @@ function CashierTableBody({
             tables={[{ id: table.id, label: table.label }]}
             products={products}
             lockedTableId={table.id}
-            submitLabel={isEmpty ? "Masayı aç ve ilk siparişi oluştur" : "Masaya yeni sipariş ekle"}
+            submitLabel={isEmpty ? "Masayı aç ve ilk siparişi oluştur" : "Yeni sipariş dalgası gönder"}
           />
         ) : null}
       </section>
@@ -470,9 +484,9 @@ function CashierTableBody({
       <section className="rounded-2xl border border-slate-200 p-4">
         <h3 className="text-sm font-black text-slate-950">Masa kapat</h3>
         {!canCloseTable ? (
-          <p className="mt-2 text-sm font-semibold text-amber-800">
+          <p className="mt-2 text-sm font-semibold text-amber-800" data-testid="cashier-close-block">
             {hasRemainingAmount
-              ? "Kalan ödeme varken masa kapatılamaz. Önce adisyonu kapatın."
+              ? "Kalan ödeme varken masa kapatılamaz. Önce adisyonu kapatın. Ödeme talebi tahsilat değildir."
               : hasOpenOrders
                 ? "Açık NEW/PREPARING sipariş varken masa kapatılamaz."
                 : table.status === "EMPTY"

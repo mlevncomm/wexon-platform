@@ -33,6 +33,22 @@ export default function WexPayOrderComposer({
   const [lines, setLines] = useState<Line[]>([
     { key: crypto.randomUUID(), productId: products[0]?.id ?? "", quantity: 1 },
   ]);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [productQuery, setProductQuery] = useState("");
+
+  const categories = useMemo(() => {
+    const names = [...new Set(products.map((product) => product.categoryName).filter(Boolean))];
+    return names.sort((a, b) => a.localeCompare(b, "tr"));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const query = productQuery.trim().toLowerCase();
+    return products.filter((product) => {
+      if (categoryFilter !== "all" && product.categoryName !== categoryFilter) return false;
+      if (!query) return true;
+      return product.name.toLowerCase().includes(query);
+    });
+  }, [products, categoryFilter, productQuery]);
 
   const priceMap = useMemo(() => new Map(products.map((product) => [product.id, product.price])), [products]);
   const validLines = lines.filter((line) => line.productId && line.quantity > 0);
@@ -46,7 +62,8 @@ export default function WexPayOrderComposer({
   }
 
   function addLine() {
-    setLines((current) => [...current, { key: crypto.randomUUID(), productId: products[0]?.id ?? "", quantity: 1 }]);
+    const first = filteredProducts[0] ?? products[0];
+    setLines((current) => [...current, { key: crypto.randomUUID(), productId: first?.id ?? "", quantity: 1 }]);
   }
 
   function removeLine(key: string) {
@@ -99,6 +116,33 @@ export default function WexPayOrderComposer({
         </p>
       )}
 
+      <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+        <label className="block min-w-0">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Kategori</span>
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+            className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition-all focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+          >
+            <option value="all">Tümü</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block min-w-0">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Ürün ara</span>
+          <input
+            value={productQuery}
+            onChange={(event) => setProductQuery(event.target.value)}
+            className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition-all focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+            placeholder="Örn. çay"
+          />
+        </label>
+      </div>
+
       <div className="min-w-0 space-y-2">
         <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Sipariş kalemleri</span>
         {lines.map((line) => (
@@ -111,7 +155,10 @@ export default function WexPayOrderComposer({
               onChange={(event) => updateLine(line.key, { productId: event.target.value })}
               className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none transition-colors focus:border-emerald-400"
             >
-              {products.map((product) => (
+              {(filteredProducts.some((product) => product.id === line.productId)
+                ? filteredProducts
+                : products.filter((product) => product.id === line.productId).concat(filteredProducts)
+              ).map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name} - {formatTry(product.price)}
                 </option>
