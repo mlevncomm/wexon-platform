@@ -46,6 +46,12 @@ enum NotificationType {
   MENU_UPDATED
 }
 
+/// Menu modifier group selection mode (WexPay MenuProduct options).
+enum MenuModifierSelectionType {
+  SINGLE
+  MULTI
+}
+
 enum MembershipRole {
   OWNER
   ADMIN
@@ -162,17 +168,17 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships           Membership[]
-  restaurants           Restaurant[]
-  licenses              License[]
-  subscriptions         Subscription[]
-  invoices              Invoice[]
-  billingPayments       BillingPayment[]
-  subscriptionPayments  SubscriptionPayment[]
-  appInstallations      AppInstallation[]
-  auditLogs             AuditLog[]
-  apiKeys               ApiKey[]
-  webhookEndpoints      WebhookEndpoint[]
+  memberships               Membership[]
+  restaurants               Restaurant[]
+  licenses                  License[]
+  subscriptions             Subscription[]
+  invoices                  Invoice[]
+  billingPayments           BillingPayment[]
+  subscriptionPayments      SubscriptionPayment[]
+  appInstallations          AppInstallation[]
+  auditLogs                 AuditLog[]
+  apiKeys                   ApiKey[]
+  webhookEndpoints          WebhookEndpoint[]
   wexPayProviderCredentials WexPayProviderCredential[]
   wexPayWebhookEvents       WexPayWebhookEvent[]
 
@@ -181,18 +187,18 @@ model Organization {
 }
 
 model User {
-  id          String    @id @default(cuid())
-  email       String    @unique
-  name        String?
-  phone       String?
-  avatarUrl   String?
-  isActive    Boolean   @default(true)
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String?
+  phone              String?
+  avatarUrl          String?
+  isActive           Boolean   @default(true)
   passwordHash       String?
   passwordSetAt      DateTime?
   mustChangePassword Boolean   @default(false)
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   memberships          Membership[]
   auditLogs            AuditLog[]
@@ -243,32 +249,32 @@ model Product {
 }
 
 model Plan {
-  id              String          @id @default(cuid())
-  productId       String
-  key             String          @unique
-  name            String
-  description     String?
-  billingInterval BillingInterval
-  isPublic        Boolean         @default(true)
-  isActive        Boolean         @default(true)
-  sortOrder       Int             @default(0)
-  priceMonthly    Decimal?        @db.Decimal(10, 2)
-  priceYearly     Decimal?        @db.Decimal(10, 2)
-  priceOneTime    Decimal?        @db.Decimal(10, 2)
-  currency        String          @default("TRY")
-  taxRatePct      Int             @default(20)
+  id                           String          @id @default(cuid())
+  productId                    String
+  key                          String          @unique
+  name                         String
+  description                  String?
+  billingInterval              BillingInterval
+  isPublic                     Boolean         @default(true)
+  isActive                     Boolean         @default(true)
+  sortOrder                    Int             @default(0)
+  priceMonthly                 Decimal?        @db.Decimal(10, 2)
+  priceYearly                  Decimal?        @db.Decimal(10, 2)
+  priceOneTime                 Decimal?        @db.Decimal(10, 2)
+  currency                     String          @default("TRY")
+  taxRatePct                   Int             @default(20)
   /// Commercial tier key: essential | growth | scale | business_suite
-  tierKey                       String?
-  setupFee                      Decimal? @db.Decimal(10, 2)
+  tierKey                      String?
+  setupFee                     Decimal?        @db.Decimal(10, 2)
   /// Starting processing fee percent shown publicly (e.g. 2.89). Final rate underwriting-bound.
-  processingFeePct              Decimal? @db.Decimal(5, 2)
+  processingFeePct             Decimal?        @db.Decimal(5, 2)
   /// Transaction-fee floor (₺). Invoice: planFee + max(actualTxnFees, this). Not an extra mystery fee.
-  minimumTransactionCommitment  Decimal? @db.Decimal(10, 2)
-  requiresManualReview          Boolean  @default(false)
+  minimumTransactionCommitment Decimal?        @db.Decimal(10, 2)
+  requiresManualReview         Boolean         @default(false)
   /// Non-guarantee settlement copy for public/admin display
-  settlementDisplay             String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  settlementDisplay            String?
+  createdAt                    DateTime        @default(now())
+  updatedAt                    DateTime        @updatedAt
 
   product              Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
   entitlements         Entitlement[]
@@ -404,32 +410,32 @@ model BillingPayment {
 
 /// Platform PayTR iFrame ledger for Core subscription checkout (NOT WexPay operational Payment).
 model SubscriptionPayment {
-  id                   String                     @id @default(cuid())
-  organizationId       String
-  subscriptionId       String?
-  planId               String
-  userId               String?
-  provider             String                     @default("PAYTR")
-  providerMode         String                     @default("iframe")
-  merchantOid          String                     @unique
-  amount               Decimal                    @db.Decimal(10, 2)
-  amountMinor          Int
-  currency             String                     @default("TRY")
-  taxRatePct           Int                        @default(20)
-  billingInterval      BillingInterval
-  status               SubscriptionPaymentStatus  @default(INITIATED)
-  paytrTokenHash       String?
-  callbackStatus       String?
-  callbackTotalAmount  String?
+  id                    String                    @id @default(cuid())
+  organizationId        String
+  subscriptionId        String?
+  planId                String
+  userId                String?
+  provider              String                    @default("PAYTR")
+  providerMode          String                    @default("iframe")
+  merchantOid           String                    @unique
+  amount                Decimal                   @db.Decimal(10, 2)
+  amountMinor           Int
+  currency              String                    @default("TRY")
+  taxRatePct            Int                       @default(20)
+  billingInterval       BillingInterval
+  status                SubscriptionPaymentStatus @default(INITIATED)
+  paytrTokenHash        String?
+  callbackStatus        String?
+  callbackTotalAmount   String?
   callbackPaymentAmount String?
-  callbackCurrency     String?
-  failedReasonCode     String?
-  failedReasonMsg      String?
-  rawCallbackJson      Json?
-  idempotencyKey       String?                    @unique
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
-  paidAt               DateTime?
+  callbackCurrency      String?
+  failedReasonCode      String?
+  failedReasonMsg       String?
+  rawCallbackJson       Json?
+  idempotencyKey        String?                   @unique
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  paidAt                DateTime?
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
@@ -515,15 +521,15 @@ model ApiKey {
 }
 
 model WebhookEndpoint {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
   productId      String?
   url            String
   secretHash     String
   events         String[]
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product      Product?     @relation(fields: [productId], references: [id])
@@ -558,29 +564,30 @@ model Branch {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  restaurant    Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  tables        RestaurantTable[]
-  categories    MenuCategory[]
-  products      MenuProduct[]
-  orders        CustomerOrder[]
-  payments      Payment[]
-  notifications BusinessNotification[]
+  restaurant     Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tables         RestaurantTable[]
+  categories     MenuCategory[]
+  products       MenuProduct[]
+  modifierGroups MenuModifierGroup[]
+  orders         CustomerOrder[]
+  payments       Payment[]
+  notifications  BusinessNotification[]
 
   @@unique([restaurantId, slug])
   @@index([restaurantId])
 }
 
 model RestaurantTable {
-  id        String      @id @default(cuid())
-  branchId  String
-  label     String
-  seats     Int         @default(4)
-  qrCode    String      @unique
-  status        TableStatus @default(EMPTY)
-  isActive      Boolean     @default(true)
-  lastClosedAt  DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id           String      @id @default(cuid())
+  branchId     String
+  label        String
+  seats        Int         @default(4)
+  qrCode       String      @unique
+  status       TableStatus @default(EMPTY)
+  isActive     Boolean     @default(true)
+  lastClosedAt DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   branch          Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
   orders          CustomerOrder[]
@@ -623,12 +630,80 @@ model MenuProduct {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  branch     Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  category   MenuCategory @relation(fields: [categoryId], references: [id])
-  orderItems OrderItem[]
+  branch                Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category              MenuCategory               @relation(fields: [categoryId], references: [id])
+  orderItems            OrderItem[]
+  productModifierGroups MenuProductModifierGroup[]
 
+  /// Composite uniqueness enables tenant-safe join FKs (product + branch).
+  @@unique([id, branchId])
   @@index([branchId])
   @@index([categoryId])
+}
+
+/// Branch-scoped modifier group (size, extras, removals). Shareable across products in the same branch.
+/// Requiredness is derived: minSelect > 0. SINGLE groups must keep maxSelect = 1 (DB CHECK).
+model MenuModifierGroup {
+  id            String                    @id @default(cuid())
+  branchId      String
+  name          String
+  selectionType MenuModifierSelectionType @default(SINGLE)
+  minSelect     Int                       @default(0)
+  maxSelect     Int                       @default(1)
+  sortOrder     Int                       @default(0)
+  isActive      Boolean                   @default(true)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  branch             Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  options            MenuModifierOption[]
+  productLinks       MenuProductModifierGroup[]
+  orderItemModifiers OrderItemModifier[]
+
+  @@unique([branchId, name])
+  /// Composite uniqueness enables tenant-safe join FKs (group + branch).
+  @@unique([id, branchId])
+  @@index([branchId])
+  @@index([isActive])
+}
+
+model MenuModifierOption {
+  id         String   @id @default(cuid())
+  groupId    String
+  name       String
+  priceDelta Decimal  @default(0) @db.Decimal(10, 2)
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  group              MenuModifierGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  orderItemModifiers OrderItemModifier[]
+
+  @@unique([groupId, name])
+  @@index([groupId])
+  @@index([isActive])
+}
+
+/// Same-branch M:N: composite FKs force product.branchId == group.branchId == branchId.
+model MenuProductModifierGroup {
+  id        String   @id @default(cuid())
+  branchId  String
+  productId String
+  groupId   String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product MenuProduct       @relation(fields: [productId, branchId], references: [id, branchId], onDelete: Cascade)
+  group   MenuModifierGroup @relation(fields: [groupId, branchId], references: [id, branchId], onDelete: Cascade)
+
+  @@unique([productId, groupId])
+  @@index([branchId])
+  @@index([productId])
+  @@index([groupId])
+  @@index([isActive])
 }
 
 model CustomerOrder {
@@ -667,11 +742,32 @@ model OrderItem {
   totalPrice  Decimal @db.Decimal(10, 2)
   note        String?
 
-  order   CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product MenuProduct   @relation(fields: [productId], references: [id])
+  order     CustomerOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   MenuProduct         @relation(fields: [productId], references: [id])
+  modifiers OrderItemModifier[]
 
   @@index([orderId])
   @@index([productId])
+}
+
+/// Immutable line-item modifier snapshot (names + delta). Soft FKs survive catalog edits/deletes.
+model OrderItemModifier {
+  id          String  @id @default(cuid())
+  orderItemId String
+  groupId     String?
+  optionId    String?
+  groupName   String
+  optionName  String
+  priceDelta  Decimal @db.Decimal(10, 2)
+  sortOrder   Int     @default(0)
+
+  orderItem OrderItem           @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  group     MenuModifierGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  option    MenuModifierOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@index([groupId])
+  @@index([optionId])
 }
 
 model Payment {
