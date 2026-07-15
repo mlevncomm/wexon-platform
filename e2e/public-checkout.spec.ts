@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import { skipUnlessDbReadable, skipUnlessPublicApiMutationAllowed } from "./mutation-gate";
 
 type SmokeFixtures = {
   dbAvailable: boolean;
@@ -15,17 +16,11 @@ function loadFixtures(): SmokeFixtures {
   return JSON.parse(raw) as SmokeFixtures;
 }
 
-function skipUnlessReady(fixtures: SmokeFixtures) {
-  test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
-  test.skip(!fixtures.fixturesReady, fixtures.setupError ?? "seed fixtures incomplete");
-  test.skip(!fixtures.qrCode, "qrCode fixture required");
-}
-
 test.describe.serial("public QR checkout — validation (independent of PSP)", () => {
   const fixtures = loadFixtures();
 
   test("unknown QR returns 404", async ({ request }) => {
-    test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
+    skipUnlessDbReadable(fixtures);
 
     const response = await request.post("/api/wexpay/public/UNKNOWN-QR-CODE-404/checkout", {
       data: {},
@@ -36,8 +31,8 @@ test.describe.serial("public QR checkout — validation (independent of PSP)", (
   });
 
   test("access closed returns 403 for inactive tenant QR", async ({ request }) => {
-    test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
-    test.skip(!fixtures.inactiveQrCode, "inactiveQrCode fixture required — run prisma:seed:real");
+    skipUnlessDbReadable(fixtures);
+    test.skip(!fixtures.inactiveQrCode, "inactiveQrCode fixture required — run e2e:db:prepare");
 
     const response = await request.post(
       `/api/wexpay/public/${encodeURIComponent(fixtures.inactiveQrCode!)}/checkout`,
@@ -50,7 +45,7 @@ test.describe.serial("public QR checkout — validation (independent of PSP)", (
   });
 
   test("invalid orderId returns 400 before PSP", async ({ request }) => {
-    skipUnlessReady(fixtures);
+    skipUnlessPublicApiMutationAllowed(fixtures);
 
     const response = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/checkout`, {
       data: { orderId: "00000000-0000-0000-0000-000000000099", amount: 99999 },
@@ -76,7 +71,7 @@ test.describe.serial("public QR checkout — PSP unavailable", () => {
   const fixtures = loadFixtures();
 
   test("no PSP credentials returns 503 with inactive message", async ({ request }) => {
-    skipUnlessReady(fixtures);
+    skipUnlessPublicApiMutationAllowed(fixtures);
     test.skip(process.env.WEXPAY_PAYTR_ENABLE_API === "true", "PSP enabled — skip no-PSP scenario");
 
     const menuResponse = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
@@ -88,7 +83,7 @@ test.describe.serial("public QR checkout — PSP unavailable", () => {
     expect(productId).toBeTruthy();
 
     const orderResponse = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/order`, {
-      data: { items: [{ productId, quantity: 1 }] },
+      data: { items: [{ productId, quantity: 1 }], note: "E2E[WXP] checkout order" },
     });
     expect(orderResponse.status()).toBe(201);
     const order = (await orderResponse.json()) as { id: string };
@@ -108,7 +103,7 @@ test.describe.serial("public QR checkout — amount rules", () => {
   const fixtures = loadFixtures();
 
   test("client-supplied amount is ignored; server uses order subtotal cap", async ({ request }) => {
-    skipUnlessReady(fixtures);
+    skipUnlessPublicApiMutationAllowed(fixtures);
     test.skip(process.env.WEXPAY_PAYTR_ENABLE_API === "true", "PSP enabled — amount assertion needs controlled PSP");
 
     const menuResponse = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
@@ -120,7 +115,7 @@ test.describe.serial("public QR checkout — amount rules", () => {
     expect(product?.id).toBeTruthy();
 
     const orderResponse = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/order`, {
-      data: { items: [{ productId: product!.id, quantity: 1 }] },
+      data: { items: [{ productId: product!.id, quantity: 1 }], note: "E2E[WXP] amount order" },
     });
     expect(orderResponse.status()).toBe(201);
     const order = (await orderResponse.json()) as { id: string; subtotal?: string };

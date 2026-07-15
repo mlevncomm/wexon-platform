@@ -1,12 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { classifyE2EDatabase } from "./lead-isolation";
+import { wexPayMutationBlockedReason } from "./lead-isolation";
 import { loadFixtures } from "./helpers";
 
 const fixtures = loadFixtures();
-const dbClass = classifyE2EDatabase();
-const mutationAllowed =
-  dbClass === "local" ||
-  (dbClass === "preview" && process.env.WEXON_E2E_ALLOW_GUEST_MUTATION === "true");
+const mutationReason = wexPayMutationBlockedReason();
 
 function skipUnlessReady() {
   test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
@@ -16,10 +13,7 @@ function skipUnlessReady() {
 
 function skipUnlessMutation() {
   skipUnlessReady();
-  test.skip(
-    !mutationAllowed,
-    `legacy mutation skipped on ${dbClass}; use test:e2e:wexpay-guest with isolated DB`,
-  );
+  test.skip(Boolean(mutationReason), mutationReason ?? "legacy mutation requires confirmed isolated DB");
 }
 
 test.use({

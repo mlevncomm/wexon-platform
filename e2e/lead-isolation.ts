@@ -1,12 +1,23 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
+import {
+  classifyE2EDatabase as classifyFromGuards,
+  describeDatabaseSafely as describeFromGuards,
+  databaseUrlsPointAtSameIsolatedDb as urlsAlignedFromGuards,
+  isE2eTestDatabaseName as isE2eNameFromGuards,
+  isLocalDatabaseHost as isLocalFromGuards,
+  isRemoteSharedDatabaseHost as isRemoteFromGuards,
+  wexPayMutationBlockedReason as mutationBlockedFromGuards,
+  assertIsolatedWexPayDatabase as assertIsolatedFromGuards,
+} from "../scripts/e2e-isolated-guards.mjs";
 
 export const E2E_LEAD_PREFIX = "E2E[WXP]";
 export const E2E_ELIGIBILITY_SOURCE_BASE = "e2e-eligibility-safety";
 
 export type DbClassification =
   | "local"
+  | "isolated"
   | "preview"
   | "shared remote-unverified"
   | "production-confirmed"
@@ -21,41 +32,24 @@ export type E2ELeadMarker = {
   message: string;
 };
 
+export type SafeDbDescriptor = {
+  host: string;
+  port: string;
+  database: string;
+};
+
+export const describeDatabaseSafely = describeFromGuards as (rawUrl: string) => SafeDbDescriptor | null;
+export const isLocalDatabaseHost = isLocalFromGuards as (url: string) => boolean;
+export const isRemoteSharedDatabaseHost = isRemoteFromGuards as (url: string) => boolean;
+export const isE2eTestDatabaseName = isE2eNameFromGuards as (url: string) => boolean;
+export const databaseUrlsPointAtSameIsolatedDb = urlsAlignedFromGuards as () => boolean;
+export const classifyE2EDatabase = classifyFromGuards as () => DbClassification;
+export const wexPayMutationBlockedReason = mutationBlockedFromGuards as () => string | null;
+export const guestMutationBlockedReason = wexPayMutationBlockedReason;
+export const assertIsolatedWexPayDatabase = assertIsolatedFromGuards as (actionLabel?: string) => void;
+
 function databaseUrl() {
   return (process.env.DIRECT_URL || process.env.DATABASE_URL || "").trim();
-}
-
-export function classifyE2EDatabase(): DbClassification {
-  const url = databaseUrl();
-  if (!url) return "missing-db";
-
-  const target = (process.env.WEXON_E2E_TARGET ?? "local").trim().toLowerCase();
-  const confirm = process.env.WEXON_E2E_CONFIRM_PRODUCTION === "true";
-  const base =
-    process.env.E2E_BASE_URL ||
-    process.env.SMOKE_BASE_URL ||
-    process.env.E2E_PUBLIC_ORIGIN ||
-    "";
-  const looksProductionHost =
-    target === "production" || /https?:\/\/([a-z0-9-]+\.)?wexon\.dev\b/i.test(base);
-
-  if (looksProductionHost && target === "production" && confirm) {
-    return "production-confirmed";
-  }
-
-  if (/localhost|127\.0\.0\.1|host\.docker\.internal/.test(url)) {
-    return "local";
-  }
-
-  if (/vercel\.app/i.test(base) || /preview/i.test(base)) {
-    return "preview";
-  }
-
-  if (/supabase\.com|neon\.tech|amazonaws\.com|pooler/.test(url)) {
-    return "shared remote-unverified";
-  }
-
-  return "shared remote-unverified";
 }
 
 export function leadMutationBlockedReason(): string | null {
@@ -90,6 +84,15 @@ export function createEligibilityLeadMarker(runId = `${Date.now().toString(36)}`
     company: `${E2E_LEAD_PREFIX} Eligibility Co ${runId}`,
     fullName: `${E2E_LEAD_PREFIX} Eligibility Applicant ${runId}`,
     message: `${E2E_LEAD_PREFIX} eligibility applicant-facing response must never include internal risk reason keys. run=${runId}`,
+  };
+}
+
+export function createWexPayRunMarker(runId = `${Date.now().toString(36)}`) {
+  const token = `${E2E_LEAD_PREFIX}.${runId}`;
+  return {
+    runId,
+    token,
+    note: `${token} isolated WexPay E2E run`,
   };
 }
 

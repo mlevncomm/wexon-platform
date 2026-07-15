@@ -1,19 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-import { classifyE2EDatabase } from "./lead-isolation";
+import { wexPayMutationBlockedReason } from "./lead-isolation";
 import { loadFixtures } from "./helpers";
 
 /**
  * Guest QR experience — default suite is read-only on shared remote.
- * Mutation flows are hard-blocked outside isolated local/preview fixture DBs.
+ * Mutation flows require confirmed isolated local e2e DB.
  */
 
 const fixtures = loadFixtures();
-const dbClass = classifyE2EDatabase();
-const sharedRemote = dbClass === "shared remote-unverified" || dbClass === "production-confirmed";
-const mutationAllowed =
-  !sharedRemote &&
-  dbClass !== "missing-db" &&
-  process.env.WEXON_E2E_ALLOW_GUEST_MUTATION === "true";
+const mutationReason = wexPayMutationBlockedReason();
 
 function skipUnlessLicensedFixture() {
   test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
@@ -25,10 +20,7 @@ function skipUnlessLicensedFixture() {
 
 function skipUnlessMutationAllowed() {
   skipUnlessLicensedFixture();
-  test.skip(
-    !mutationAllowed,
-    `guest mutation blocked (${dbClass}). Set isolated local/preview + WEXON_E2E_ALLOW_GUEST_MUTATION=true`,
-  );
+  test.skip(Boolean(mutationReason), mutationReason ?? "guest mutation blocked");
 }
 
 async function measureOverflow(page: Page) {
@@ -66,9 +58,10 @@ test.describe("wexpay guest — read-only", () => {
   });
 
   test("responsive shell has no horizontal overflow", async ({ page }) => {
-    const path = fixtures.fixturesReady && fixtures.qrCode
-      ? `/wexpay/t/${encodeURIComponent(fixtures.qrCode)}`
-      : "/wexpay/t/UNKNOWN-QR-CODE-404";
+    const path =
+      fixtures.fixturesReady && fixtures.qrCode
+        ? `/wexpay/t/${encodeURIComponent(fixtures.qrCode)}`
+        : "/wexpay/t/UNKNOWN-QR-CODE-404";
 
     for (const width of [360, 390, 430, 768, 1440] as const) {
       await page.setViewportSize({ width, height: 900 });

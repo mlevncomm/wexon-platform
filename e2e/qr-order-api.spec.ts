@@ -1,13 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { loadFixtures } from "./helpers";
+import { skipUnlessDbReadable, skipUnlessPublicApiMutationAllowed } from "./mutation-gate";
 
 const fixtures = loadFixtures();
-
-function skipUnlessReady() {
-  test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
-  test.skip(!fixtures.fixturesReady, fixtures.setupError ?? "seed fixtures incomplete");
-  test.skip(!fixtures.qrCode, "qrCode fixture required");
-}
 
 test.describe.serial("QR order public API", () => {
   test("invalid QR order returns 404", async ({ request }) => {
@@ -18,7 +13,7 @@ test.describe.serial("QR order public API", () => {
   });
 
   test("price manipulation fields are rejected", async ({ request }) => {
-    skipUnlessReady();
+    skipUnlessPublicApiMutationAllowed(fixtures);
     const menu = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
     expect(menu.ok()).toBeTruthy();
     const menuBody = await menu.json();
@@ -34,7 +29,7 @@ test.describe.serial("QR order public API", () => {
   });
 
   test("valid order returns orderId/orderNo/total/status", async ({ request }) => {
-    skipUnlessReady();
+    skipUnlessPublicApiMutationAllowed(fixtures);
     const menu = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
     expect(menu.ok()).toBeTruthy();
     const menuBody = await menu.json();
@@ -43,7 +38,7 @@ test.describe.serial("QR order public API", () => {
     const idempotencyKey = `e2e-order-${Date.now()}`;
     const response = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/order`, {
       headers: { "Idempotency-Key": idempotencyKey },
-      data: { items: [{ productId: product.id, quantity: 1 }], note: "E2E API order" },
+      data: { items: [{ productId: product.id, quantity: 1 }], note: "E2E[WXP] API order" },
     });
     expect(response.status()).toBe(201);
     const body = await response.json();
@@ -55,7 +50,7 @@ test.describe.serial("QR order public API", () => {
 
     const replay = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/order`, {
       headers: { "Idempotency-Key": idempotencyKey },
-      data: { items: [{ productId: product.id, quantity: 1 }], note: "E2E API order" },
+      data: { items: [{ productId: product.id, quantity: 1 }], note: "E2E[WXP] API order" },
     });
     expect(replay.status()).toBe(201);
     const replayBody = await replay.json();
@@ -63,7 +58,8 @@ test.describe.serial("QR order public API", () => {
   });
 
   test("bill endpoint returns empty or account snapshot", async ({ request }) => {
-    skipUnlessReady();
+    skipUnlessDbReadable(fixtures);
+    test.skip(!fixtures.fixturesReady || !fixtures.qrCode, fixtures.setupError ?? "qr fixture required");
     const response = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/bill`);
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
@@ -74,10 +70,10 @@ test.describe.serial("QR order public API", () => {
   });
 
   test("payment-request does not charge", async ({ request }) => {
-    skipUnlessReady();
+    skipUnlessPublicApiMutationAllowed(fixtures);
     const response = await request.post(
       `/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/payment-request`,
-      { data: { mode: "full_bill", note: "E2E payment request" } },
+      { data: { mode: "full_bill", note: "E2E[WXP] payment request" } },
     );
     expect(response.status()).toBe(201);
     const body = await response.json();
@@ -86,10 +82,10 @@ test.describe.serial("QR order public API", () => {
   });
 
   test("waiter call succeeds", async ({ request }) => {
-    skipUnlessReady();
+    skipUnlessPublicApiMutationAllowed(fixtures);
     const response = await request.post(
       `/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/call-waiter`,
-      { data: { reason: "other", note: "E2E waiter" } },
+      { data: { reason: "other", note: "E2E[WXP] waiter" } },
     );
     expect(response.status()).toBe(201);
     const body = await response.json();
@@ -98,7 +94,7 @@ test.describe.serial("QR order public API", () => {
   });
 
   test("inactive tenant QR rejects order", async ({ request }) => {
-    test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
+    skipUnlessDbReadable(fixtures);
     test.skip(!fixtures.inactiveQrCode, "inactiveQrCode fixture required");
 
     const response = await request.post(

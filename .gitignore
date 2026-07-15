@@ -13,6 +13,12 @@
 # testing
 /coverage
 /e2e/.fixtures.json
+/e2e/.wexpay-run.json
+/e2e/.cleanup-report.json
+/e2e/.cleanup-report-*.json
+/e2e/.db-runtime.json
+/e2e/.embedded-pg.pid
+/e2e/.pgdata/
 /playwright-report/
 /test-results/
 

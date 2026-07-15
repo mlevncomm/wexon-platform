@@ -1,9 +1,31 @@
 import { defineConfig, devices } from "@playwright/test";
-import { config as loadEnv } from "dotenv";
+import { parse as parseEnv } from "dotenv";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-loadEnv({ path: resolve(process.cwd(), ".env"), quiet: true });
-loadEnv({ path: resolve(process.cwd(), ".env.local"), override: true, quiet: true });
+function loadEnvFile(fileName: string, { override = false } = {}) {
+  const fullPath = resolve(process.cwd(), fileName);
+  if (!existsSync(fullPath)) return;
+  const entries = parseEnv(readFileSync(fullPath));
+  const isolatedPinned = process.env.WEXON_E2E_CONFIRM_ISOLATED === "true";
+  for (const [key, value] of Object.entries(entries)) {
+    if (
+      isolatedPinned &&
+      (key === "DATABASE_URL" ||
+        key === "DIRECT_URL" ||
+        key === "WEXON_E2E_TARGET" ||
+        key === "WEXON_E2E_CONFIRM_ISOLATED")
+    ) {
+      continue;
+    }
+    if (override || !process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFile(".env");
+loadEnvFile(".env.local", { override: true });
 
 const port = Number(process.env.SMOKE_PORT ?? 3100);
 const baseURL =
