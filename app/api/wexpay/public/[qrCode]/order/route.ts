@@ -1,41 +1,25 @@
-import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
+import { writeAuditFailure } from "@/lib/wexon-audit";
 import { readJsonBody, wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
 import {
   getIdempotentResponse,
   readIdempotencyKeyFromRequest,
   storeIdempotentResponse,
 } from "@/lib/wexpay-public-idempotency";
+import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 import { createPublicOrder } from "@/lib/wexpay-service";
 import { validateOrderItems, validatePublicNote } from "@/lib/wexpay-validation";
 
 /**
  * PUBLIC QR order creation -> POST /api/wexpay/public/[qrCode]/order
- *
- * Unauthenticated diner endpoint. Resolves tenant from qrCode, requires Core
- * WexPay access, creates an order with server-side subtotal (client money
- * fields rejected). Optional Idempotency-Key reduces double-submit duplicates.
+ * Optional Idempotency-Key reduces double-submit duplicates.
  */
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
 
-  const ipAddress = getRequestIpAddress(request) ?? "unknown";
-  const rateLimit = enforceRateLimit("wexpay.public.qr_order", ipAddress, RATE_LIMITS.publicQrOrder);
-  if (!rateLimit.ok) {
-    writeAuditFailure({
-      action: "wexpay.public.rate_limited",
-      message: "QR sipariş isteği hız sınırına takıldı.",
-      level: "WARN",
-      source: "public_qr",
-      ipAddress,
-      metadata: { qrCode, retryAfterSeconds: rateLimit.retryAfterSeconds },
-    });
-    return Response.json(
-      { error: "Çok fazla istek. Lütfen kısa bir süre sonra tekrar deneyin.", reason: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
-    );
-  }
+  const limited = enforcePublicQrIpRateLimit({ kind: "order", request, qrCode });
+  if (!limited.ok) return limited.response;
+  const ipAddress = limited.ipAddress;
 
   const resolution = await resolvePublicTableByQr(qrCode);
   if (!resolution) {
