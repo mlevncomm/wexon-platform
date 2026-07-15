@@ -45,6 +45,8 @@ export function isE2eRateLimitRelaxAllowed() {
 export const PRODUCTION_FORBIDDEN_ENVS = [
   "CUSTOMER_DEV_LOGIN_PASSWORD",
   "WEXON_E2E_RELAX_RATE_LIMIT",
+  "WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT",
+  "WEXON_PUBLIC_ASSIST_COOLDOWN_MS",
 ] as const;
 
 export function listForbiddenProductionEnvsSet() {

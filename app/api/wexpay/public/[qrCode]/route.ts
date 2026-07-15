@@ -1,18 +1,29 @@
+import { writeAuditFailure } from "@/lib/wexon-audit";
+import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
 import { getPublicBranchMenu, resolvePublicTableByQr } from "@/lib/wexpay-read";
 
 /**
- * PUBLIC QR table resolution (Phase 2B scaffold) -> /api/wexpay/public/[qrCode].
+ * PUBLIC QR table resolution -> GET /api/wexpay/public/[qrCode]
  *
- * Unauthenticated diner endpoint. Resolves qrCode -> table -> branch ->
- * restaurant -> organizationId and gates the public menu through Wexon Core
- * access (`evaluateProductAccess`). No demo slug, no global fallback. If the
- * owning organization's WexPay access is not allowed, the menu is closed.
+ * Unauthenticated diner endpoint. Rate-limited per client IP.
+ * Never returns organizationId / riskReasons / secrets.
  */
-export async function GET(_request: Request, context: { params: Promise<{ qrCode: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
+
+  const limited = enforcePublicQrIpRateLimit({ kind: "menu", request, qrCode });
+  if (!limited.ok) return limited.response;
 
   const resolution = await resolvePublicTableByQr(qrCode);
   if (!resolution) {
+    writeAuditFailure({
+      action: "wexpay.public.qr_not_found",
+      message: "QR masa bulunamadı.",
+      level: "WARN",
+      source: "public_qr",
+      ipAddress: limited.ipAddress,
+      metadata: { qrCode },
+    });
     return Response.json({ error: "Masa bulunamadı." }, { status: 404 });
   }
 

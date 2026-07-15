@@ -1,32 +1,18 @@
-import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
+import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 import { getPublicTableBill } from "@/lib/wexpay-service";
 
 /**
  * PUBLIC QR table bill -> GET /api/wexpay/public/[qrCode]/bill
  * Session-scoped account snapshot for the diner payment screen.
- * paymentAvailability reports staff-request vs online checkout (never charges here).
  */
 export async function GET(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
-  const ipAddress = getRequestIpAddress(request) ?? "unknown";
-  const rateLimit = enforceRateLimit("wexpay.public.qr_bill", ipAddress, RATE_LIMITS.publicQrBill);
-  if (!rateLimit.ok) {
-    writeAuditFailure({
-      action: "wexpay.public.rate_limited",
-      message: "QR hesap isteği hız sınırına takıldı.",
-      level: "WARN",
-      source: "public_qr",
-      ipAddress,
-      metadata: { qrCode, retryAfterSeconds: rateLimit.retryAfterSeconds },
-    });
-    return Response.json(
-      { error: "Çok fazla istek. Lütfen kısa bir süre sonra tekrar deneyin.", reason: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
-    );
-  }
+
+  const limited = enforcePublicQrIpRateLimit({ kind: "bill", request, qrCode });
+  if (!limited.ok) return limited.response;
+  const ipAddress = limited.ipAddress;
 
   const resolution = await resolvePublicTableByQr(qrCode);
   if (!resolution) {
@@ -65,7 +51,6 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
       paymentAvailability: {
         staffPaymentRequest: true,
         onlineCheckout: onlineCheckoutEnabled,
-        /** Public bill UI still uses staff request; online charge requires /checkout + credentials. */
         liveChargeFromThisEndpoint: false,
       },
     });

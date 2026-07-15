@@ -91,6 +91,7 @@ test.describe.serial("QR order public API", () => {
     const body = await response.json();
     expect(body.ok).toBe(true);
     expect(String(body.title)).toMatch(/GARSON/i);
+    expect(body).not.toHaveProperty("id");
   });
 
   test("inactive tenant QR rejects order", async ({ request }) => {

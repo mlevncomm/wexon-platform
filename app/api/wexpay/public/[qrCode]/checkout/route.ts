@@ -1,19 +1,23 @@
-import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
+import { writeAuditFailure } from "@/lib/wexon-audit";
 import { readJsonBody, wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
+import {
+  getIdempotentResponse,
+  readIdempotencyKeyFromRequest,
+  storeIdempotentResponse,
+} from "@/lib/wexpay-public-idempotency";
 import {
   createPublicCheckoutPayment,
   getPublicCheckoutPaymentStatus,
   WexPayPublicCheckoutUnavailableError,
 } from "@/lib/wexpay-public-checkout";
+import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
 
 /**
  * PUBLIC QR PayTR checkout -> POST /api/wexpay/public/[qrCode]/checkout.
  *
- * Unauthenticated diner endpoint. Resolves tenant from qrCode, computes amount
- * server-side (order subtotal or table remaining), then starts a PayTR checkout.
- * Manual provider is not available on this route.
+ * When PayTR is disabled, responds with honest 503 checkout_unavailable.
+ * Idempotency-Key scopes to table to prevent duplicate checkout intents.
  *
  * GET with ?paymentId= polls payment status after PayTR redirect (webhook may lag).
  */
@@ -24,6 +28,9 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
   if (!paymentId) {
     return Response.json({ error: "paymentId gerekli." }, { status: 400 });
   }
+
+  const limited = enforcePublicQrIpRateLimit({ kind: "bill", request, qrCode });
+  if (!limited.ok) return limited.response;
 
   let resolution;
   try {
@@ -56,22 +63,9 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
 export async function POST(request: Request, context: { params: Promise<{ qrCode: string }> }) {
   const { qrCode } = await context.params;
 
-  const ipAddress = getRequestIpAddress(request) ?? "unknown";
-  const rateLimit = enforceRateLimit("wexpay.public.qr_checkout", ipAddress, RATE_LIMITS.publicQrCheckout);
-  if (!rateLimit.ok) {
-    writeAuditFailure({
-      action: "wexpay.public.rate_limited",
-      message: "QR ödeme isteği hız sınırına takıldı.",
-      level: "WARN",
-      source: "public_qr",
-      ipAddress,
-      metadata: { qrCode, retryAfterSeconds: rateLimit.retryAfterSeconds },
-    });
-    return Response.json(
-      { error: "Çok fazla istek. Lütfen kısa bir süre sonra tekrar deneyin.", reason: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
-    );
-  }
+  const limited = enforcePublicQrIpRateLimit({ kind: "checkout", request, qrCode });
+  if (!limited.ok) return limited.response;
+  const ipAddress = limited.ipAddress;
 
   let resolution;
   try {
@@ -106,6 +100,13 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
     return Response.json({ error: "Bu işletme şu anda QR ödeme kabul etmiyor.", reason: "access_closed" }, { status: 403 });
   }
 
+  const idempotencyKey = readIdempotencyKeyFromRequest(request);
+  const idempotencyScope = `qr-checkout:${resolution.table.id}`;
+  const cached = await getIdempotentResponse(idempotencyScope, idempotencyKey);
+  if (cached) {
+    return Response.json(cached.body, { status: cached.status });
+  }
+
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;
 
@@ -126,16 +127,15 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       ipAddress,
     });
 
-    return Response.json(
-      {
-        paymentId: result.paymentId,
-        amount: result.amount,
-        providerRef: result.providerRef,
-        externalCheckoutUrl: result.externalCheckoutUrl,
-        reusedPending: result.reusedPending,
-      },
-      { status: 201 },
-    );
+    const payload = {
+      paymentId: result.paymentId,
+      amount: result.amount,
+      externalCheckoutUrl: result.externalCheckoutUrl,
+      reusedPending: result.reusedPending,
+    };
+
+    await storeIdempotentResponse(idempotencyScope, idempotencyKey, 201, payload);
+    return Response.json(payload, { status: 201 });
   } catch (error) {
     if (error instanceof WexPayPublicCheckoutUnavailableError) {
       writeAuditFailure({
@@ -147,7 +147,10 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
         ipAddress,
         metadata: { qrCode, tableId: resolution.table.id },
       });
-      return Response.json({ error: error.message, reason: "checkout_unavailable" }, { status: 503 });
+      const unavailable = { error: error.message, reason: "checkout_unavailable" as const };
+      // Cache unavailable decisions briefly so double-submit does not spawn parallel intents.
+      await storeIdempotentResponse(idempotencyScope, idempotencyKey, 503, unavailable);
+      return Response.json(unavailable, { status: 503 });
     }
     return wexpayApiErrorResponse(error, {
       organizationId: resolution.organizationId,

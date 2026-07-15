@@ -156,7 +156,12 @@ const isProduction =
   process.env.NODE_ENV === "production" ||
   process.env.VERCEL_ENV === "production";
 
-const FORBIDDEN_IN_PRODUCTION = ["CUSTOMER_DEV_LOGIN_PASSWORD", "WEXON_E2E_RELAX_RATE_LIMIT"];
+const FORBIDDEN_IN_PRODUCTION = [
+  "CUSTOMER_DEV_LOGIN_PASSWORD",
+  "WEXON_E2E_RELAX_RATE_LIMIT",
+  "WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT",
+  "WEXON_PUBLIC_ASSIST_COOLDOWN_MS",
+];
 
 if (isProduction) {
   const forbiddenSet = FORBIDDEN_IN_PRODUCTION.filter((name) => isSet(name));
