@@ -2,11 +2,14 @@
  * In-memory sliding-window rate limiter.
  *
  * PRODUCTION NOTE: This store is per-process, resets on deploy, and does not
- * coordinate across multiple instances. Replace with Redis / Upstash (or edge
- * rate limiting) before running multi-instance production traffic.
+ * coordinate across multiple instances. On Vercel Fluid / multi-instance runtimes
+ * an attacker can amplify limits by spreading requests across isolates.
+ * Replace with Redis / Upstash (or platform edge rate limiting) before relying
+ * on these limits alone for production abuse protection — see
+ * docs/wexpay-public-api-rate-limits.md.
  */
 
-import { isE2eRateLimitRelaxAllowed } from "@/lib/wexon-production-guards";
+import { isE2eRateLimitRelaxAllowed, isHostedProduction } from "@/lib/wexon-production-guards";
 
 type RateLimitEntry = {
   count: number;
@@ -24,15 +27,30 @@ export type RateLimitResult =
   | { ok: true; remaining: number; resetAt: number }
   | { ok: false; retryAfterSeconds: number; resetAt: number };
 
+/**
+ * Public QR limits — rationale per endpoint:
+ * - menu: read-heavy browsing, scrape/enumeration resistance
+ * - order: write-cost control (stricter than prior 30/min)
+ * - bill: guest status polling (~few seconds) with headroom
+ * - waiter / payment-request: separate IP buckets + table cooldowns elsewhere
+ * - checkout: expensive intent creation (PayTR path when enabled)
+ */
 export const RATE_LIMITS = {
   adminLoginIp: { limit: 10, windowMs: 15 * 60 * 1000 },
   adminLoginEmail: { limit: 5, windowMs: 15 * 60 * 1000 },
   customerLoginIp: { limit: 15, windowMs: 15 * 60 * 1000 },
   customerLoginEmail: { limit: 8, windowMs: 15 * 60 * 1000 },
-  publicQrOrder: { limit: 30, windowMs: 60 * 1000 },
-  publicQrCheckout: { limit: 20, windowMs: 60 * 1000 },
-  publicQrBill: { limit: 60, windowMs: 60 * 1000 },
-  publicQrAssist: { limit: 20, windowMs: 60 * 1000 },
+  publicQrMenu: { limit: 90, windowMs: 60 * 1000 },
+  publicQrOrder: { limit: 20, windowMs: 60 * 1000 },
+  publicQrCheckout: { limit: 15, windowMs: 60 * 1000 },
+  publicQrBill: { limit: 90, windowMs: 60 * 1000 },
+  /** @deprecated Prefer publicQrWaiterCall / publicQrPaymentRequest */
+  publicQrAssist: { limit: 8, windowMs: 60 * 1000 },
+  publicQrWaiterCall: { limit: 8, windowMs: 60 * 1000 },
+  publicQrPaymentRequest: { limit: 8, windowMs: 60 * 1000 },
+  /** Table-scoped cooldowns: 1 successful attempt per window */
+  publicQrWaiterTableCooldown: { limit: 1, windowMs: 45 * 1000 },
+  publicQrPaymentRequestTableCooldown: { limit: 1, windowMs: 60 * 1000 },
   paytrWebhook: { limit: 300, windowMs: 60 * 1000 },
   wexpayApi: { limit: 120, windowMs: 60 * 1000 },
 } as const satisfies Record<string, RateLimitConfig>;
@@ -64,9 +82,35 @@ export function checkRateLimit(key: string, config: RateLimitConfig): RateLimitR
   return { ok: true, remaining: config.limit - entry.count, resetAt: entry.resetAt };
 }
 
+/** Test-only: wipe in-memory buckets. Never call from production request paths. */
+export function resetRateLimitStoreForTests() {
+  store.clear();
+}
+
+function shouldRelaxRateLimit() {
+  if (process.env.WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT === "true") return false;
+  return isE2eRateLimitRelaxAllowed();
+}
+
+/**
+ * Optional low limits for isolated security E2E only (never on hosted production).
+ * Env example: WEXON_PUBLIC_QR_MENU_LIMIT=5
+ */
+export function resolveRateLimitConfig(
+  base: RateLimitConfig,
+  overrideEnvKey?: string,
+): RateLimitConfig {
+  if (!overrideEnvKey || isHostedProduction()) return base;
+  if (process.env.WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT !== "true") return base;
+  const raw = Number(process.env[overrideEnvKey]);
+  if (!Number.isFinite(raw) || raw < 1) return base;
+  const windowRaw = Number(process.env.WEXON_PUBLIC_QR_WINDOW_MS);
+  const windowMs = Number.isFinite(windowRaw) && windowRaw >= 1000 ? windowRaw : base.windowMs;
+  return { limit: Math.floor(raw), windowMs };
+}
+
 export function enforceRateLimit(scope: string, identifier: string, config: RateLimitConfig): RateLimitResult {
-  // Local/test E2E only — ignored when NODE_ENV/VERCEL_ENV is production.
-  if (isE2eRateLimitRelaxAllowed()) {
+  if (shouldRelaxRateLimit()) {
     return { ok: true, remaining: config.limit, resetAt: Date.now() + config.windowMs };
   }
 
