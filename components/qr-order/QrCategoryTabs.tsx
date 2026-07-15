@@ -4,13 +4,20 @@ export default function QrCategoryTabs({
   categories,
   activeId,
   onSelect,
+  embedded = false,
 }: {
   categories: Array<{ id: string; name: string }>;
   activeId: string;
   onSelect: (id: string) => void;
+  /** When true, sits inside sticky header — no second sticky layer. */
+  embedded?: boolean;
 }) {
+  const shell = embedded
+    ? "pt-1"
+    : "sticky top-[7.5rem] z-10 -mx-4 border-b border-emerald-100/50 bg-[#F6F8F5]/90 px-4 py-3 backdrop-blur-md sm:top-[8.25rem] sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:pt-4 lg:backdrop-blur-none";
+
   return (
-    <div className="sticky top-[7.5rem] z-10 -mx-4 border-b border-emerald-100/50 bg-[#F6F8F5]/90 px-4 py-3 backdrop-blur-md sm:top-[8.25rem] sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:pt-4 lg:backdrop-blur-none">
+    <div className={shell}>
       <div
         className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2.5"
         role="tablist"
