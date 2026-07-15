@@ -16,11 +16,19 @@ export default function WexPayOrderComposer({
   redirectTo,
   tables,
   products,
+  lockedTableId,
+  submitLabel = "Sipariş oluştur",
+  heading,
+  description,
 }: {
   branchId: string;
   redirectTo: string;
   tables: TableOption[];
   products: ProductOption[];
+  lockedTableId?: string;
+  submitLabel?: string;
+  heading?: string;
+  description?: string;
 }) {
   const [lines, setLines] = useState<Line[]>([
     { key: crypto.randomUUID(), productId: products[0]?.id ?? "", quantity: 1 },
@@ -30,6 +38,8 @@ export default function WexPayOrderComposer({
   const validLines = lines.filter((line) => line.productId && line.quantity > 0);
   const subtotal = validLines.reduce((sum, line) => sum + (priceMap.get(line.productId) ?? 0) * line.quantity, 0);
   const itemsPayload = JSON.stringify(validLines.map((line) => ({ productId: line.productId, quantity: line.quantity })));
+  const effectiveTables = lockedTableId ? tables.filter((table) => table.id === lockedTableId) : tables;
+  const tableOptions = effectiveTables.length > 0 ? effectiveTables : tables;
 
   function updateLine(key: string, patch: Partial<Line>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
@@ -43,26 +53,51 @@ export default function WexPayOrderComposer({
     setLines((current) => (current.length <= 1 ? current : current.filter((line) => line.key !== key)));
   }
 
+  if (products.length === 0) {
+    return (
+      <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+        Sipariş için menüde satılabilir (aktif ve stokta) ürün bulunmuyor.
+      </p>
+    );
+  }
+
+  if (tableOptions.length === 0) {
+    return (
+      <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+        Sipariş oluşturulacak masa bulunmuyor.
+      </p>
+    );
+  }
+
   return (
-    <form action={createOrderAction} className="grid min-w-0 gap-4">
+    <form action={createOrderAction} className="grid min-w-0 gap-4" data-wexpay-composer>
+      {heading ? <h3 className="text-sm font-black text-slate-950">{heading}</h3> : null}
+      {description ? <p className="text-xs font-semibold leading-relaxed text-slate-500">{description}</p> : null}
       <input type="hidden" name="branchId" value={branchId} />
       <input type="hidden" name="redirectTo" value={redirectTo} />
       <input type="hidden" name="items" value={itemsPayload} />
+      {lockedTableId ? <input type="hidden" name="tableId" value={lockedTableId} /> : null}
 
-      <label className="block min-w-0">
-        <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Masa</span>
-        <select
-          name="tableId"
-          required
-          className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition-all focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 md:max-w-xs"
-        >
-          {tables.map((table) => (
-            <option key={table.id} value={table.id}>
-              {table.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {!lockedTableId ? (
+        <label className="block min-w-0">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Masa</span>
+          <select
+            name="tableId"
+            required
+            className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition-all focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 md:max-w-xs"
+          >
+            {tableOptions.map((table) => (
+              <option key={table.id} value={table.id}>
+                {table.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+          Masa: {tableOptions[0]?.label ?? lockedTableId}
+        </p>
+      )}
 
       <div className="min-w-0 space-y-2">
         <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Sipariş kalemleri</span>
@@ -97,7 +132,7 @@ export default function WexPayOrderComposer({
               type="button"
               onClick={() => removeLine(line.key)}
               disabled={lines.length <= 1}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Kalemi kaldır"
             >
               Kaldır
@@ -107,9 +142,9 @@ export default function WexPayOrderComposer({
         <button
           type="button"
           onClick={addLine}
-          className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-emerald-300 hover:text-emerald-700"
+          className="min-h-11 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-emerald-300 hover:text-emerald-700"
         >
-          + Ürün ekle
+          + Kalem ekle
         </button>
       </div>
 
@@ -127,15 +162,13 @@ export default function WexPayOrderComposer({
         <span className="text-lg font-black text-slate-950">{formatTry(subtotal)}</span>
       </div>
 
-      <div>
-        <button
-          type="submit"
-          disabled={validLines.length === 0}
-          className="w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
-        >
-          Sipariş oluştur
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={validLines.length === 0}
+        className="min-h-12 w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+      >
+        {submitLabel}
+      </button>
     </form>
   );
 }

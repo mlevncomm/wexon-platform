@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { WexPayEmptyAccess } from "@/components/wexpay/WexPayBusinessUI";
 import WexPayBusinessShell from "@/components/wexpay/WexPayBusinessShell";
+import WexPayKeyboardShortcuts from "@/components/wexpay/WexPayKeyboardShortcuts";
 import { writeAuditFailure } from "@/lib/wexon-audit";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
@@ -59,6 +60,9 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
           licenseStatus: formatCoreStatus(access.license.status),
         }}
       >
+        <Suspense fallback={null}>
+          <WexPayKeyboardShortcuts />
+        </Suspense>
         {children}
       </WexPayBusinessShell>
     </Suspense>

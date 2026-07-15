@@ -16,11 +16,14 @@ import {
 import { createPaymentAction, updatePaymentAction } from "@/lib/wexpay-actions";
 import {
   listBranchActiveTables,
+  listBranchNotifications,
   listBranchOrders,
   listBranchPayments,
   listOrgBranches,
   resolveActiveBranch,
 } from "@/lib/wexpay-read";
+import { buildOpsAlerts, WexPayOperationsAlertStrip } from "@/components/wexpay/WexPayOperationsAlertStrip";
+import { appNavigationUrl } from "@/lib/wexon/urls";
 import { resolveWexPaySessionContext } from "@/lib/wexpay-tenant";
 
 type SearchParams = Promise<{
@@ -62,12 +65,16 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
   const activeBranch = await resolveActiveBranch(context.organizationId, branchId);
   if (!activeBranch) return null;
 
-  const [payments, tables, orders] = await Promise.all([
+  const [payments, tables, orders, notifications] = await Promise.all([
     listBranchPayments(context.organizationId, activeBranch.id),
     listBranchActiveTables(context.organizationId, activeBranch.id),
     listBranchOrders(context.organizationId, activeBranch.id),
+    listBranchNotifications(context.organizationId, activeBranch.id, 20),
   ]);
   const redirectTo = `/apps/wexpay/payments?branchId=${activeBranch.id}`;
+  const paymentRequestAlerts = buildOpsAlerts(notifications, context.organizationId, activeBranch.id).filter(
+    (alert) => alert.kind === "payment_request",
+  );
 
   const checkoutPayment = paymentId ? payments.find((payment) => payment.id === paymentId) : null;
 
@@ -105,6 +112,26 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
           providerRef={checkoutPayment?.providerRef}
         />
       ) : null}
+
+      <WexPayPanel
+        eyebrow="Ayrım"
+        title="Müşteri ödeme istekleri ≠ tahsilat"
+        description="Aşağıdaki kartlar bildirimdir; Payment kaydı oluşturmaz. Gerçek tahsilat tablosu ayrıdır."
+      >
+        <WexPayOperationsAlertStrip
+          alerts={paymentRequestAlerts}
+          emptyHint="Müşteriden gelen açık ödeme isteği yok."
+        />
+        <Link
+          href={appNavigationUrl(
+            "/apps/wexpay/tables",
+            `organizationId=${encodeURIComponent(context.organizationId)}&branchId=${encodeURIComponent(activeBranch.id)}`,
+          )}
+          className="mt-4 inline-flex text-xs font-black text-emerald-700 hover:underline"
+        >
+          Masalarda tahsilat al →
+        </Link>
+      </WexPayPanel>
 
       <WexPayPaymentsBoard payments={paymentRows} />
 

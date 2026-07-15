@@ -71,9 +71,9 @@ export default async function WexPayMenuPage({ searchParams }: { searchParams: S
           accent={products.some((product) => product.isActive)}
         />
         <WexPayMetricCard
-          label="Stokta olmayan"
+          label="Stokta değil"
           value={String(products.filter((product) => !product.inStock).length)}
-          detail="Geçici kapalı"
+          detail="Satışa kapalı (boolean)"
           accent={products.some((product) => !product.inStock)}
         />
         <WexPayMetricCard label="Kategori sayısı" value={String(categories.length)} detail="Menü grubu" accent={categories.length > 0} />
@@ -149,9 +149,14 @@ export default async function WexPayMenuPage({ searchParams }: { searchParams: S
                       <ActiveBadge active={product.isActive} />
                       {!product.inStock && (
                         <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-rose-800">
-                          Stok yok
+                          Stokta değil
                         </span>
                       )}
+                      {product.inStock ? (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-emerald-800">
+                          Satışta
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   {context.canManage && (
@@ -173,7 +178,7 @@ export default async function WexPayMenuPage({ searchParams }: { searchParams: S
                       </label>
                       <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm shadow-slate-900/5">
                         <input name="inStock" value="true" type="checkbox" defaultChecked={product.inStock} className="h-4 w-4 rounded border-slate-300" />
-                        Stokta
+                        Satışta / stokta
                       </label>
                       <div className="md:col-span-2">
                         <DemoPrimaryButton>Kaydet</DemoPrimaryButton>
