@@ -49,6 +49,19 @@ test.describe.serial("wexpay public API security — isolated mutation", () => {
     cleanupAfterSuite();
   });
 
+  test("inactive tenant crossover stays denied", async ({ request }) => {
+    skipUnlessPublicApiMutationAllowed(fixtures);
+    test.skip(!fixtures.inactiveQrCode, "inactive QR fixture required");
+    const response = await request.post(
+      `/api/wexpay/public/${encodeURIComponent(fixtures.inactiveQrCode!)}/order`,
+      { data: { items: [{ productId: "x", quantity: 1 }] } },
+    );
+    expect(response.status()).toBe(403);
+    const body = await response.json();
+    expect(String(body.reason ?? "")).toBe("access_closed");
+    assertNoLeaks(body);
+  });
+
   test("order rate limit and checkout idempotency + PayTR-off 503", async ({ request }) => {
     skipUnlessPublicApiMutationAllowed(fixtures);
     test.skip(process.env.WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT !== "true", "FORCE_PUBLIC_QR_RATE_LIMIT required");
@@ -168,16 +181,5 @@ test.describe.serial("wexpay public API security — isolated mutation", () => {
       expect([200, 403]).toContain(response.status());
     }
     expect(saw429).toBe(true);
-  });
-
-  test("inactive tenant crossover stays denied", async ({ request }) => {
-    skipUnlessDbReadable(fixtures);
-    test.skip(!fixtures.inactiveQrCode, "inactive QR fixture required");
-    const response = await request.post(
-      `/api/wexpay/public/${encodeURIComponent(fixtures.inactiveQrCode!)}/order`,
-      { data: { items: [{ productId: "x", quantity: 1 }] } },
-    );
-    expect(response.status()).toBe(403);
-    assertNoLeaks(await response.json());
   });
 });
