@@ -188,11 +188,12 @@ export function WexPayPanel({
   );
 }
 
-export function WexPayEmptyNotice({ children }: { children: ReactNode }) {
+export function WexPayEmptyNotice({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-5 text-center text-sm font-semibold leading-relaxed text-slate-400">
-      {children}
-    </p>
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-5 text-center">
+      <p className="text-sm font-semibold leading-relaxed text-slate-400">{children}</p>
+      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
+    </div>
   );
 }
 
@@ -200,6 +201,32 @@ export function WexPayErrorNotice({ message }: { message: string }) {
   return (
     <div className="rounded-[16px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 shadow-sm shadow-rose-900/5">
       {message}
+    </div>
+  );
+}
+
+export function WexPayFilterBar({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`flex min-w-0 flex-wrap items-end gap-2 sm:gap-3 ${className}`}>{children}</div>
+  );
+}
+
+export function WexPayTableShell({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`w-full min-w-0 overflow-hidden rounded-none border-y border-slate-200 bg-white sm:rounded-[16px] sm:border ${className}`}>
+      <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+        <div className="min-w-full [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-slate-50/80 [&_td]:px-3 [&_td]:py-3 [&_th]:px-3 [&_th]:py-3 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-slate-50/95">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function WexPayKpiGrid({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 ${className}`}>
+      {children}
     </div>
   );
 }

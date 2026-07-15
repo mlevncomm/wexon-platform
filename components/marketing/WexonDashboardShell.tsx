@@ -1,12 +1,17 @@
 import type { ReactNode } from "react";
 import { Suspense } from "react";
-import WexonDashboardNav from "@/components/marketing/WexonDashboardNav";
+import WexonDashboardNav, { WexonDashboardMobileNavDrawer } from "@/components/marketing/WexonDashboardNav";
 import WexonDashboardProfileMenu from "@/components/marketing/WexonDashboardProfileMenu";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
 import { canManageOrganizationUsers, getCurrentCustomerUser } from "@/lib/wexon-customer-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
 import { readActiveOrganizationId, wexpayHref } from "@/lib/wexon-organization-context";
 import { publicUrl } from "@/lib/wexon/urls";
+import {
+  WORKSPACE_CONTENT_MAX_PX,
+  WORKSPACE_PAGE_PADDING,
+  WORKSPACE_SIDEBAR_WIDTH_PX,
+} from "@/lib/wexon-workspace-layout";
 
 export default async function WexonDashboardShell({ children }: { children: ReactNode }) {
   const [customerUser, adminSession, activeOrganizationId] = await Promise.all([
@@ -28,30 +33,45 @@ export default async function WexonDashboardShell({ children }: { children: Reac
     : null;
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#f6f8f7] text-slate-950">
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 max-w-[1360px] flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
+    <div className="core-shell min-h-screen w-full overflow-x-clip bg-[#f6f8f7] text-slate-950">
+      <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/95 backdrop-blur-xl">
+        <div className={`mx-auto flex h-16 w-full max-w-none items-center justify-between gap-3 ${WORKSPACE_PAGE_PADDING}`}>
           <div className="flex min-w-0 items-center gap-3">
+            <Suspense fallback={<span className="inline-flex h-9 w-9 lg:hidden" aria-hidden />}>
+              <WexonDashboardMobileNavDrawer
+                userEmail={customerUser?.email}
+                mustChangePassword={customerUser?.mustChangePassword ?? false}
+                isAdminPreview={Boolean(adminSession) && !customerUser}
+              />
+            </Suspense>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-emerald-300">
               W
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-slate-950">Wexon Core</p>
-              <p className="truncate text-xs font-semibold text-slate-500">Müşteri Paneli</p>
+              <p className="truncate text-xs font-semibold text-slate-500">
+                {primaryMembership?.organization.name ?? "Müşteri Paneli"}
+              </p>
             </div>
           </div>
 
           {adminSession ? (
-            <div className="hidden min-w-0 flex-1 items-center justify-center md:flex">
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">Admin önizleme</span>
-            </div>
+            <span className="hidden rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 md:inline-flex">
+              Admin önizleme
+            </span>
           ) : null}
 
           <div className="flex shrink-0 items-center gap-2">
-            <a href={publicUrl("/contact")} className="wx-interactive hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">
+            <a
+              href={publicUrl("/contact")}
+              className="wx-interactive hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex"
+            >
               Destek
             </a>
-            <a href={wexpayAppHref} className="wx-interactive hidden rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600 lg:inline-flex">
+            <a
+              href={wexpayAppHref}
+              className="wx-interactive hidden rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600 lg:inline-flex"
+            >
               WexPay uygulaması
             </a>
             <Suspense
@@ -79,38 +99,53 @@ export default async function WexonDashboardShell({ children }: { children: Reac
         </div>
       </header>
 
-      <main className="px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto grid w-full max-w-[1360px] min-w-0 items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="min-w-0 lg:self-start">
-            <div className="w-full min-w-0 rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/70 lg:sticky lg:top-24 lg:rounded-[28px] lg:p-3.5">
-              <div className="mb-3 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 lg:mb-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
-                    Wexon Core
+      <div
+        className="core-body mx-auto grid w-full min-w-0 lg:grid-cols-[var(--workspace-sidebar)_minmax(0,1fr)]"
+        style={{ ["--workspace-sidebar" as string]: `${WORKSPACE_SIDEBAR_WIDTH_PX}px` }}
+      >
+        <aside className="hidden min-w-0 border-r border-slate-200/80 bg-white lg:sticky lg:top-16 lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col lg:self-start lg:overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 px-3 py-5">
+            <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">Wexon Core</p>
+                <p className="mt-1 truncate text-sm font-black text-slate-950">
+                  {primaryMembership?.organization.name ?? "Müşteri Paneli"}
+                </p>
+                {customerUser?.email ? (
+                  <p className="mt-1 truncate text-xs font-semibold text-slate-500" title={customerUser.email}>
+                    {customerUser.email}
                   </p>
-                  <p className="mt-1 text-sm font-black text-slate-950">Müşteri Paneli</p>
-                  {customerUser?.email && (
-                    <p className="mt-1 truncate text-xs font-semibold text-slate-500" title={customerUser.email}>
-                      {customerUser.email}
-                    </p>
-                  )}
-                  {customerUser?.mustChangePassword && (
-                    <p className="mt-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Şifre değişimi gerekli</p>
-                  )}
-                  {!customerUser && adminSession && (
-                    <p className="mt-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Admin önizleme</p>
-                  )}
-                </div>
-                <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-xs font-black text-white lg:flex">
-                  W
-                </span>
+                ) : null}
+                {customerUser?.mustChangePassword ? (
+                  <p className="mt-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">
+                    Şifre değişimi gerekli
+                  </p>
+                ) : null}
+                {!customerUser && adminSession ? (
+                  <p className="mt-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">
+                    Admin önizleme
+                  </p>
+                ) : null}
               </div>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-xs font-black text-emerald-300">
+                {userInitial}
+              </span>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col">
               <WexonDashboardNav />
             </div>
-          </aside>
-          <div className="wx-panel-enter mx-auto w-full max-w-[1120px] min-w-0">{children}</div>
+          </div>
+        </aside>
+
+        <div className={`core-content min-w-0 w-full ${WORKSPACE_PAGE_PADDING} py-4 sm:py-6 lg:py-7`}>
+          <div
+            className="wx-panel-enter mx-auto min-w-0 w-full max-w-none"
+            style={{ maxWidth: `${WORKSPACE_CONTENT_MAX_PX}px` }}
+          >
+            {children}
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

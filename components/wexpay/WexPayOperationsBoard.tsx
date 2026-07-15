@@ -128,12 +128,14 @@ export default function WexPayOperationsBoard({
       detail: "Açık fiş talebi olan masalar",
       accent: metrics.receiptRequestCount > 0,
     },
-    {
-      label: "Bekleyen PayTR",
-      value: String(metrics.pendingPaytrCount ?? 0),
-      detail: "Onay bekleyen sanal POS ödemesi",
-      accent: (metrics.pendingPaytrCount ?? 0) > 0,
-    },
+    metrics.pendingPaytrCount != null && metrics.pendingPaytrCount > 0
+      ? {
+          label: "Bekleyen PayTR",
+          value: String(metrics.pendingPaytrCount),
+          detail: "Onay bekleyen sanal POS ödemesi",
+          accent: true,
+        }
+      : null,
     {
       label: "Okunmamış olay",
       value: String(metrics.unreadNotificationCount),
@@ -146,7 +148,7 @@ export default function WexPayOperationsBoard({
       detail: "Bugünkü ortalama",
       accent: metrics.averageTicket > 0,
     },
-  ];
+  ].filter(Boolean) as Array<{ label: string; value: string; detail: string; accent: boolean }>;
 
   return (
     <WexPayPage>

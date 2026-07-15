@@ -8,9 +8,9 @@ import {
   WexPayMetricCard,
   WexPayPage,
   WexPayPanel,
-  WexPaySurface,
+  WexPayTableShell,
 } from "@/components/wexpay/WexPayBusinessUI";
-import { formatWexPayPaymentProvider, isPaytrPendingPayment } from "@/lib/wexpay-payment-display";
+import { formatWexPayPaymentProvider } from "@/lib/wexpay-payment-display";
 
 type PaymentRow = {
   id: string;
@@ -23,15 +23,22 @@ type PaymentRow = {
   createdAt: string;
 };
 
+function maskRef(value: string | null) {
+  if (!value) return null;
+  if (value.length <= 8) return `${value.slice(0, 2)}…`;
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
 export default function WexPayPaymentsBoard({ payments }: { payments: PaymentRow[] }) {
   const paidPayments = payments.filter((payment) => payment.status === PaymentStatus.PAID);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayPayments = paidPayments.filter((payment) => new Date(payment.createdAt) >= today);
   const todayTotal = todayPayments.reduce((sum, payment) => sum + payment.amount, 0);
-  const averagePayment = paidPayments.length > 0
-    ? paidPayments.reduce((sum, payment) => sum + payment.amount, 0) / paidPayments.length
-    : 0;
+  const averagePayment =
+    paidPayments.length > 0
+      ? paidPayments.reduce((sum, payment) => sum + payment.amount, 0) / paidPayments.length
+      : 0;
   const lastPayment = payments[0];
 
   const rows = [
@@ -52,7 +59,7 @@ export default function WexPayPaymentsBoard({ payments }: { payments: PaymentRow
       <WexPayPanel
         eyebrow="Operasyon"
         title="Ödeme özeti"
-        description="Operasyonel WexPay ödeme kayıtları. Core faturalandırmasından ayrıdır."
+        description="Operasyonel WexPay ödeme kayıtları. Core faturalandırmasından ayrıdır. Sağlayıcı referansları maskelenir."
         headerAction={
           <span className="rounded-full border border-emerald-300/30 bg-emerald-500/20 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-emerald-100">
             Canlı
@@ -67,34 +74,43 @@ export default function WexPayPaymentsBoard({ payments }: { payments: PaymentRow
       </WexPayPanel>
 
       <WexPayPanel eyebrow="Hareketler" title="Son ödeme hareketleri">
-        <div className="space-y-3">
-          {payments.length === 0 && <WexPayEmptyNotice>Gösterilecek ödeme bulunmuyor.</WexPayEmptyNotice>}
-          {payments.map((payment) => (
-            <WexPaySurface key={payment.id} className="transition-colors hover:border-emerald-200/80">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-black text-slate-950">
-                      {formatWexPayPaymentProvider(payment.provider)}
-                    </p>
-                    <PaymentStatusBadge status={payment.status} />
-                  </div>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    {payment.tableLabel}
-                    {payment.orderNo ? ` · Sipariş ${payment.orderNo}` : " · Masa ödemesi"} ·{" "}
-                    {new Date(payment.createdAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}
-                  </p>
-                  {isPaytrPendingPayment(payment.provider, payment.status) && payment.providerRef ? (
-                    <p className="mt-1 font-mono text-[11px] font-semibold text-slate-500">
-                      merchant_oid: {payment.providerRef}
-                    </p>
-                  ) : null}
-                </div>
-                <p className="shrink-0 text-lg font-black text-slate-950">{formatLira(payment.amount)}</p>
-              </div>
-            </WexPaySurface>
-          ))}
-        </div>
+        {payments.length === 0 ? (
+          <WexPayEmptyNotice>Gösterilecek ödeme bulunmuyor.</WexPayEmptyNotice>
+        ) : (
+          <WexPayTableShell>
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="text-xs uppercase tracking-[0.1em] text-slate-400">
+                <tr>
+                  <th className="font-black">Sağlayıcı</th>
+                  <th className="font-black">Masa</th>
+                  <th className="font-black">Referans</th>
+                  <th className="font-black">Tarih</th>
+                  <th className="font-black">Durum</th>
+                  <th className="font-black">Tutar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {payments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td className="font-bold text-slate-950">{formatWexPayPaymentProvider(payment.provider)}</td>
+                    <td className="font-semibold text-slate-600">
+                      {payment.tableLabel}
+                      {payment.orderNo ? ` · ${payment.orderNo}` : ""}
+                    </td>
+                    <td className="font-mono text-xs font-semibold text-slate-500">{maskRef(payment.providerRef) ?? "—"}</td>
+                    <td className="whitespace-nowrap font-semibold text-slate-600">
+                      {new Date(payment.createdAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}
+                    </td>
+                    <td>
+                      <PaymentStatusBadge status={payment.status} />
+                    </td>
+                    <td className="font-black text-slate-950">{formatLira(payment.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </WexPayTableShell>
+        )}
       </WexPayPanel>
     </WexPayPage>
   );

@@ -13,6 +13,7 @@ import {
   formatCoreStatus,
   getCustomerDashboardData,
 } from "@/lib/wexon-core-dashboard";
+import { isPaytrSubscriptionEnabled } from "@/lib/paytr/paytr-client";
 
 const textEntitlements = ["reporting_level", "integration_level", "support_level", "role_level"];
 
@@ -29,6 +30,7 @@ export default async function DashboardSubscriptionPage({ searchParams }: { sear
     menuProductCount,
     entitlementMap,
   } = await getCustomerDashboardData(params);
+  const paytrOn = isPaytrSubscriptionEnabled();
 
   if (!organization || !wexPayLicense) {
     return (
@@ -40,7 +42,7 @@ export default async function DashboardSubscriptionPage({ searchParams }: { sear
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {!organization.isActive && <DashboardAccountStatusNotice />}
       <DashboardSectionTitle
         badge="Lisanslar"
@@ -62,7 +64,18 @@ export default async function DashboardSubscriptionPage({ searchParams }: { sear
             <DashboardInfoRow label="Durum" value={formatCoreStatus(wexPayLicense.status)} />
             <DashboardInfoRow label="Başlangıç tarihi" value={formatCoreDate(wexPayLicense.startsAt)} />
             <DashboardInfoRow label="Bitiş / yenileme tarihi" value={formatCoreDate(wexPayLicense.endsAt)} />
-            <DashboardInfoRow label="Uygulama kurulumu" value={wexPayInstallation ? formatCoreStatus(wexPayInstallation.status) : "-"} />
+            <DashboardInfoRow
+              label="Uygulama kurulumu"
+              value={wexPayInstallation ? formatCoreStatus(wexPayInstallation.status) : "-"}
+            />
+            <DashboardInfoRow
+              label="Otomatik ödeme"
+              value={
+                paytrOn
+                  ? "Sağlayıcı yapılandırmasına bağlı — otomatik ödeme garantisi gösterilmez"
+                  : "Aktif değil (online abonelik tahsilatı kapalı)"
+              }
+            />
           </div>
         </DashboardPanel>
 
@@ -77,7 +90,11 @@ export default async function DashboardSubscriptionPage({ searchParams }: { sear
             <DashboardUsageCard label="Şube limiti" used={branchCount} limit={entitlementNumber(entitlementMap, "branch_limit")} />
             <DashboardUsageCard label="Masa limiti" used={tableCount} limit={entitlementNumber(entitlementMap, "table_limit")} />
             <DashboardUsageCard label="Ürün limiti" used={menuProductCount} limit={entitlementNumber(entitlementMap, "product_limit")} />
-            <DashboardUsageCard label="Personel limiti" used={organization.memberships.length} limit={entitlementNumber(entitlementMap, "staff_limit")} />
+            <DashboardUsageCard
+              label="Personel limiti"
+              used={organization.memberships.length}
+              limit={entitlementNumber(entitlementMap, "staff_limit")}
+            />
             <DashboardUsageCard label="Aylık işlem limiti" used={0} limit={entitlementNumber(entitlementMap, "monthly_order_limit")} />
             <DashboardUsageCard label="API kullanım limiti" used={0} limit={entitlementNumber(entitlementMap, "api_request_limit")} />
           </div>

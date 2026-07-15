@@ -8,6 +8,7 @@ import {
 } from "@/components/marketing/WexonDashboardCards";
 import { coreAccessDenialMessage } from "@/lib/wexon-core-access";
 import { dashboardHref, formatCoreStatus, getCustomerDashboardData } from "@/lib/wexon-core-dashboard";
+import { WORKSPACE_GRID_GAP } from "@/lib/wexon-workspace-layout";
 import { wexpayHref } from "@/lib/wexon-organization-context";
 
 type DashboardSearchParams = Promise<{ organizationId?: string; organizationSlug?: string }>;
@@ -44,20 +45,20 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
   const onboarding = wexPayInstallation?.settingsJson as { onboardingStatus?: string; message?: string } | null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {!organization.isActive && <DashboardAccountStatusNotice />}
       <DashboardSectionTitle
         badge="Ürünler"
         title="Ürün erişimleri"
         description="Organizasyonunuzun kullanabildiği Wexon ürünlerini ve erişim durumlarını buradan takip edebilirsiniz."
       />
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className={`grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 ${WORKSPACE_GRID_GAP}`}>
         {products.map((product) => {
           const isWexPay = product.key === "wexpay";
           return (
             <article
               key={product.id}
-              className={`rounded-[32px] border bg-white p-7 shadow-sm shadow-slate-200/60 ${
+              className={`min-w-0 rounded-[24px] border bg-white p-6 shadow-sm shadow-slate-200/60 sm:rounded-[28px] sm:p-7 ${
                 isWexPay && hasActiveWexPay
                   ? "border-emerald-200 shadow-xl shadow-emerald-100/50"
                   : "border-slate-200"
@@ -101,10 +102,14 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
                 <div className="mt-6 grid gap-3">
                   <DashboardInfoRow label="Paket" value={wexPayLicense?.plan.name ?? "-"} />
                   <DashboardInfoRow label="Lisans" value={wexPayLicense ? formatCoreStatus(wexPayLicense.status) : "-"} />
-                  <DashboardInfoRow label="Uygulama" value={wexPayInstallation ? formatCoreStatus(wexPayInstallation.status) : "-"} />
+                  <DashboardInfoRow
+                    label="Uygulama"
+                    value={wexPayInstallation ? formatCoreStatus(wexPayInstallation.status) : "-"}
+                  />
                   {onboarding?.onboardingStatus === "PENDING_SETUP" && (
                     <p className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
-                      Kurulum süreci devam ediyor. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçecektir.
+                      Kurulum süreci devam ediyor. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle
+                      iletişime geçecektir.
                     </p>
                   )}
                   {hasActiveWexPay ? (

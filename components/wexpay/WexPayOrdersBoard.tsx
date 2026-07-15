@@ -62,7 +62,7 @@ export default function WexPayOrdersBoard({
   }, [filteredOrders, selectedOrderId, orders]);
 
   return (
-    <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,28rem)] 2xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,32rem)]">
       <WexPayPanel
         eyebrow="Operasyon"
         title="QR siparişler"
@@ -129,7 +129,7 @@ export default function WexPayOrdersBoard({
           title={selectedOrder.orderNo}
           description={selectedOrder.tableLabel}
           headerAction={<OrderStatusBadge status={selectedOrder.status} />}
-          className="xl:sticky xl:top-6 xl:max-h-[calc(100vh-48px)] xl:overflow-y-auto"
+          className="xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto"
         >
 
           <div className="space-y-3">
