@@ -3,7 +3,7 @@ import { NotificationType, OrderStatus, PaymentStatus, type Prisma, ReceiptStatu
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { assertEntitlementLimit, type CoreEntitlementMap } from "@/lib/wexon-core-access";
-import { calculateTableAccount, filterTableSessionRecords, type TableAccountSnapshot } from "@/lib/wexpay-account";
+import { calculateTableAccount, closeTableBlockReason, filterTableSessionRecords, type TableAccountSnapshot } from "@/lib/wexpay-account";
 import {
   assertBranchInOrg,
   assertCategoryInOrg,
@@ -428,12 +428,9 @@ export async function closeTable(context: WexPayMutationContext, input: { tableI
   return runInTransaction(async (tx) => {
     const existing = await assertTableInOrg(tx, context.organizationId, input.tableId);
     const account = await getTableAccountSnapshot(tx, existing.id);
-
-    if (account.hasOpenOrders) {
-      throw new WexPayValidationError("Aktif sipariş varken masa kapatılamaz. Önce siparişleri servis edin veya iptal edin.");
-    }
-    if (account.remainingAmount > 0) {
-      throw new WexPayValidationError("Kalan ödeme varken masa kapatılamaz. Önce adisyonu kapatın.");
+    const blockReason = closeTableBlockReason(account);
+    if (blockReason) {
+      throw new WexPayValidationError(blockReason);
     }
 
     await tx.receiptRequest.updateMany({
@@ -792,10 +789,10 @@ export async function createOrder(
     return await runInTransaction(async (tx) => {
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
-      const table = await tx.restaurantTable.findFirst({
-        where: { id: input.tableId, branchId: input.branchId },
-      });
-      if (!table) throw new WexPayValidationError("Masa bu şubeye ait değil.");
+      const table = await assertTableInOrg(tx, context.organizationId, input.tableId);
+      if (table.branchId !== input.branchId) {
+        throw new WexPayValidationError("Masa bu şubeye ait değil.");
+      }
 
       const { orderItems, subtotal } = await resolveOrderItems(tx, input.branchId, input.items);
 
