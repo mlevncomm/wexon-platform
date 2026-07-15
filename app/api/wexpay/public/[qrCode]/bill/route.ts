@@ -1,4 +1,3 @@
-import { writeAuditFailure } from "@/lib/wexon-audit";
 import { wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
 import { resolvePublicTableByQr } from "@/lib/wexpay-read";
