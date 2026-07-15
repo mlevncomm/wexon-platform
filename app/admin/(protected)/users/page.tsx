@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { AdminEmptyState, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
+import { AdminEmptyState, AdminPageHeader, AdminStatusPill, AdminStatGrid, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
 import { AdminActionNotice, AdminFormPanel } from "@/components/marketing/WexonAdminForms";
-import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
+import { AdminOrgLink } from "@/components/marketing/WexonAdminOperations";
 import { resetAdminUserPasswordAction, toggleAdminUserActiveAction } from "@/lib/wexon-admin-actions";
 import { formatAdminDate, formatAdminStatus, getAdminUsersData } from "@/lib/wexon-admin";
 
@@ -23,31 +23,43 @@ export default async function AdminUsersPage({
   const users = await getAdminUsersData(q);
   const activeUsers = users.filter((user) => user.isActive);
   const mustChange = users.filter((user) => user.mustChangePassword);
+  const withMembership = users.filter((user) => user.memberships.length > 0);
+  const loadedAtMs = new Date().getTime();
+  const recentLogin = users.filter((user) => {
+    if (!user.lastLoginAt) return false;
+    return loadedAtMs - user.lastLoginAt.getTime() <= 30 * 24 * 60 * 60 * 1000;
+  });
 
   return (
     <div className="space-y-8">
-      <div className="space-y-4">
-        <AdminSectionTitle
-          badge="Kullanıcılar"
-          title="Global kullanıcı yönetimi"
-          description="Tüm platform kullanıcılarını arayın, şifre sıfırlayın ve hesap durumunu yönetin."
-        />
-        <AdminQuickLinks
-          links={[
-            { label: "Müşteriler", href: "/admin/organizations" },
-            { label: "Lisanslar", href: "/admin/licenses" },
-            { label: "İşlem geçmişi", href: "/admin/audit-logs" },
-          ]}
-        />
-      </div>
+      <AdminPageHeader
+        badge="Kullanıcılar"
+        title="Global kullanıcı yönetimi"
+        description="Platform kullanıcılarını arayın, şifre sıfırlayın ve hesap durumunu yönetin."
+        actions={
+          <>
+            <Link href="/admin/organizations" className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              Müşteriler
+            </Link>
+            <Link href="/admin/audit-logs" className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              İşlem geçmişi
+            </Link>
+          </>
+        }
+      />
 
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <AdminSummaryCard label="Toplam kullanıcı" value={users.length} />
-        <AdminSummaryCard label="Aktif hesap" value={activeUsers.length} />
-        <AdminSummaryCard label="Şifre değişimi bekleyen" value={mustChange.length} />
-      </section>
+      <AdminStatGrid>
+        <AdminSummaryCard label="Toplam kullanıcı" value={users.length} helper={q ? "Arama sonucu kümesi" : "Listelenen kullanıcılar"} />
+        <AdminSummaryCard label="Aktif" value={activeUsers.length} helper="Aktif hesaplar" tone="success" />
+        <AdminSummaryCard label="Pasif" value={users.length - activeUsers.length} helper="Pasife alınanlar" />
+        <AdminSummaryCard label="Organizasyon üyesi" value={withMembership.length} helper="En az bir üyeliği olan" />
+        <AdminSummaryCard label="Şifre değişimi bekleyen" value={mustChange.length} helper="mustChangePassword" tone={mustChange.length ? "warning" : "default"} />
+        {recentLogin.length > 0 || users.some((user) => user.lastLoginAt) ? (
+          <AdminSummaryCard label="Son 30 gün giriş" value={recentLogin.length} helper="lastLoginAt dolu kayıtlar" />
+        ) : null}
+      </AdminStatGrid>
 
       <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="min-w-[240px] flex-1">

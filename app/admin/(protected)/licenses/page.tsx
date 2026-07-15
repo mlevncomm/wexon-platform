@@ -1,6 +1,7 @@
-import { AdminEmptyState, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
+import Link from "next/link";
+import { AdminEmptyState, AdminPageHeader, AdminStatusPill, AdminStatGrid, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
 import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton } from "@/components/marketing/WexonAdminForms";
-import { AdminInlineSelectForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
+import { AdminInlineSelectForm, AdminOrgLink } from "@/components/marketing/WexonAdminOperations";
 import {
   changeAdminLicenseStatusAction,
   createAdminLicenseFromListAction,
@@ -19,33 +20,44 @@ const licenseStatusOptions = [
 export default async function AdminLicensesPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
   const { adminError } = await searchParams;
   const [licenses, options] = await Promise.all([getAdminLicensesData(), getAdminOperationOptions()]);
+  const clock = new Date().getTime();
   const attention = licenses.filter((license) => license.status === "PAST_DUE" || license.status === "SUSPENDED" || license.status === "EXPIRED");
+  const expiringSoon = licenses.filter((license) => {
+    if (!license.endsAt || license.status === "EXPIRED" || license.status === "CANCELLED") return false;
+    const ms = license.endsAt.getTime() - clock;
+    return ms > 0 && ms <= 30 * 24 * 60 * 60 * 1000;
+  });
+  const trial = licenses.filter((license) => license.status === "TRIAL").length;
+  const suspended = licenses.filter((license) => license.status === "SUSPENDED").length;
 
   return (
     <div className="space-y-8">
-      <div className="space-y-4">
-        <AdminSectionTitle
-          badge="Lisanslar"
-          title="Lisans operasyonları"
-          description="Tüm müşteri lisanslarını buradan izleyin, durum güncelleyin ve yeni lisans atayın."
-        />
-        <AdminQuickLinks
-          links={[
-            { label: "Müşteriler", href: "/admin/organizations" },
-            { label: "Paketler", href: "/admin/plans" },
-            { label: "Abonelikler", href: "/admin/subscriptions" },
-            { label: "İşlem geçmişi", href: "/admin/audit-logs?status=FAILURE" },
-          ]}
-        />
-      </div>
+      <AdminPageHeader
+        badge="Lisanslar"
+        title="Lisans operasyonları"
+        description="Müşteri lisanslarını izleyin, durum güncelleyin ve yeni lisans atayın."
+        actions={
+          <>
+            <Link href="/admin/plans" className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              Paketler
+            </Link>
+            <Link href="/admin/subscriptions" className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              Abonelikler
+            </Link>
+          </>
+        }
+      />
 
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <AdminSummaryCard label="Toplam lisans" value={licenses.length} />
-        <AdminSummaryCard label="Dikkat gerektiren" value={attention.length} helper="Gecikmiş, askıda veya süresi dolmuş" />
-        <AdminSummaryCard label="Aktif lisans" value={licenses.filter((l) => l.status === "ACTIVE").length} />
-      </section>
+      <AdminStatGrid>
+        <AdminSummaryCard label="Aktif lisans" value={licenses.filter((license) => license.status === "ACTIVE").length} helper="ACTIVE durumu" tone="success" />
+        <AdminSummaryCard label="Deneme" value={trial} helper="TRIAL durumu" />
+        <AdminSummaryCard label="Yakında sona erecek" value={expiringSoon.length} helper="30 gün içinde bitiş" tone={expiringSoon.length ? "warning" : "default"} />
+        <AdminSummaryCard label="Askıda" value={suspended} helper="SUSPENDED" />
+        <AdminSummaryCard label="Dikkat gerektiren" value={attention.length} helper="Gecikmiş, askıda veya süresi dolmuş" tone={attention.length ? "danger" : "default"} />
+        <AdminSummaryCard label="Toplam lisans" value={licenses.length} helper="Tüm kayıtlar" />
+      </AdminStatGrid>
 
       <AdminFormPanel title="Yeni lisans ata" description="WexPay lisansı oluşturur ve ürün kurulumunu aktifleştirir." collapsible>
         <form action={createAdminLicenseFromListAction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

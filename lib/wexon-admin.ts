@@ -91,6 +91,7 @@ const organizationInclude = {
   },
   invoices: true,
   billingPayments: true,
+  subscriptions: true,
   apiKeys: true,
   webhookEndpoints: true,
   auditLogs: {

@@ -47,10 +47,25 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
         </AdminActionNotice>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <AdminSummaryCard label="Aktif API anahtarı" value={activeKeys.length} />
-        <AdminSummaryCard label="Webhook" value={webhookEndpoints.length} />
-        <AdminSummaryCard label="Aktif webhook" value={webhookEndpoints.filter((w) => w.isActive).length} />
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <AdminSummaryCard label="Aktif API anahtarı" value={activeKeys.length} helper="İptal edilmemiş anahtarlar" />
+        <AdminSummaryCard label="Webhook" value={webhookEndpoints.length} helper="Tanımlı endpoint" />
+        <AdminSummaryCard label="Aktif webhook" value={webhookEndpoints.filter((w) => w.isActive).length} helper="isActive=true" tone="success" />
+        <AdminSummaryCard
+          label="PayTR abonelik API"
+          value={process.env.PAYTR_SUBSCRIPTION_ENABLE_API === "true" && process.env.PAYTR_IFRAME_ENABLE_API === "true" ? "Açık" : "Kapalı"}
+          helper="Boolean bayrak — secret gösterilmez"
+        />
+        <AdminSummaryCard
+          label="PayTR recurring"
+          value={process.env.PAYTR_RECURRING_ENABLE_API === "true" ? "Açık" : "Kapalı"}
+          helper="Boolean bayrak"
+        />
+        <AdminSummaryCard
+          label="WexPay PayTR API"
+          value={process.env.WEXPAY_PAYTR_ENABLE_API === "true" ? "Açık" : "Kapalı"}
+          helper="Operasyonel POS bayrağı"
+        />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">

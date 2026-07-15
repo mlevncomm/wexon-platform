@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { ADMIN_GRID_GAP } from "@/lib/wexon-admin-layout";
 
@@ -5,19 +6,48 @@ export function AdminSummaryCard({
   label,
   value,
   helper,
+  href,
+  tone = "default",
 }: {
   label: string;
   value: string | number;
   helper?: string;
+  href?: string;
+  tone?: "default" | "warning" | "danger" | "success";
 }) {
-  return (
-    <div className="flex min-h-[7.5rem] min-w-0 flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50 sm:rounded-[22px] sm:p-6">
+  const valueClass =
+    tone === "warning"
+      ? "text-amber-800"
+      : tone === "danger"
+        ? "text-rose-800"
+        : tone === "success"
+          ? "text-emerald-800"
+          : "text-slate-950";
+
+  const body = (
+    <>
       <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{label}</p>
-      <p className="mt-auto break-words pt-3 text-3xl font-black tracking-tight text-slate-950">{value}</p>
+      <p className={`mt-auto break-words pt-3 text-3xl font-black tracking-tight ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-500">{helper}</p> : null}
-    </div>
+    </>
   );
+
+  const className =
+    "flex min-h-[7.5rem] min-w-0 flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50 sm:rounded-[22px] sm:p-6";
+
+  if (href) {
+    return (
+      <Link href={href} className={`${className} transition hover:border-emerald-200 hover:bg-emerald-50/40`}>
+        {body}
+      </Link>
+    );
+  }
+
+  return <div className={className}>{body}</div>;
 }
+
+/** Alias — denser KPI naming from content-workspace plan. */
+export const AdminMetricCard = AdminSummaryCard;
 
 export function AdminMetricStrip({
   items,
@@ -97,6 +127,7 @@ export function AdminSectionTitle({
 
 /** Alias used by plan naming — same as AdminSectionTitle. */
 export const AdminPageHeader = AdminSectionTitle;
+export const AdminSectionHeader = AdminSectionTitle;
 
 export function AdminStatusPill({ children, active = false }: { children: string; active?: boolean }) {
   return (
@@ -105,6 +136,8 @@ export function AdminStatusPill({ children, active = false }: { children: string
     </span>
   );
 }
+
+export const AdminStatusBadge = AdminStatusPill;
 
 export function AdminInfoRow({ label, value }: { label: string; value: string | number }) {
   return (
@@ -125,10 +158,48 @@ export function AdminPanel({ children, className = "" }: { children: ReactNode; 
   );
 }
 
-export function AdminEmptyState({ children }: { children: string }) {
+export function AdminEmptyState({
+  children,
+  description,
+  action,
+}: {
+  children: ReactNode;
+  description?: string;
+  action?: ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-5 py-5 text-center text-sm font-semibold text-slate-500">
-      {children}
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-5 py-5 text-center">
+      <div className="text-sm font-semibold text-slate-500">{children}</div>
+      {description ? <p className="mx-auto mt-2 max-w-md text-xs font-semibold leading-relaxed text-slate-400">{description}</p> : null}
+      {action ? <div className="mt-4 flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
+    </div>
+  );
+}
+
+export function AdminErrorState({
+  title = "Veriler yüklenemedi",
+  description = "Lütfen sayfayı yenileyin. Sorun sürerse sistem yöneticisine bildirin.",
+  action,
+}: {
+  title?: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-5 text-center">
+      <p className="text-sm font-black text-rose-900">{title}</p>
+      <p className="mt-2 text-xs font-semibold text-rose-700">{description}</p>
+      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
+    </div>
+  );
+}
+
+export function AdminLoadingSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="animate-pulse space-y-3" aria-hidden>
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="h-14 rounded-2xl bg-slate-100" />
+      ))}
     </div>
   );
 }
@@ -148,15 +219,15 @@ export function AdminTableShell({ children, className = "" }: { children: ReactN
 /** Desktop row / mobile stack filter toolbar. */
 export function AdminFilterBar({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div
-      className={`mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end ${className}`}
-    >
+    <div className={`mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:items-end ${className || "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]"}`}>
       {children}
     </div>
   );
 }
 
 /** KPI grid helper matching wide-admin breakpoints. */
-export function AdminStatGrid({ children }: { children: ReactNode }) {
-  return <section className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 ${ADMIN_GRID_GAP}`}>{children}</section>;
+export function AdminStatGrid({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <section className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 ${ADMIN_GRID_GAP} ${className}`}>{children}</section>;
 }
+
+export const AdminKpiGrid = AdminStatGrid;

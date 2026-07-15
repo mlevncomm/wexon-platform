@@ -1,4 +1,5 @@
 import { AdminEmptyState, AdminPanel, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
+import { AdminSoftNotice } from "@/components/marketing/WexonAdminContent";
 import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
 import { AdminInlineSelectForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import {
@@ -7,6 +8,7 @@ import {
   updateAdminInvoiceStatusAction,
 } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminBillingData, getAdminOperationOptions } from "@/lib/wexon-admin";
+import { isPaytrRecurringEnabled, isPaytrSubscriptionEnabled } from "@/lib/paytr/paytr-client";
 
 const invoiceStatusOptions = [
   { value: "DRAFT", label: "Taslak" },
@@ -28,8 +30,9 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
   const [{ invoices, billingPayments, subscriptionPayments }, options] = await Promise.all([getAdminBillingData(), getAdminOperationOptions()]);
   const pendingInvoices = invoices.filter((invoice) => invoice.status === "ISSUED" || invoice.status === "OVERDUE");
   const paidInvoices = invoices.filter((invoice) => invoice.status === "PAID");
-  const paidPayments = billingPayments.filter((payment) => payment.status === "PAID");
-  const paytrPaid = subscriptionPayments.filter((payment) => payment.status === "PAID");
+  const paytrSubscriptionOn = isPaytrSubscriptionEnabled();
+  const paytrRecurringOn = isPaytrRecurringEnabled();
+  const paidTotal = paidInvoices.reduce((sum, invoice) => sum + Number(invoice.total), 0);
 
   return (
     <div className="space-y-8">
@@ -50,12 +53,21 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
 
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
+      <AdminSoftNotice>
+        PayTR abonelik API: {paytrSubscriptionOn ? "açık" : "kapalı"} · recurring: {paytrRecurringOn ? "açık" : "kapalı"}.
+        Bu ekranda canlı tahsilat durumu iddiası yoktur; kayıtlar manuel fatura/ledger görünümüdür.
+      </AdminSoftNotice>
+
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
-        <AdminSummaryCard label="Toplam fatura" value={invoices.length} />
-        <AdminSummaryCard label="Bekleyen fatura" value={pendingInvoices.length} />
-        <AdminSummaryCard label="Ödenen fatura" value={paidInvoices.length} />
-        <AdminSummaryCard label="Başarılı tahsilat" value={paidPayments.length} />
-        <AdminSummaryCard label="PayTR PAID" value={paytrPaid.length} />
+        <AdminSummaryCard label="Toplam fatura" value={invoices.length} helper="Oluşturulan faturalar" />
+        <AdminSummaryCard label="Bekleyen" value={pendingInvoices.length} helper="ISSUED / OVERDUE" tone={pendingInvoices.length ? "warning" : "default"} />
+        <AdminSummaryCard label="Ödenen" value={paidInvoices.length} helper="PAID durumu" tone="success" />
+        <AdminSummaryCard label="İptal" value={invoices.filter((invoice) => invoice.status === "VOID").length} helper="VOID" />
+        <AdminSummaryCard
+          label="Nominal tutar (PAID)"
+          value={paidTotal.toLocaleString("tr-TR")}
+          helper="Ödenen faturaların toplamı"
+        />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">

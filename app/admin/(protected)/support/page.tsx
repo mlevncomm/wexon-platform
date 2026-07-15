@@ -1,7 +1,16 @@
-import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStatGrid, AdminStatusPill, AdminSummaryCard } from "@/components/marketing/WexonAdminCards";
+import Link from "next/link";
+import {
+  AdminEmptyState,
+  AdminPageHeader,
+  AdminPanel,
+  AdminSectionTitle,
+  AdminStatGrid,
+  AdminStatusPill,
+  AdminSummaryCard,
+} from "@/components/marketing/WexonAdminCards";
 import AdminDemoRequestsPanel from "@/components/marketing/AdminDemoRequestsPanel";
 import { AdminActionNotice, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
-import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
+import { AdminOrgLink } from "@/components/marketing/WexonAdminOperations";
 import { updateAdminSupportTicketAction } from "@/lib/wexon-admin-actions";
 import { formatAdminDate, getAdminDemoRequestsData, getAdminSupportTicketsData } from "@/lib/wexon-admin";
 
@@ -49,17 +58,27 @@ function isHighPriority(priority?: string) {
 export default async function AdminSupportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ adminError?: string; demoProduct?: string; demoSource?: string }>;
+  searchParams: Promise<{
+    adminError?: string;
+    demoProduct?: string;
+    demoSource?: string;
+    demoStatus?: string;
+    demoReview?: string;
+    demoFollowUp?: string;
+    q?: string;
+    leadId?: string;
+  }>;
 }) {
-  const { adminError, demoProduct, demoSource } = await searchParams;
-  const [{ tickets, loadedAt }, { requests: demoRequests }] = await Promise.all([
+  const params = await searchParams;
+  const { adminError } = params;
+  const [{ tickets }, { requests: demoRequests }] = await Promise.all([
     getAdminSupportTicketsData(),
     getAdminDemoRequestsData(),
   ]);
-  const loadedAtTime = loadedAt.getTime();
+  const now = new Date().getTime();
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   const highPriorityCount = tickets.filter((ticket) => isHighPriority(readMeta(ticket.metadataJson).priority)).length;
-  const lastWeekCount = tickets.filter((ticket) => loadedAtTime - ticket.createdAt.getTime() <= sevenDaysMs).length;
+  const lastWeekCount = tickets.filter((ticket) => now - ticket.createdAt.getTime() <= sevenDaysMs).length;
   const waitingCount = tickets.filter((ticket) => {
     const status = readMeta(ticket.metadataJson).status ?? "OPEN";
     return status === "OPEN" || status === "IN_PROGRESS";
@@ -67,36 +86,72 @@ export default async function AdminSupportPage({
 
   return (
     <div className="space-y-8">
-      <div className="space-y-4">
-        <AdminSectionTitle
-          badge="Destek"
-          title="Destek masası"
-          description="Talepleri yanıtlayın, durum güncelleyin ve müşteri sorunlarını çözün."
-          actions={
-            <AdminQuickLinks
-              links={[
-                { label: "Müşteriler", href: "/admin/organizations" },
-                { label: "Hata logları", href: "/admin/audit-logs?status=FAILURE" },
-                { label: "Entegrasyonlar", href: "/admin/integrations" },
-              ]}
-            />
-          }
-        />
-      </div>
+      <AdminPageHeader
+        badge="Destek"
+        title="Destek masası"
+        description="Destek taleplerini, public başvuruları ve müşteri takiplerini tek alandan yönetin."
+        actions={
+          <>
+            <Link
+              href="/admin/support"
+              className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Yenile
+            </Link>
+            <Link
+              href="/admin/organizations"
+              className="inline-flex rounded-full bg-slate-950 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+            >
+              Yeni müşteri
+            </Link>
+            <Link
+              href="/admin/audit-logs?status=FAILURE"
+              className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Hata logları
+            </Link>
+            <Link
+              href="/admin/integrations"
+              className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Entegrasyonlar
+            </Link>
+          </>
+        }
+      />
 
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
       <AdminStatGrid>
-        <AdminSummaryCard label="Toplam talep" value={tickets.length} />
-        <AdminSummaryCard label="Yüksek / kritik" value={highPriorityCount} />
-        <AdminSummaryCard label="Son 7 gün" value={lastWeekCount} />
-        <AdminSummaryCard label="Açık / işlemde" value={waitingCount} />
+        <AdminSummaryCard label="Toplam talep" value={tickets.length} helper="Tüm destek kayıtları" />
+        <AdminSummaryCard
+          label="Açık / işlemde"
+          value={waitingCount}
+          helper="Yanıt veya takip bekleyenler"
+          tone={waitingCount > 0 ? "warning" : "default"}
+        />
+        <AdminSummaryCard label="Son 7 gün" value={lastWeekCount} helper="Son yedi günde oluşturulan kayıtlar" />
+        <AdminSummaryCard
+          label="Yüksek / kritik"
+          value={highPriorityCount}
+          helper="Öncelikli müdahale gereken kayıtlar"
+          tone={highPriorityCount > 0 ? "danger" : "default"}
+        />
       </AdminStatGrid>
 
       <AdminPanel>
-        <AdminSectionTitle badge="Liste" title="Talep kayıtları" />
+        <AdminSectionTitle badge="Liste" title="Destek talepleri" description="Müşteri paneli üzerinden açılan destek kayıtları." />
         {tickets.length === 0 ? (
-          <AdminEmptyState>Henüz destek talebi bulunmuyor.</AdminEmptyState>
+          <AdminEmptyState
+            description="Müşteriler dashboard üzerinden talep oluşturduğunda burada görünür."
+            action={
+              <Link href="/admin/organizations" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700">
+                Müşterilere git
+              </Link>
+            }
+          >
+            Henüz destek talebi bulunmuyor.
+          </AdminEmptyState>
         ) : (
           <div className="space-y-4">
             {tickets.map((ticket) => {
@@ -107,20 +162,25 @@ export default async function AdminSupportPage({
               return (
                 <div key={ticket.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-lg font-black text-slate-950">{meta.subject ?? "Destek talebi"}</p>
                       <p className="mt-1 text-xs font-semibold text-slate-500">
-                        {formatAdminDate(ticket.createdAt)} · {ticket.organization ? <AdminOrgLink id={ticket.organizationId!} name={ticket.organization.name} /> : "—"}
+                        {formatAdminDate(ticket.createdAt)} ·{" "}
+                        {ticket.organization ? (
+                          <AdminOrgLink id={ticket.organizationId!} name={ticket.organization.name} />
+                        ) : (
+                          "—"
+                        )}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <AdminStatusPill active={isHighPriority(priority)}>{priorityLabels[priority] ?? priority}</AdminStatusPill>
                       <AdminStatusPill active={status === "RESOLVED" || status === "CLOSED"}>
-                        {ticketStatusOptions.find((s) => s.value === status)?.label ?? status}
+                        {ticketStatusOptions.find((option) => option.value === status)?.label ?? status}
                       </AdminStatusPill>
                     </div>
                   </div>
-                  <p className="mt-4 text-sm leading-relaxed text-slate-600">{meta.message ?? "-"}</p>
+                  <p className="mt-4 text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
                   <p className="mt-2 text-xs font-semibold text-slate-500">
                     {categoryLabels[meta.category ?? "GENERAL"] ?? meta.category} · {ticket.user?.email ?? meta.actor?.email ?? "—"}
                   </p>
@@ -152,16 +212,15 @@ export default async function AdminSupportPage({
       <AdminDemoRequestsPanel
         requests={demoRequests}
         filters={{
-          product: demoProduct,
-          source: demoSource,
+          product: params.demoProduct,
+          source: params.demoSource,
+          status: params.demoStatus,
+          reviewStatus: params.demoReview,
+          followUp: params.demoFollowUp,
+          q: params.q,
+          leadId: params.leadId,
         }}
       />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <AdminInfoRow label="Kaynak" value="AuditLog metadata" />
-        <AdminInfoRow label="Durum yönetimi" value="Aktif" />
-        <AdminInfoRow label="Yanıt" value="Admin panelinden" />
-      </div>
     </div>
   );
 }

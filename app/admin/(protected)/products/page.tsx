@@ -35,9 +35,12 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <AdminSummaryCard label="Toplam ürün" value={products.length} />
-        <AdminSummaryCard label="Aktif ürün" value={products.filter((p) => p.status === "ACTIVE").length} />
-        <AdminSummaryCard label="Toplam kurulum" value={products.reduce((sum, p) => sum + p.appInstallations.length, 0)} />
+        <AdminSummaryCard label="Toplam ürün" value={products.length} helper="Katalogdaki ürünler" />
+        <AdminSummaryCard label="Aktif ürün" value={products.filter((p) => p.status === "ACTIVE").length} helper="ACTIVE durumunda yayınlanan" tone="success" />
+        <AdminSummaryCard label="Yakında / iç" value={products.filter((p) => p.status === "UPCOMING" || p.status === "INTERNAL").length} helper="Henüz public aktif değil" />
+        <AdminSummaryCard label="Aktif plan" value={products.reduce((sum, p) => sum + p.plans.length, 0)} helper="Ürünlere bağlı planlar" />
+        <AdminSummaryCard label="Toplam kurulum" value={products.reduce((sum, p) => sum + p.appInstallations.length, 0)} helper="AppInstallation kayıtları" />
+        <AdminSummaryCard label="Aktif lisans" value={products.reduce((sum, p) => sum + p.licenses.filter((l) => l.status === "ACTIVE").length, 0)} helper="Ürün bazlı lisanslar" />
       </section>
 
       <AdminFormPanel title="Yeni ürün ekle" description="Kataloga yeni Wexon ürünü tanımlayın." collapsible>

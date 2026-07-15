@@ -36,10 +36,13 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
 
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <AdminSummaryCard label="Toplam abonelik" value={subscriptions.length} />
-        <AdminSummaryCard label="Aktif" value={subscriptions.filter((s) => s.status === "ACTIVE").length} />
-        <AdminSummaryCard label="Riskli" value={subscriptions.filter((s) => s.status === "PAST_DUE" || s.status === "CANCELLED").length} />
+      <section className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <AdminSummaryCard label="Toplam abonelik" value={subscriptions.length} helper="Tüm kayıtlar" />
+        <AdminSummaryCard label="Aktif" value={subscriptions.filter((s) => s.status === "ACTIVE").length} helper="ACTIVE" tone="success" />
+        <AdminSummaryCard label="Deneme" value={subscriptions.filter((s) => s.status === "TRIALING").length} helper="TRIALING" />
+        <AdminSummaryCard label="Gecikmiş" value={subscriptions.filter((s) => s.status === "PAST_DUE").length} helper="PAST_DUE" tone="warning" />
+        <AdminSummaryCard label="İptal" value={subscriptions.filter((s) => s.status === "CANCELLED").length} helper="CANCELLED" />
+        <AdminSummaryCard label="Süresi dolmuş" value={subscriptions.filter((s) => s.status === "EXPIRED").length} helper="EXPIRED" />
       </section>
 
       <AdminFormPanel title="Yeni abonelik oluştur" description="Müşteriye paket atar; gerekirse lisans ve kurulum da açılır." collapsible>
