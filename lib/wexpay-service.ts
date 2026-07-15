@@ -19,6 +19,7 @@ import {
   WexPayAccessError,
 } from "@/lib/wexpay-tenant";
 import { type OrderItemInput, WexPayValidationError } from "@/lib/wexpay-validation";
+import { priceOrderLine, sumPricedLinesSubtotal } from "@/lib/wexpay-order-pricing";
 import { resolveWexPayPaymentProvider, type WexPayPaymentProviderKey } from "@/lib/wexpay-payment-provider";
 
 /**
@@ -746,14 +747,22 @@ export type ResolvedOrderItems = {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    modifiers: Array<{
+      groupId: string;
+      optionId: string;
+      groupName: string;
+      optionName: string;
+      priceDelta: number;
+      sortOrder: number;
+    }>;
   }>;
   subtotal: number;
 };
 
 /**
- * Loads the requested products scoped to the branch, validates that each
- * belongs to that branch and is active/in-stock, and computes server-side line
- * totals + subtotal. Client-provided totals are never trusted.
+ * Loads products + active modifier catalog for the branch, validates selections,
+ * and computes server-side line totals + immutable modifier snapshots.
+ * Client-provided totals / names / deltas are never trusted.
  */
 export async function resolveOrderItems(
   tx: TenantDb,
@@ -761,22 +770,103 @@ export async function resolveOrderItems(
   items: OrderItemInput[],
 ): Promise<ResolvedOrderItems> {
   const productIds = [...new Set(items.map((item) => item.productId))];
-  const products = await tx.menuProduct.findMany({ where: { id: { in: productIds }, branchId } });
+  const products = await tx.menuProduct.findMany({
+    where: { id: { in: productIds }, branchId },
+    include: {
+      productModifierGroups: {
+        where: { isActive: true },
+        include: {
+          group: {
+            include: {
+              options: {
+                where: { isActive: true },
+                orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+              },
+            },
+          },
+        },
+        orderBy: [{ sortOrder: "asc" }],
+      },
+    },
+  });
   const productMap = new Map(products.map((product) => [product.id, product]));
 
   const orderItems = items.map((item) => {
     const product = productMap.get(item.productId);
     if (!product) throw new WexPayValidationError("Seçilen ürün bu şubeye ait değil.");
-    if (!product.isActive) throw new WexPayValidationError(`${product.name} pasif olduğu için siparişe eklenemez.`);
-    if (!product.inStock) throw new WexPayValidationError(`${product.name} stokta olmadığı için siparişe eklenemez.`);
 
-    const unitPrice = Number(product.price);
-    const totalPrice = Math.round(unitPrice * item.quantity * 100) / 100;
-    return { productId: product.id, productName: product.name, quantity: item.quantity, unitPrice, totalPrice };
+    const priced = priceOrderLine({
+      product: {
+        id: product.id,
+        branchId: product.branchId,
+        name: product.name,
+        price: product.price,
+        isActive: product.isActive,
+        inStock: product.inStock,
+        productModifierGroups: product.productModifierGroups.map((link) => ({
+          groupId: link.groupId,
+          sortOrder: link.sortOrder,
+          isActive: link.isActive,
+          group: {
+            id: link.group.id,
+            branchId: link.group.branchId,
+            name: link.group.name,
+            selectionType: link.group.selectionType,
+            minSelect: link.group.minSelect,
+            maxSelect: link.group.maxSelect,
+            sortOrder: link.group.sortOrder,
+            isActive: link.group.isActive,
+            options: link.group.options.map((option) => ({
+              id: option.id,
+              groupId: option.groupId,
+              name: option.name,
+              priceDelta: option.priceDelta,
+              sortOrder: option.sortOrder,
+              isActive: option.isActive,
+            })),
+          },
+        })),
+      },
+      branchId,
+      quantity: item.quantity,
+      modifierOptionIds: item.modifierOptionIds,
+    });
+
+    return {
+      productId: priced.productId,
+      productName: priced.productName,
+      quantity: priced.quantity,
+      unitPrice: priced.unitPrice,
+      totalPrice: priced.totalPrice,
+      modifiers: priced.modifiers,
+    };
   });
 
-  const subtotal = Math.round(orderItems.reduce((sum, item) => sum + item.totalPrice, 0) * 100) / 100;
-  return { orderItems, subtotal };
+  return { orderItems, subtotal: sumPricedLinesSubtotal(orderItems) };
+}
+
+function orderItemsCreateInput(orderItems: ResolvedOrderItems["orderItems"]) {
+  return orderItems.map((item) => ({
+    productId: item.productId,
+    productName: item.productName,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    totalPrice: item.totalPrice,
+    ...(item.modifiers.length > 0
+      ? {
+          modifiers: {
+            create: item.modifiers.map((modifier) => ({
+              groupId: modifier.groupId,
+              optionId: modifier.optionId,
+              groupName: modifier.groupName,
+              optionName: modifier.optionName,
+              priceDelta: modifier.priceDelta,
+              sortOrder: modifier.sortOrder,
+            })),
+          },
+        }
+      : {}),
+  }));
 }
 
 export async function createOrder(
@@ -804,9 +894,9 @@ export async function createOrder(
           status: OrderStatus.NEW,
           note: input.note,
           subtotal,
-          items: { create: orderItems },
+          items: { create: orderItemsCreateInput(orderItems) },
         },
-        include: { table: true, items: { orderBy: { id: "asc" } } },
+        include: { table: true, items: { orderBy: { id: "asc" }, include: { modifiers: { orderBy: { sortOrder: "asc" } } } } },
       });
 
       await syncTableStatus(tx, table.id);
@@ -1260,9 +1350,9 @@ export async function createPublicOrder(input: {
           note: input.note,
           subtotal,
           receiptRequested,
-          items: { create: orderItems },
+          items: { create: orderItemsCreateInput(orderItems) },
         },
-        include: { table: true, items: { orderBy: { id: "asc" } } },
+        include: { table: true, items: { orderBy: { id: "asc" }, include: { modifiers: { orderBy: { sortOrder: "asc" } } } } },
       });
 
       if (receiptRequested) {
@@ -1347,6 +1437,12 @@ export type PublicTableBillLine = {
   lineTotal: number;
   orderNo: string;
   status: string;
+  modifiers: Array<{
+    groupName: string;
+    optionName: string;
+    priceDelta: number;
+    sortOrder: number;
+  }>;
 };
 
 export async function getPublicTableBill(input: {
@@ -1377,6 +1473,15 @@ export async function getPublicTableBill(input: {
               quantity: true,
               unitPrice: true,
               totalPrice: true,
+              modifiers: {
+                select: {
+                  groupName: true,
+                  optionName: true,
+                  priceDelta: true,
+                  sortOrder: true,
+                },
+                orderBy: { sortOrder: "asc" },
+              },
             },
             orderBy: { id: "asc" },
           },
@@ -1410,6 +1515,12 @@ export async function getPublicTableBill(input: {
       lineTotal: Number(item.totalPrice),
       orderNo: order.orderNo,
       status: String(order.status),
+      modifiers: item.modifiers.map((modifier) => ({
+        groupName: modifier.groupName,
+        optionName: modifier.optionName,
+        priceDelta: Number(modifier.priceDelta),
+        sortOrder: modifier.sortOrder,
+      })),
     })),
   );
 
