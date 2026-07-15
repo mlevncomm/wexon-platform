@@ -14,7 +14,9 @@
  */
 
 import { config as loadEnv } from "dotenv";
-import { resolve } from "node:path";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
@@ -27,6 +29,8 @@ const KNOWN_E2E_SOURCES = new Set([
   "e2e-admin-crm",
   "e2e-audit",
 ]);
+
+const EXPECTED_MATCH_COUNT = Number(process.env.E2E_LEAD_EXPECTED_COUNT ?? 25);
 
 function classify() {
   const url = (process.env.DIRECT_URL || process.env.DATABASE_URL || "").trim();
@@ -46,21 +50,26 @@ function isE2eLead(meta) {
   const email = String(meta.email ?? "").toLowerCase();
   const company = String(meta.company ?? "");
   const fullName = String(meta.fullName ?? "");
-  const message = String(meta.message ?? "");
 
+  // ALL three required (no partial matches).
   const sourceOk =
+    source.startsWith("e2e-") ||
     KNOWN_E2E_SOURCES.has(source) ||
-    source.startsWith("e2e-eligibility-safety.") ||
-    source.startsWith("e2e-");
-  const identityOk =
+    source.startsWith("e2e-eligibility-safety.");
+
+  const emailOk =
     (email.endsWith("@example.com") && email.includes("e2e")) ||
+    /^e2e[.+_-]/i.test(email);
+
+  const nameOk =
     company.startsWith("E2E[WXP]") ||
     /^E2E\b/.test(company) ||
     /^E2E\b/.test(fullName) ||
     company.includes("E2E Wexon Test Org") ||
-    /E2E eligibility|E2E audit|E2E admin CRM|E2E\[WXP\]/i.test(message);
+    /E2E\[WXP\]/.test(company) ||
+    /E2E\[WXP\]/.test(fullName);
 
-  return sourceOk && identityOk;
+  return sourceOk && emailOk && nameOk;
 }
 
 async function main() {
@@ -103,9 +112,37 @@ async function main() {
     for (const row of matches) {
       const meta = row.metadataJson && typeof row.metadataJson === "object" ? row.metadataJson : {};
       const source = String(meta.source ?? "unknown");
-      bySource[source] = (bySource[source] ?? 0) + 1;
+      // Collapse unique run suffixes for eligibility-safety.* into base bucket for reporting.
+      const bucket = source.startsWith("e2e-eligibility-safety")
+        ? "e2e-eligibility-safety"
+        : source;
+      bySource[bucket] = (bySource[bucket] ?? 0) + 1;
     }
     const dates = matches.map((r) => r.createdAt.getTime());
+
+    const exportPath =
+      process.env.E2E_LEAD_EXPORT_PATH?.trim() ||
+      join(tmpdir(), `wexon-e2e-lead-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+
+    writeFileSync(
+      exportPath,
+      JSON.stringify(
+        {
+          exportedAt: new Date().toISOString(),
+          classification,
+          matched: matches.length,
+          bySource,
+          rows: matches.map((row) => ({
+            id: row.id,
+            createdAt: row.createdAt.toISOString(),
+            metadataJson: row.metadataJson,
+          })),
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
 
     const report = {
       mode: apply ? "APPLY" : "DRY_RUN",
@@ -120,11 +157,20 @@ async function main() {
               latest: new Date(Math.max(...dates)).toISOString(),
             },
       ids: matches.map((r) => r.id),
+      exportPath,
+      remainingNonE2ePreview: rows.length - matches.length,
     };
 
     if (!apply) {
-      console.log(JSON.stringify({ ...report, note: "Dry-run only. No deletes." }, null, 2));
+      console.log(JSON.stringify({ ...report, note: "Dry-run only. No deletes. Export written." }, null, 2));
       return;
+    }
+
+    if (matches.length !== EXPECTED_MATCH_COUNT) {
+      console.error(
+        `REFUSED apply: matched ${matches.length} !== expected ${EXPECTED_MATCH_COUNT}. Export at ${exportPath}`,
+      );
+      process.exit(3);
     }
 
     const ids = matches.map((r) => r.id);
@@ -160,13 +206,25 @@ async function main() {
       const deletedCreated = await prisma.auditLog.deleteMany({
         where: { id: { in: ids }, action: "public.demo_request.created" },
       });
+
+      const remaining = await prisma.auditLog.findMany({
+        where: { action: "public.demo_request.created" },
+        select: { id: true, metadataJson: true },
+      });
+      const remainingE2e = remaining.filter((row) => isE2eLead(row.metadataJson));
+
       console.log(
         JSON.stringify(
           {
             ...report,
             deletedCreated: deletedCreated.count,
             deletedRelated,
-            note: "Applied marker-scoped cleanup only.",
+            remainingDemoRequests: remaining.length,
+            remainingE2eMarkers: remainingE2e.length,
+            remainingNonE2eIds: remaining
+              .filter((row) => !isE2eLead(row.metadataJson))
+              .map((row) => row.id),
+            note: "Applied marker-scoped cleanup only. Export retained locally (not committed).",
           },
           null,
           2,
