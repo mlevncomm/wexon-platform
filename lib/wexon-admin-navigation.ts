@@ -1,13 +1,21 @@
-export const adminNavigation = [
-  { label: "Genel Bakış", shortLabel: "Özet", icon: "overview", href: "/admin" },
-  { label: "Müşteriler", shortLabel: "Müşteri", icon: "customers", href: "/admin/organizations" },
-  { label: "Kullanıcılar", shortLabel: "Kullanıcı", icon: "customers", href: "/admin/users" },
-  { label: "Ön Başvurular", shortLabel: "Başvuru", icon: "support", href: "/admin/applications" },
-  { label: "Destek", shortLabel: "Destek", icon: "support", href: "/admin/support" },
-  { label: "Lisanslar", shortLabel: "Lisans", icon: "license", href: "/admin/licenses" },
-  { label: "Faturalar", shortLabel: "Fatura", icon: "billing", href: "/admin/billing" },
-  { label: "İşlem Geçmişi", shortLabel: "Log", icon: "activity", href: "/admin/audit-logs" },
-  { label: "Ayarlar", shortLabel: "Ayar", icon: "settings", href: "/admin/settings" },
+export type AdminNavItem = {
+  label: string;
+  shortLabel: string;
+  icon: string;
+  href: string;
+  section?: "operasyon" | "finans" | "sistem";
+};
+
+export const adminNavigation: AdminNavItem[] = [
+  { label: "Genel Bakış", shortLabel: "Özet", icon: "overview", href: "/admin", section: "operasyon" },
+  { label: "Müşteriler", shortLabel: "Müşteri", icon: "customers", href: "/admin/organizations", section: "operasyon" },
+  { label: "Kullanıcılar", shortLabel: "Kullanıcı", icon: "customers", href: "/admin/users", section: "operasyon" },
+  { label: "Ön Başvurular", shortLabel: "Başvuru", icon: "support", href: "/admin/applications", section: "operasyon" },
+  { label: "Destek", shortLabel: "Destek", icon: "support", href: "/admin/support", section: "operasyon" },
+  { label: "Lisanslar", shortLabel: "Lisans", icon: "license", href: "/admin/licenses", section: "finans" },
+  { label: "Faturalar", shortLabel: "Fatura", icon: "billing", href: "/admin/billing", section: "finans" },
+  { label: "İşlem Geçmişi", shortLabel: "Log", icon: "activity", href: "/admin/audit-logs", section: "sistem" },
+  { label: "Ayarlar", shortLabel: "Ayar", icon: "settings", href: "/admin/settings", section: "sistem" },
 ];
 
 export const adminSecondaryNavigation = [
@@ -18,6 +26,13 @@ export const adminSecondaryNavigation = [
   { label: "Entegrasyonlar", href: "/admin/integrations" },
   { label: "Müşteri Özeti", href: "/admin/customers" },
 ];
+
+export const adminNavSectionLabels: Record<"operasyon" | "finans" | "sistem" | "teknik", string> = {
+  operasyon: "Operasyon",
+  finans: "Finans",
+  sistem: "Sistem",
+  teknik: "Teknik",
+};
 
 export const adminCommandRoutes = [
   ...adminNavigation.map((item) => ({

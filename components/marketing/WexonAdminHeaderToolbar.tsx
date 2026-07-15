@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import type { AdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { adminCommandRoutes } from "@/lib/wexon-admin-navigation";
 import WexonAdminProfileMenu from "@/components/marketing/WexonAdminProfileMenu";
+import { WexonAdminMobileNavDrawer } from "@/components/marketing/WexonAdminNav";
 import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl, resolveNavigationHref } from "@/lib/wexon/urls";
 
 type CommandItem = {
@@ -141,10 +142,12 @@ export default function WexonAdminHeaderToolbar({
   snapshot,
   userInitial,
   userEmail,
+  environmentBadge,
 }: {
   snapshot: AdminHeaderSnapshot;
   userInitial: string;
   userEmail?: string | null;
+  environmentBadge?: string;
 }) {
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
@@ -327,13 +330,14 @@ export default function WexonAdminHeaderToolbar({
   }
 
   const searchTriggerClassName =
-    "group flex h-9 w-full items-center gap-2.5 rounded-xl border border-slate-200/60 bg-slate-50/70 px-3 text-left transition-colors hover:border-slate-300/80 hover:bg-white";
+    "group flex h-10 w-full items-center gap-2.5 rounded-xl border border-slate-200/60 bg-slate-50/70 px-3 text-left transition-colors hover:border-slate-300/80 hover:bg-white";
   const mobileSearchClassName =
     "group flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-slate-100/70 px-2.5 text-left transition-colors hover:bg-slate-100";
 
   return (
     <>
-      <div className="flex h-14 w-full items-center gap-2 px-4 md:hidden">
+      <div className="flex h-16 w-full items-center gap-2 md:hidden">
+        <WexonAdminMobileNavDrawer environmentBadge={environmentBadge} />
         <AdminBrandLink inline />
         <button
           type="button"
@@ -395,10 +399,14 @@ export default function WexonAdminHeaderToolbar({
         </div>
       </div>
 
-      <div className="hidden h-14 items-center gap-3 px-4 sm:px-6 lg:gap-4 lg:px-8 md:flex">
+      <div className="hidden h-16 items-center gap-3 lg:gap-4 md:flex">
         <AdminBrandLink />
-        <div className="flex min-w-0 flex-1 items-center justify-center px-2 lg:px-6">
-          <button type="button" onClick={openCommand} className={`${searchTriggerClassName} max-w-sm`}>
+        <div className="flex min-w-0 flex-1 items-center justify-center px-2 lg:px-4">
+          <button
+            type="button"
+            onClick={openCommand}
+            className={`${searchTriggerClassName} w-full min-w-[360px] max-w-sm xl:min-w-[420px] xl:max-w-[520px]`}
+          >
             <span className="flex h-6 w-6 shrink-0 items-center justify-center text-slate-400 transition-colors group-hover:text-slate-500">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                 <circle cx="11" cy="11" r="7" />
@@ -424,6 +432,11 @@ export default function WexonAdminHeaderToolbar({
                 {snapshot.stats.pendingWork} bekleyen
               </span>
             ) : null}
+            {environmentBadge ? (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+                {environmentBadge}
+              </span>
+            ) : null}
           </div>
 
           <div ref={alertsDesktopRef} className="relative">
@@ -435,7 +448,7 @@ export default function WexonAdminHeaderToolbar({
               }}
               aria-expanded={alertsOpen}
               aria-label="Bildirimler ve bekleyen işler"
-              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200/60 bg-slate-50/70 text-slate-600 transition-colors hover:border-slate-300/80 hover:bg-white hover:text-slate-800"
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/60 bg-slate-50/70 text-slate-600 transition-colors hover:border-slate-300/80 hover:bg-white hover:text-slate-800"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                 <path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7" strokeLinecap="round" strokeLinejoin="round" />
@@ -461,7 +474,7 @@ export default function WexonAdminHeaderToolbar({
 
           <Link
             href={adminNavigationUrl("/admin/organizations")}
-            className="hidden rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-sm shadow-slate-900/20 transition-colors hover:bg-emerald-700 sm:inline-flex"
+            className="hidden shrink-0 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-black text-white shadow-sm shadow-slate-900/20 transition-colors hover:bg-emerald-700 sm:inline-flex"
           >
             + Yeni müşteri
           </Link>

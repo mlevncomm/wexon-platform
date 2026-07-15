@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   AdminEmptyState,
+  AdminFilterBar,
   AdminPanel,
   AdminSectionTitle,
   AdminStatusPill,
@@ -468,7 +469,7 @@ function DemoRequestTableRow({
               <summary className="cursor-pointer text-xs font-bold text-emerald-700 hover:underline">
                 Uygunluk detayı
               </summary>
-              <div className="mt-3 max-w-xl">
+              <div className="mt-3 w-full max-w-2xl min-w-0">
                 <WexPayEligibilityAdminCard metadataJson={request.metadataJson} />
               </div>
             </details>
@@ -570,7 +571,8 @@ export default function AdminDemoRequestsPanel({
       </section>
       ) : null}
 
-      <form method="get" className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
+      <form method="get">
+        <AdminFilterBar>
         <label className="grid min-w-0 gap-1.5 text-sm">
           <span className="text-xs font-semibold text-slate-500">Ürün</span>
           <select
@@ -610,16 +612,17 @@ export default function AdminDemoRequestsPanel({
           Filtrele
         </button>
 
-        {hasActiveFilter ? (
-          <Link
-            href={basePath}
-            className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 sm:h-10 lg:w-auto"
-          >
-            Sıfırla
-          </Link>
-        ) : (
-          <span className="hidden lg:block" aria-hidden />
-        )}
+          {hasActiveFilter ? (
+            <Link
+              href={basePath}
+              className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 sm:h-10 lg:w-auto"
+            >
+              Sıfırla
+            </Link>
+          ) : (
+            <span className="hidden lg:block" aria-hidden />
+          )}
+        </AdminFilterBar>
       </form>
 
       {requests.length === 0 ? (

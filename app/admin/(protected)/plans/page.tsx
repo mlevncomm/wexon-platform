@@ -100,7 +100,7 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
         </form>
       </AdminFormPanel>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-2 2xl:grid-cols-3">
         {plans.map((plan) => {
           const updatePlan = updateAdminPlanAction.bind(null, plan.id);
           const upsertEntitlement = upsertAdminEntitlementAction.bind(null, plan.id);

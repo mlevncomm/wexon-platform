@@ -1,4 +1,4 @@
-import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStatusPill, AdminSummaryCard } from "@/components/marketing/WexonAdminCards";
+import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStatGrid, AdminStatusPill, AdminSummaryCard } from "@/components/marketing/WexonAdminCards";
 import AdminDemoRequestsPanel from "@/components/marketing/AdminDemoRequestsPanel";
 import { AdminActionNotice, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
@@ -72,24 +72,26 @@ export default async function AdminSupportPage({
           badge="Destek"
           title="Destek masası"
           description="Talepleri yanıtlayın, durum güncelleyin ve müşteri sorunlarını çözün."
-        />
-        <AdminQuickLinks
-          links={[
-            { label: "Müşteriler", href: "/admin/organizations" },
-            { label: "Hata logları", href: "/admin/audit-logs?status=FAILURE" },
-            { label: "Entegrasyonlar", href: "/admin/integrations" },
-          ]}
+          actions={
+            <AdminQuickLinks
+              links={[
+                { label: "Müşteriler", href: "/admin/organizations" },
+                { label: "Hata logları", href: "/admin/audit-logs?status=FAILURE" },
+                { label: "Entegrasyonlar", href: "/admin/integrations" },
+              ]}
+            />
+          }
         />
       </div>
 
       {adminError ? <AdminActionNotice tone="error">{adminError}</AdminActionNotice> : null}
 
-      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <AdminStatGrid>
         <AdminSummaryCard label="Toplam talep" value={tickets.length} />
         <AdminSummaryCard label="Yüksek / kritik" value={highPriorityCount} />
         <AdminSummaryCard label="Son 7 gün" value={lastWeekCount} />
         <AdminSummaryCard label="Açık / işlemde" value={waitingCount} />
-      </section>
+      </AdminStatGrid>
 
       <AdminPanel>
         <AdminSectionTitle badge="Liste" title="Talep kayıtları" />
