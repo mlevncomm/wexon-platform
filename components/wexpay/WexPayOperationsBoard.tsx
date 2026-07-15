@@ -14,6 +14,7 @@ import {
   WexPayPanelGrid,
   WexPaySurface,
 } from "@/components/wexpay/WexPayBusinessUI";
+import { buildOpsAlerts, WexPayOperationsAlertStrip } from "@/components/wexpay/WexPayOperationsAlertStrip";
 
 const notificationTypeLabels: Record<string, string> = {
   ORDER_CREATED: "Sipariş",
@@ -27,10 +28,10 @@ const notificationTypeLabels: Record<string, string> = {
 function resolveNotificationBadge(notification: OperationsNotification) {
   const title = notification.title ?? "";
   if (title.includes("[ÖDEME TALEBİ]")) {
-    return { label: "Ödeme talebi", className: "border-amber-200 bg-amber-50 text-amber-900" };
+    return { label: "Müşteri ödeme istedi", className: "border-amber-200 bg-amber-50 text-amber-900" };
   }
   if (title.includes("[GARSON ÇAĞRISI]")) {
-    return { label: "Garson", className: "border-sky-200 bg-sky-50 text-sky-900" };
+    return { label: "Garson çağrısı", className: "border-sky-200 bg-sky-50 text-sky-900" };
   }
   if (notification.type === "ORDER_CREATED" || title.toLowerCase().includes("qr sipariş")) {
     return { label: "QR sipariş", className: "border-emerald-200 bg-emerald-50 text-emerald-900" };
@@ -99,9 +100,13 @@ export default function WexPayOperationsBoard({
 
   const { notifications, topProducts, tables } = overview;
   const receiptTables = tables.filter((table) => table.receiptRequested);
-  const branchSearch = `branchId=${encodeURIComponent(branchId)}`;
+  const branchSearch = `organizationId=${encodeURIComponent(organizationId)}&branchId=${encodeURIComponent(branchId)}`;
   const kitchenHref = appNavigationUrl("/apps/wexpay/kitchen", branchSearch);
   const tablesHref = appNavigationUrl("/apps/wexpay/tables", branchSearch);
+  const ordersHref = appNavigationUrl("/apps/wexpay/orders", branchSearch);
+  const paymentsHref = appNavigationUrl("/apps/wexpay/payments", branchSearch);
+  const menuHref = appNavigationUrl("/apps/wexpay/menu", branchSearch);
+  const alerts = buildOpsAlerts(notifications, organizationId, branchId);
 
   const metricCards = [
     {
@@ -167,6 +172,28 @@ export default function WexPayOperationsBoard({
           {isRefreshing ? "Yenileniyor..." : "Şimdi yenile"}
         </button>
       </div>
+
+      <WexPayOperationsAlertStrip alerts={alerts} />
+
+      <div className="flex flex-wrap gap-2">
+        {[
+          { href: tablesHref, label: "Masaları aç" },
+          { href: `${tablesHref}&composer=1`, label: "Yeni sipariş" },
+          { href: kitchenHref, label: "Mutfağı aç" },
+          { href: paymentsHref, label: "Ödemeleri aç" },
+          { href: menuHref, label: "Menüyü yönet" },
+          { href: ordersHref, label: "Siparişler" },
+        ].map((action) => (
+          <Link
+            key={action.label}
+            href={action.href}
+            className="min-h-11 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-800 hover:border-emerald-300 hover:bg-emerald-50"
+          >
+            {action.label}
+          </Link>
+        ))}
+      </div>
+
       <WexPayMetricStrip eyebrow="Genel bakış" title="Günlük özet" description="Şube operasyon metrikleri">
         {metricCards.map((metric) => (
           <WexPayMetricCard

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   DemoInput,
   DemoPrimaryButton,
@@ -7,13 +8,27 @@ import {
   WexPayPage,
   WexPayPanel,
 } from "@/components/wexpay/WexPayBusinessUI";
-import { WexPayTableOperationsView } from "@/components/wexpay/WexPayTableOperations";
+import { WexPayCashierWorkspace } from "@/components/wexpay/WexPayCashierWorkspace";
 import { WexPayPaytrCheckoutNotice } from "@/components/wexpay/WexPayPaytrCheckoutNotice";
-import { closeTableAction, createTableAction, updateTableAction } from "@/lib/wexpay-actions";
-import { listBranchTableOperations, listBranchTables, listOrgBranches, resolveActiveBranch } from "@/lib/wexpay-read";
+import { createTableAction, updateTableAction } from "@/lib/wexpay-actions";
+import {
+  listBranchNotifications,
+  listBranchOrderableProducts,
+  listBranchTableOperations,
+  listBranchTables,
+  listOrgBranches,
+  resolveActiveBranch,
+} from "@/lib/wexpay-read";
 import { resolveWexPaySessionContext } from "@/lib/wexpay-tenant";
 
-type SearchParams = Promise<{ wexpayError?: string; branchId?: string; paytrCheckout?: string; paymentId?: string }>;
+type SearchParams = Promise<{
+  wexpayError?: string;
+  branchId?: string;
+  paytrCheckout?: string;
+  paymentId?: string;
+  tableId?: string;
+  composer?: string;
+}>;
 
 export default async function WexPayTablesPage({ searchParams }: { searchParams: SearchParams }) {
   const context = await resolveWexPaySessionContext();
@@ -38,13 +53,25 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
   const activeBranch = await resolveActiveBranch(context.organizationId, branchId);
   if (!activeBranch) return null;
 
-  const tables = await listBranchTableOperations(context.organizationId, activeBranch.id);
-  const adminTables = await listBranchTables(context.organizationId, activeBranch.id);
+  const [tables, adminTables, products, notifications] = await Promise.all([
+    listBranchTableOperations(context.organizationId, activeBranch.id),
+    listBranchTables(context.organizationId, activeBranch.id),
+    listBranchOrderableProducts(context.organizationId, activeBranch.id),
+    listBranchNotifications(context.organizationId, activeBranch.id, 20),
+  ]);
+
   const redirectTo = `/apps/wexpay/tables?branchId=${activeBranch.id}`;
   const checkoutPayment =
     paymentId && paytrCheckout
       ? tables.flatMap((table) => table.payments).find((payment) => payment.id === paymentId)
       : null;
+
+  const productOptions = products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    price: Number(product.price),
+    categoryName: product.category?.name ?? "",
+  }));
 
   return (
     <WexPayPage>
@@ -58,13 +85,16 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
         />
       ) : null}
 
-      <WexPayTableOperationsView
-        tables={tables}
-        canManage={context.canManage}
-        activeBranchId={activeBranch.id}
-        redirectTo={redirectTo}
-        showRefresh
-      />
+      <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl bg-slate-100" />}>
+        <WexPayCashierWorkspace
+          tables={tables}
+          canManage={context.canManage}
+          activeBranchId={activeBranch.id}
+          redirectTo={redirectTo}
+          products={productOptions}
+          notifications={notifications}
+        />
+      </Suspense>
 
       {context.canManage && (
         <>
@@ -95,7 +125,10 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
                       key={table.id}
                       className="flex min-w-0 flex-col gap-3 px-4 py-3 lg:flex-row lg:items-end lg:gap-4"
                     >
-                      <form action={updateTableAction} className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end lg:flex-nowrap lg:gap-4">
+                      <form
+                        action={updateTableAction}
+                        className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end lg:flex-nowrap lg:gap-4"
+                      >
                         <input type="hidden" name="tableId" value={table.id} />
                         <input type="hidden" name="redirectTo" value={redirectTo} />
                         <label className="min-w-0 flex-1 sm:min-w-[200px]">
@@ -106,7 +139,7 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
                             name="label"
                             defaultValue={table.label}
                             required
-                            className="w-full min-w-0 rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+                            className="w-full min-w-0 rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
                           />
                         </label>
                         <label className="w-full sm:w-28">
@@ -119,34 +152,19 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
                             min={1}
                             max={100}
                             defaultValue={table.seats}
-                            className="w-full min-w-0 rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+                            required
+                            className="w-full rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
                           />
                         </label>
-                        <label className="flex h-[42px] w-full shrink-0 items-center gap-2 rounded-[16px] border border-slate-200 bg-slate-50/80 px-4 text-sm font-bold text-slate-700 sm:w-auto">
-                          <input
-                            name="isActive"
-                            value="true"
-                            type="checkbox"
-                            defaultChecked={table.isActive}
-                            className="h-4 w-4 rounded border-slate-300"
-                          />
+                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                          <input type="checkbox" name="isActive" value="true" defaultChecked={table.isActive} />
                           Aktif
                         </label>
                         <button
                           type="submit"
-                          className="shrink-0 rounded-[16px] bg-[#10b981] px-4 py-2.5 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-colors hover:bg-emerald-700"
+                          className="rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white hover:bg-emerald-700"
                         >
-                          Kaydet
-                        </button>
-                      </form>
-                      <form action={closeTableAction} className="shrink-0">
-                        <input type="hidden" name="tableId" value={table.id} />
-                        <input type="hidden" name="redirectTo" value={redirectTo} />
-                        <button
-                          type="submit"
-                          className="w-full rounded-[16px] border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-900 shadow-sm shadow-slate-900/5 transition-colors hover:bg-slate-50 lg:w-auto"
-                        >
-                          Masayı kapat
+                          Güncelle
                         </button>
                       </form>
                     </div>
