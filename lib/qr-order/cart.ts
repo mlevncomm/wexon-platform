@@ -5,15 +5,29 @@ export { cartStorageKey };
 
 function isCartLine(value: unknown): value is QrCartLine {
   if (!value || typeof value !== "object") return false;
-  const line = value as QrCartLine;
+  const line = value as QrCartLine & { selectedOptions?: unknown };
   return (
     typeof line.key === "string" &&
     typeof line.quantity === "number" &&
     line.quantity > 0 &&
     line.product != null &&
     typeof line.product.id === "string" &&
-    typeof line.product.price === "number"
+    typeof line.product.price === "number" &&
+    typeof line.note === "string"
   );
+}
+
+function normalizeStoredLine(value: unknown): QrCartLine | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const product = raw.product as QrCartLine["product"] | undefined;
+  if (!product || typeof product.id !== "string" || typeof product.price !== "number") return null;
+  const quantity = Number(raw.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+  const note = typeof raw.note === "string" ? raw.note : "";
+  const key = typeof raw.key === "string" ? raw.key : `${product.id}::${note.trim().toLowerCase()}`;
+  const line: QrCartLine = { key, product, quantity, note };
+  return isCartLine(line) ? line : null;
 }
 
 export function readCartFromStorage(qrCode: string): QrCartLine[] {
@@ -23,7 +37,7 @@ export function readCartFromStorage(qrCode: string): QrCartLine[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isCartLine);
+    return parsed.map(normalizeStoredLine).filter(Boolean) as QrCartLine[];
   } catch {
     return [];
   }

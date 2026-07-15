@@ -1,71 +1,69 @@
 "use client";
 
 import QrStatusBadge from "@/components/qr-order/QrStatusBadge";
-import { qrCard, qrFrame, qrGhostCta, qrGlass, qrPrimaryCta } from "@/components/qr-order/qr-theme";
+import { qrCard, qrFrame, qrGhostCta, qrGlass, qrPrimaryCta, qrSecondaryCta } from "@/components/qr-order/qr-theme";
 import type { QrTableContext } from "@/lib/qr-order/types";
 
 export default function QrLanding({
   context,
   menuEmpty,
-  onOrder,
-  onPay,
   onBrowseMenu,
+  onPay,
   onCallWaiter,
 }: {
   context: QrTableContext;
   menuEmpty: boolean;
-  onOrder: () => void;
-  onPay: () => void;
   onBrowseMenu: () => void;
+  onPay: () => void;
   onCallWaiter: () => void;
 }) {
   return (
     <div className={`relative flex min-h-[100dvh] flex-col pb-10 pt-6 sm:pt-10 ${qrFrame}`}>
-      <header className="relative z-10 text-center md:mx-auto md:max-w-2xl">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700/90 sm:text-[11px]">
+      <header className="relative z-10 text-center">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-800/90 sm:text-[11px]">
           WexPay · Masa siparişi
         </p>
-        <h1 className="mt-3 break-words text-[1.75rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-4xl md:text-5xl">
+        <h1 className="mt-3 break-words text-[1.85rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-4xl md:text-5xl">
           {context.restaurantName}
         </h1>
         <p className="mt-2 text-sm font-semibold text-slate-500 sm:text-base">
-          {context.branchName} · <span className="text-slate-800">{context.tableLabel}</span>
+          {context.branchName}
+          {" · "}
+          <span className="text-slate-800">{context.tableLabel}</span>
         </p>
         <div className="mt-4 flex justify-center">
-          <QrStatusBadge tone="mint">Masa oturumunuz hazır</QrStatusBadge>
+          <QrStatusBadge tone="mint">Masaya hoş geldiniz</QrStatusBadge>
         </div>
       </header>
 
       <section
-        className={`relative z-10 mt-7 sm:mt-10 ${qrGlass} rounded-[28px] p-5 sm:rounded-[36px] sm:p-8 md:mx-auto md:max-w-3xl md:p-10`}
+        className={`relative z-10 mt-7 sm:mt-10 ${qrGlass} rounded-[28px] p-5 sm:rounded-[36px] sm:p-8 lg:p-10`}
       >
-        <div className="md:grid md:grid-cols-[1.15fr_1fr] md:items-end md:gap-10">
+        <div className="lg:grid lg:grid-cols-[1.15fr_1fr] lg:items-end lg:gap-12">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-800">
               Hoş geldiniz
             </p>
-            <h2 className="mt-3 text-[1.4rem] font-black leading-snug tracking-[-0.03em] text-slate-950 sm:text-3xl md:text-[2rem]">
-              Masadan hızlıca sipariş ver veya hesabını görüntüle
+            <h2 className="mt-3 text-[1.4rem] font-black leading-snug tracking-[-0.03em] text-slate-950 sm:text-3xl">
+              Menüyü inceleyin, siparişinizi masadan gönderin
             </h2>
             <p className="mt-3 max-w-xl text-sm font-semibold leading-relaxed text-slate-500 sm:text-[15px]">
-              Siparişiniz doğrudan restoran ekranına düşer. Ödeme veya yardım talepleriniz masanıza
-              bağlı iletilir.
+              Kayıt olmadan sipariş verebilirsiniz. Siparişiniz restoran ekranına düşer; garson
+              çağrısı ve ödeme talebi masanıza bağlı iletilir.
             </p>
           </div>
 
-          <div className="mt-6 space-y-3 md:mt-0">
+          <div className="mt-6 space-y-3 lg:mt-0">
             <button
               type="button"
               data-testid="qr-cta-order"
-              onClick={onOrder}
+              onClick={onBrowseMenu}
               disabled={menuEmpty}
               className={`${qrPrimaryCta} flex-col gap-1 !items-stretch !justify-start px-5 py-4 text-left sm:py-5`}
             >
-              <span className="text-[15px] font-black leading-none sm:text-base">
-                Sipariş vermek istiyorum
-              </span>
+              <span className="text-[15px] font-black leading-none sm:text-base">Menüyü İncele</span>
               <span className="text-xs font-semibold text-emerald-50/95 sm:text-[13px]">
-                Menüyü aç, sepete ekle, masaya sipariş gönder
+                Kategoriler, ürünler ve sepet — tek akışta sipariş
               </span>
             </button>
 
@@ -73,14 +71,23 @@ export default function QrLanding({
               type="button"
               data-testid="qr-cta-pay"
               onClick={onPay}
-              className={`${qrCard} flex min-h-14 w-full flex-col items-stretch gap-1 rounded-[20px] px-5 py-4 text-left transition hover:border-emerald-200 hover:shadow-md active:scale-[0.98] sm:rounded-[22px] sm:py-5`}
+              className={`${qrSecondaryCta} flex-col gap-1 !items-stretch !justify-start px-5 py-4 text-left`}
             >
               <span className="text-[15px] font-black leading-none text-slate-950 sm:text-base">
-                Ödeme yapmak istiyorum
+                Hesabı Gör / Ödeme Talebi
               </span>
               <span className="text-xs font-semibold text-slate-500 sm:text-[13px]">
-                Masa hesabını görüntüle veya ödeme talebi gönder
+                Hesabı görüntüle veya restorana ödeme talebi ilet
               </span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="qr-cta-waiter"
+              onClick={onCallWaiter}
+              className={`${qrCard} flex min-h-12 w-full items-center justify-center rounded-[20px] px-5 text-sm font-black text-slate-800 transition hover:border-emerald-200`}
+            >
+              Garson Çağır
             </button>
           </div>
         </div>
@@ -92,21 +99,21 @@ export default function QrLanding({
         ) : null}
       </section>
 
-      <div className="relative z-10 mt-5 grid grid-cols-3 gap-2 sm:mx-auto sm:mt-6 sm:max-w-xl sm:gap-3 md:max-w-2xl">
-        <button type="button" data-testid="qr-cta-waiter" onClick={onCallWaiter} className={qrGhostCta}>
-          Garson çağır
-        </button>
+      <div className="relative z-10 mt-5 flex flex-wrap gap-2 sm:mt-6">
         <button
           type="button"
           data-testid="qr-cta-browse"
           onClick={onBrowseMenu}
           disabled={menuEmpty}
-          className={`${qrGhostCta} disabled:opacity-40`}
+          className={`${qrGhostCta} max-w-xs disabled:opacity-40`}
         >
-          Menüyü gör
+          Menüyü İncele
         </button>
-        <button type="button" onClick={onCallWaiter} className={qrGhostCta}>
-          Yardım
+        <button type="button" onClick={onCallWaiter} className={`${qrGhostCta} max-w-xs`}>
+          Garson Çağır
+        </button>
+        <button type="button" onClick={onPay} className={`${qrGhostCta} max-w-xs`}>
+          Hesabı Gör
         </button>
       </div>
 

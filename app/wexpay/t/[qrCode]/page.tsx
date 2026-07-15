@@ -15,14 +15,26 @@ type PageProps = {
  */
 export default async function PublicTablePage({ params }: PageProps) {
   const { qrCode } = await params;
-  const resolution = await resolvePublicTableByQr(qrCode);
+
+  let resolution: Awaited<ReturnType<typeof resolvePublicTableByQr>> = null;
+  try {
+    resolution = await resolvePublicTableByQr(qrCode);
+  } catch {
+    return (
+      <QrErrorState
+        title="Bağlantı hatası"
+        message="Menü şu anda yüklenemedi. Lütfen bağlantınızı kontrol edip tekrar deneyin."
+        hint="Sorun sürerse personelden yardım isteyin."
+      />
+    );
+  }
 
   if (!resolution) {
     return (
       <QrErrorState
         title="QR geçersiz"
         message="Bu QR koduna ait masa bulunamadı. Lütfen personelden yeni bir kod isteyin."
-        hint="Kod silinmiş veya yanlış yazılmış olabilir."
+        hint="Kod silinmiş, pasif veya yanlış olabilir."
       />
     );
   }
@@ -37,7 +49,17 @@ export default async function PublicTablePage({ params }: PageProps) {
     );
   }
 
-  const categories = await getPublicBranchMenu(resolution.organizationId, resolution.branch.id);
+  let categories: Awaited<ReturnType<typeof getPublicBranchMenu>> = [];
+  try {
+    categories = await getPublicBranchMenu(resolution.organizationId, resolution.branch.id);
+  } catch {
+    return (
+      <QrErrorState
+        title="Bağlantı hatası"
+        message="Menü yüklenirken bir sorun oluştu. Lütfen kısa süre sonra tekrar deneyin."
+      />
+    );
+  }
 
   return (
     <QrCustomerApp

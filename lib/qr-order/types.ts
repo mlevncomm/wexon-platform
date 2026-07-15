@@ -1,6 +1,4 @@
-export type QrView = "landing" | "menu" | "cart" | "success" | "bill";
-
-export type QrProductBadge = "popular" | "spicy" | "vegetarian" | "new";
+export type QrView = "landing" | "menu" | "cart" | "success" | "bill" | "status";
 
 export type QrProduct = {
   id: string;
@@ -10,7 +8,6 @@ export type QrProduct = {
   currency: string;
   imageUrl?: string | null;
   isPopular?: boolean;
-  badges?: QrProductBadge[];
 };
 
 export type QrCategory = {
@@ -27,33 +24,21 @@ export type QrTableContext = {
   tableStatus: string;
 };
 
-export type QrOptionChoice = {
-  id: string;
-  label: string;
-  priceDelta?: number;
-};
-
-export type QrOptionGroup = {
-  id: string;
-  label: string;
-  required: boolean;
-  multi: boolean;
-  choices: QrOptionChoice[];
-};
-
 export type QrCartLine = {
-  /** Stable key so same product with different options stays separate. */
+  /** Stable key so same product with different notes stays separate. */
   key: string;
   product: QrProduct;
   quantity: number;
-  selectedOptions: Record<string, string[]>;
   note: string;
 };
+
+export type QrOrderStatus = "NEW" | "PREPARING" | "SERVED" | "CANCELLED";
 
 export type QrOrderSuccess = {
   orderId: string;
   orderNo: string;
   subtotal: number;
+  status: string;
 };
 
 export type QrBillLine = {
@@ -83,3 +68,23 @@ export const WAITER_REASON_LABELS: Record<WaiterReason, string> = {
   table_clean: "Masa temizliği",
   other: "Diğer",
 };
+
+export const ORDER_STATUS_LABELS: Record<QrOrderStatus, string> = {
+  NEW: "Sipariş alındı",
+  PREPARING: "Hazırlanıyor",
+  SERVED: "Servis edildi",
+  CANCELLED: "İptal edildi",
+};
+
+export function normalizeOrderStatus(value: string): QrOrderStatus | null {
+  const upper = value.trim().toUpperCase();
+  if (upper === "NEW" || upper === "PREPARING" || upper === "SERVED" || upper === "CANCELLED") {
+    return upper;
+  }
+  return null;
+}
+
+export function orderStatusLabel(value: string): string {
+  const normalized = normalizeOrderStatus(value);
+  return normalized ? ORDER_STATUS_LABELS[normalized] : value;
+}
