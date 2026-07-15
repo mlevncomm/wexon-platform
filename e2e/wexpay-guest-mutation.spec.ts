@@ -52,8 +52,8 @@ test.describe.serial("wexpay guest mutation (isolated)", () => {
     await expect(page.getByTestId("qr-menu-search")).toBeVisible();
 
     const search = page.getByTestId("qr-menu-search");
-    await search.fill("Mercimek");
-    await expect(page.getByText(/Mercimek/i).first()).toBeVisible({ timeout: 10_000 });
+    await search.fill("Izgara");
+    await expect(page.getByText(/Izgara/i).first()).toBeVisible({ timeout: 10_000 });
 
     const categoryBtn = page.locator("[data-testid^='qr-category-'], button").filter({ hasText: /Ana|Hepsi|Yemek/i }).first();
     if (await categoryBtn.count()) {
@@ -106,10 +106,14 @@ test.describe.serial("wexpay guest mutation (isolated)", () => {
     await expect(page.locator("body")).toContainText(/Sipariş alındı|NEW|Hazırlanıyor|Servis/i);
     expect(await page.locator("body").innerText()).not.toMatch(/servise hazır|READY/i);
 
-    // Replay idempotency via API
+    // Replay idempotency via API (Izgara = optional modifiers, safe without option IDs)
     const menu = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
-    const menuBody = (await menu.json()) as { menu: Array<{ products: Array<{ id: string }> }> };
-    const productId = menuBody.menu.flatMap((c) => c.products)[0]?.id;
+    const menuBody = (await menu.json()) as {
+      menu: Array<{ products: Array<{ id: string; name: string }> }>;
+    };
+    const productId = menuBody.menu
+      .flatMap((c) => c.products)
+      .find((product) => /Izgara/i.test(product.name))?.id;
     expect(productId).toBeTruthy();
     const replay = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/order`, {
       headers: { "Idempotency-Key": idemKey },

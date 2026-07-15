@@ -92,6 +92,7 @@ export async function cleanupWexPayE2ERun(options = {}) {
   /** @type {Record<string, number>} */
   const counts = {
     orderItems: 0,
+    orderItemModifiers: 0,
     notifications: 0,
     receipts: 0,
     payments: 0,
@@ -237,6 +238,10 @@ export async function cleanupWexPayE2ERun(options = {}) {
     }
 
     if (orderIds.length) {
+      const modifiers = await prisma.orderItemModifier.deleteMany({
+        where: { orderItem: { orderId: { in: orderIds } } },
+      });
+      counts.orderItemModifiers = modifiers.count;
       const items = await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
       counts.orderItems = items.count;
       const orders = await prisma.customerOrder.deleteMany({ where: { id: { in: orderIds } } });
@@ -259,6 +264,12 @@ export async function cleanupWexPayE2ERun(options = {}) {
     }
 
     report.deleted = counts;
+    // Clear tracked IDs so later suite afterAll hooks don't re-process emptied rows.
+    artifact.orderIds = [];
+    artifact.notificationIds = [];
+    artifact.paymentIds = [];
+    artifact.idempotencyKeys = [];
+    saveRunArtifact(artifact);
     writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf8");
     return report;
   } finally {
