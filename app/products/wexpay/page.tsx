@@ -9,11 +9,11 @@ import {
   Eyebrow,
   FeatureChip,
   PhoneFrame,
-  PricingCard,
   SectionHeading,
   SectionShell,
   WexonIcon,
 } from "@/components/ui";
+import WexPayPricingGrid from "@/components/marketing/WexPayPricingGrid";
 import type { WexonIconName } from "@/types/wexon";
 import { getPublicWexPayPricingPlans } from "@/lib/wexon-public-pricing";
 
@@ -473,16 +473,7 @@ export default async function WexPayPage() {
               ))}
             </div>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {plans.map((plan) => (
-              <PricingCard
-                key={plan.id}
-                plan={plan}
-                href={plan.ctaHref ?? `/demo-request?product=wexpay&plan=${plan.id}&intent=eligibility`}
-                tone="light"
-              />
-            ))}
-          </div>
+          <WexPayPricingGrid plans={plans} disclaimerPlacement="below" />
         </SectionShell>
 
         {/* POS + Core notes */}

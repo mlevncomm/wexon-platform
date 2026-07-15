@@ -15,10 +15,18 @@ export default function PricingCard({ plan, href, tone = "light", className }: P
   const isDark = tone === "dark";
   const highlighted = plan.highlighted;
 
+  const mutedText = highlighted
+    ? "text-emerald-50/80"
+    : isDark
+      ? "text-slate-400"
+      : "text-slate-500";
+  const bodyText = highlighted ? "text-emerald-50" : isDark ? "text-slate-200" : "text-slate-700";
+  const commercialText = highlighted ? "text-emerald-50/90" : isDark ? "text-slate-300" : "text-slate-700";
+
   return (
     <div
       className={cn(
-        "wx-lift relative flex flex-col rounded-[26px] border p-6 sm:p-7",
+        "wx-lift relative flex h-full flex-col rounded-[26px] border p-6 sm:p-7",
         highlighted
           ? "border-emerald-400/50 bg-gradient-to-b from-emerald-500 to-emerald-600 text-white shadow-[0_30px_70px_-28px_rgba(16,185,129,0.7)]"
           : isDark
@@ -59,15 +67,39 @@ export default function PricingCard({ plan, href, tone = "light", className }: P
         >
           {plan.priceLabel}
         </p>
-        <p
-          className={cn(
-            "mt-1 text-xs font-semibold",
-            highlighted ? "text-emerald-50/80" : isDark ? "text-slate-400" : "text-slate-500",
-          )}
-        >
-          {plan.billingNote}
-        </p>
+        <p className={cn("mt-1 text-xs font-semibold", mutedText)}>{plan.billingNote}</p>
       </div>
+
+      {(plan.processingFeeLabel ||
+        plan.setupFeeLabel ||
+        plan.commitmentLabel ||
+        plan.commitmentNote ||
+        plan.settlementDisplay) && (
+        <div className="mt-4 space-y-1.5" aria-label="Ticari koşullar">
+          {plan.processingFeeLabel ? (
+            <p className={cn("break-words text-sm font-semibold leading-snug", commercialText)}>
+              <span className="sr-only">İşlem ücreti: </span>
+              {plan.processingFeeLabel}
+            </p>
+          ) : null}
+          {plan.setupFeeLabel ? (
+            <p className={cn("break-words text-sm leading-snug", bodyText)}>
+              <span className="font-semibold">Kurulum:</span> {plan.setupFeeLabel}
+            </p>
+          ) : null}
+          {plan.commitmentLabel ? (
+            <p className={cn("break-words text-sm leading-snug", bodyText)}>{plan.commitmentLabel}</p>
+          ) : null}
+          {plan.commitmentNote ? (
+            <p className={cn("break-words text-xs leading-relaxed", mutedText)}>{plan.commitmentNote}</p>
+          ) : null}
+          {plan.settlementDisplay ? (
+            <p className={cn("break-words text-xs font-medium leading-relaxed", mutedText)}>
+              {plan.settlementDisplay}
+            </p>
+          ) : null}
+        </div>
+      )}
 
       <ul className="mt-6 flex flex-1 flex-col gap-2.5">
         {plan.features.map((feature) => (

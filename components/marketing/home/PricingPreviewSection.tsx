@@ -1,8 +1,7 @@
 import SectionShell from "@/components/ui/SectionShell";
-import PricingCard from "@/components/ui/PricingCard";
+import WexPayPricingGrid from "@/components/marketing/WexPayPricingGrid";
 import SectionHeading from "./SectionHeading";
 import { getPublicWexPayPricingPlans, startingPriceLabel } from "@/lib/wexon-public-pricing";
-import { WEXPAY_PROCESSING_DISCLAIMER } from "@/lib/wexpay-tier-config";
 
 export default async function PricingPreviewSection() {
   const plans = await getPublicWexPayPricingPlans();
@@ -26,21 +25,16 @@ export default async function PricingPreviewSection() {
           subtitle={`WexPay Essential, Growth, Scale ve Business Suite. Fiyatlar ${startLabel}'dan başlar; uygunluk ve görüşme ile ilerlenir.`}
         />
 
-        <p className="mt-6 text-center text-xs font-semibold text-slate-400">{WEXPAY_PROCESSING_DISCLAIMER}</p>
         <p className="mt-3 text-center text-xs font-semibold text-slate-500">
           Aylık lisans · KDV hariç liste fiyatları (DB kaynaklı) · Canlı satınalma kapalı
         </p>
 
-        <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 lg:items-stretch">
-          {plans.map((plan) => (
-            <PricingCard
-              key={plan.id}
-              plan={plan}
-              href={plan.ctaHref ?? `/demo-request?product=wexpay&plan=${plan.id}&intent=eligibility`}
-              tone="dark"
-            />
-          ))}
-        </div>
+        <WexPayPricingGrid
+          plans={plans}
+          tone="dark"
+          disclaimerPlacement="above"
+          className="mt-12"
+        />
       </div>
     </SectionShell>
   );
