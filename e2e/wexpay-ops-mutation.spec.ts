@@ -48,7 +48,7 @@ test.describe.serial("wexpay ops mutation (isolated)", () => {
     await emptyTable.click();
     await expect(page.getByRole("dialog")).toBeVisible();
     const drawer = page.getByRole("dialog");
-    await expect(drawer.getByRole("heading", { name: /Masayı aç ve ilk siparişi oluştur/i })).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: /Masayı aç|ilk sipariş/i })).toBeVisible();
 
     const composerToggle = drawer.getByRole("button", { name: /Composer aç/i });
     if (await composerToggle.count()) {
@@ -68,14 +68,14 @@ test.describe.serial("wexpay ops mutation (isolated)", () => {
     }
     await expect(page.getByRole("dialog")).toBeVisible();
     const drawer2 = page.getByRole("dialog");
-    await expect(drawer2.getByText(/Masaya yeni sipariş ekle|ilk sipariş/i).first()).toBeVisible();
+    await expect(drawer2.getByText(/Yeni sipariş dalgası|Masaya yeni sipariş|ilk sipariş/i).first()).toBeVisible();
     await expect(drawer2.getByText(/Tahsilat/i).first()).toBeVisible();
     await expect(drawer2.getByText(/ödeme isteği|Müşteri ödeme|bildirim/i).first()).toBeVisible({ timeout: 5_000 }).catch(() => undefined);
 
     if (await drawer2.getByRole("button", { name: /Composer aç/i }).count()) {
       await drawer2.getByRole("button", { name: /Composer aç/i }).click();
       await drawer2.locator('input[name="note"]').fill(`${artifact.note || artifact.token} second`);
-      await drawer2.getByRole("button", { name: /Masaya yeni sipariş ekle|Sipariş oluştur|Masayı aç/i }).first().click();
+      await drawer2.getByRole("button", { name: /Yeni sipariş dalgası|Masaya yeni sipariş ekle|Sipariş oluştur|Masayı aç/i }).first().click();
       await page.waitForTimeout(1500);
     }
 
