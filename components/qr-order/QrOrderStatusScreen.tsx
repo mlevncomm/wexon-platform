@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { qrCard, qrFrameNarrow, qrGhostCta, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
 import {
@@ -34,11 +34,73 @@ export default function QrOrderStatusScreen({
   const [bill, setBill] = useState<QrBillSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [retryDelay, setRetryDelay] = useState(0);
   const inFlight = useRef(false);
   const cancelled = useRef(false);
+  const retryMs = useRef(0);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    cancelled.current = false;
+    retryMs.current = 0;
+
+    async function loadBill() {
+      if (inFlight.current || cancelled.current) return;
+      if (typeof document !== "undefined" && document.hidden) return;
+      inFlight.current = true;
+      try {
+        const response = await fetch(`/api/wexpay/public/${encodeURIComponent(context.qrCode)}/bill`);
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          bill?: QrBillSnapshot;
+        };
+        if (cancelled.current) return;
+        if (!response.ok) {
+          setError(payload.error ?? "Sipariş durumu yüklenemedi.");
+          retryMs.current = Math.min(30_000, retryMs.current ? retryMs.current * 2 : 2_000);
+          return;
+        }
+        setBill(payload.bill ?? null);
+        setError(null);
+        retryMs.current = 0;
+      } catch {
+        if (!cancelled.current) {
+          setError("Bağlantı hatası. Lütfen yenileyin.");
+          retryMs.current = Math.min(30_000, retryMs.current ? retryMs.current * 2 : 2_000);
+        }
+      } finally {
+        if (!cancelled.current) setLoading(false);
+        inFlight.current = false;
+      }
+    }
+
+    const kickoff = window.setTimeout(() => {
+      void loadBill();
+    }, 0);
+
+    const intervalId = window.setInterval(() => {
+      void loadBill();
+    }, 6_000);
+
+    const retryId = window.setInterval(() => {
+      if (retryMs.current > 0 && !document.hidden) {
+        void loadBill();
+      }
+    }, 2_000);
+
+    function onVisibility() {
+      if (!document.hidden) void loadBill();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled.current = true;
+      window.clearTimeout(kickoff);
+      window.clearInterval(intervalId);
+      window.clearInterval(retryId);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [context.qrCode]);
+
+  async function refresh() {
     if (inFlight.current) return;
     inFlight.current = true;
     setError(null);
@@ -50,49 +112,17 @@ export default function QrOrderStatusScreen({
       };
       if (!response.ok) {
         setError(payload.error ?? "Sipariş durumu yüklenemedi.");
-        setRetryDelay((current) => Math.min(30_000, current ? current * 2 : 2_000));
         return;
       }
       setBill(payload.bill ?? null);
-      setRetryDelay(0);
+      retryMs.current = 0;
     } catch {
       setError("Bağlantı hatası. Lütfen yenileyin.");
-      setRetryDelay((current) => Math.min(30_000, current ? current * 2 : 2_000));
     } finally {
       setLoading(false);
       inFlight.current = false;
     }
-  }, [context.qrCode]);
-
-  useEffect(() => {
-    cancelled.current = false;
-    void load();
-
-    const intervalMs = 6_000;
-    const timer = window.setInterval(() => {
-      if (document.hidden || cancelled.current) return;
-      void load();
-    }, intervalMs);
-
-    function onVisibility() {
-      if (!document.hidden) void load();
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      cancelled.current = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [load]);
-
-  useEffect(() => {
-    if (!retryDelay) return;
-    const timer = window.setTimeout(() => {
-      if (!document.hidden) void load();
-    }, retryDelay);
-    return () => window.clearTimeout(timer);
-  }, [retryDelay, load]);
+  }
 
   const orders = (() => {
     if (!bill?.lines?.length) return [] as Array<{ orderNo: string; status: string; total: number }>;
@@ -101,7 +131,6 @@ export default function QrOrderStatusScreen({
       const existing = map.get(line.orderNo);
       if (existing) {
         existing.total += line.lineTotal;
-        // Prefer more advanced kitchen status when lines diverge
         const next = normalizeOrderStatus(line.status);
         const prev = normalizeOrderStatus(existing.status);
         if (statusRank(next) > statusRank(prev)) existing.status = line.status;
@@ -132,7 +161,7 @@ export default function QrOrderStatusScreen({
             Sipariş durumu · {context.tableLabel}
           </h1>
         </div>
-        <button type="button" onClick={() => void load()} className={qrGhostCta} data-testid="qr-status-refresh">
+        <button type="button" onClick={() => void refresh()} className={qrGhostCta} data-testid="qr-status-refresh">
           Yenile
         </button>
       </header>

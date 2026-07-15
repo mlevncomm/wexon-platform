@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import QrModalShell from "@/components/qr-order/QrModalShell";
 import { qrCard, qrGhostCta, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { WAITER_REASON_LABELS, type WaiterReason } from "@/lib/qr-order/types";
@@ -23,10 +23,17 @@ export default function QrWaiterCall({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [coolingDown, setCoolingDown] = useState(false);
+  const cooldownTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimer.current) window.clearTimeout(cooldownTimer.current);
+    };
+  }, []);
 
   async function submit() {
-    if (pending || Date.now() < cooldownUntil) return;
+    if (pending || coolingDown) return;
     setPending(true);
     setError(null);
     try {
@@ -41,15 +48,15 @@ export default function QrWaiterCall({
         return;
       }
       setSuccess(true);
-      setCooldownUntil(Date.now() + COOLDOWN_MS);
+      setCoolingDown(true);
+      if (cooldownTimer.current) window.clearTimeout(cooldownTimer.current);
+      cooldownTimer.current = window.setTimeout(() => setCoolingDown(false), COOLDOWN_MS);
     } catch {
       setError("Bağlantı hatası. Lütfen tekrar deneyin.");
     } finally {
       setPending(false);
     }
   }
-
-  const coolingDown = Date.now() < cooldownUntil;
 
   return (
     <QrModalShell open={open} titleId={titleId} onClose={onClose}>

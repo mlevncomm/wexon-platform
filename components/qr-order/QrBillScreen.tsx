@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import QrModalShell from "@/components/qr-order/QrModalShell";
 import { qrCard, qrFrameNarrow, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
@@ -26,40 +26,43 @@ export default function QrBillScreen({
   const [requestSuccess, setRequestSuccess] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [coolingDown, setCoolingDown] = useState(false);
   const titleId = useId();
   const inFlight = useRef(false);
-
-  const load = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    setError(null);
-    try {
-      const response = await fetch(`/api/wexpay/public/${encodeURIComponent(context.qrCode)}/bill`);
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        bill?: QrBillSnapshot;
-      };
-      if (!response.ok) {
-        setError(payload.error ?? "Hesap yüklenemedi.");
-        return;
-      }
-      setBill(payload.bill ?? null);
-    } catch {
-      setError("Bağlantı hatası. Lütfen tekrar deneyin.");
-    } finally {
-      setLoading(false);
-      inFlight.current = false;
-    }
-  }, [context.qrCode]);
+  const cooldownTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    void load();
-  }, [load]);
+    let cancelled = false;
+    inFlight.current = true;
+    (async () => {
+      try {
+        const response = await fetch(`/api/wexpay/public/${encodeURIComponent(context.qrCode)}/bill`);
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          bill?: QrBillSnapshot;
+        };
+        if (cancelled) return;
+        if (!response.ok) {
+          setError(payload.error ?? "Hesap yüklenemedi.");
+          return;
+        }
+        setBill(payload.bill ?? null);
+        setError(null);
+      } catch {
+        if (!cancelled) setError("Bağlantı hatası. Lütfen tekrar deneyin.");
+      } finally {
+        if (!cancelled) setLoading(false);
+        inFlight.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (cooldownTimer.current) window.clearTimeout(cooldownTimer.current);
+    };
+  }, [context.qrCode]);
 
   async function requestPayment() {
-    if (requestPending || Date.now() < cooldownUntil) return;
+    if (requestPending || coolingDown) return;
     setRequestPending(true);
     setRequestError(null);
     try {
@@ -81,15 +84,15 @@ export default function QrBillScreen({
       }
       setRequestSuccess(true);
       setConfirmOpen(false);
-      setCooldownUntil(Date.now() + COOLDOWN_MS);
+      setCoolingDown(true);
+      if (cooldownTimer.current) window.clearTimeout(cooldownTimer.current);
+      cooldownTimer.current = window.setTimeout(() => setCoolingDown(false), COOLDOWN_MS);
     } catch {
       setRequestError("Bağlantı hatası. Lütfen tekrar deneyin.");
     } finally {
       setRequestPending(false);
     }
   }
-
-  const coolingDown = Date.now() < cooldownUntil;
 
   return (
     <div className={`${qrFrameNarrow} min-h-[100dvh] pb-10 pt-4`}>
