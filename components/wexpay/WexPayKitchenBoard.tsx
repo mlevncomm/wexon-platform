@@ -111,9 +111,12 @@ export default function WexPayKitchenBoard({
           </div>
         </div>
 
-        <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-3">
+        <div className="flex gap-3 overflow-x-auto p-4 sm:p-5 lg:grid lg:grid-cols-3 lg:overflow-visible">
           {grouped.map((column) => (
-            <div key={column.key} className={`min-w-0 rounded-[18px] border p-3 ${column.accent}`}>
+            <div
+              key={column.key}
+              className={`min-w-[16rem] flex-1 shrink-0 rounded-[18px] border p-3 sm:min-w-[18rem] lg:min-w-0 ${column.accent}`}
+            >
               <div className="mb-3 flex items-center justify-between gap-2 px-1">
                 <h3 className="text-sm font-black text-slate-950">{column.label}</h3>
                 <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">

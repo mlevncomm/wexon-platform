@@ -16,8 +16,7 @@ function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayA
 }
 
 /**
- * WexPay access gate + demo-business operasyon layout.
- * Sidebar/dashboard shell kaldırıldı; tüm sayfalar geniş yatay panel kullanır.
+ * WexPay access gate + sticky sidebar workspace shell.
  */
 export default async function WexPayLayout({ children }: { children: ReactNode }) {
   const selector = await resolvePlatformOrganizationSelector();
