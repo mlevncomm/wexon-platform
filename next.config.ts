@@ -43,12 +43,25 @@ const longLivedAssetHeaders = [
   { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
 ];
 
+const noStoreHeaders = [
+  ...securityHeaders,
+  { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
+];
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
       {
         source: "/fonts/:path*",
         headers: longLivedAssetHeaders,
+      },
+      {
+        source: "/api/health",
+        headers: noStoreHeaders,
+      },
+      {
+        source: "/api/health/:path*",
+        headers: noStoreHeaders,
       },
       {
         source: "/:path*",
