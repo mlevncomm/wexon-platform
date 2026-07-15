@@ -42,13 +42,17 @@ If a **demo/inactive** org with safe test entitlement exists:
 
 If no safe fixture: verify UI forms and server actions exist in code only; **do not mutate production customers**.
 
-## E. Eligibility admin görünümü — demo/lead detail
+## E. Eligibility admin görünümü — demo/lead detail (`/admin/support`, `/admin/applications`)
 
-- [ ] `recommendedTier` visible on eligibility-enriched lead metadata (when present)
-- [ ] `reviewStatus` visible
-- [ ] `riskReasons` admin-only (not returned in applicant-facing API responses)
+- [ ] Lead kartında **WexPay Uygunluk Değerlendirmesi** bölümü görünüyor
+- [ ] `recommendedTier` (Önerilen paket) görünüyor
+- [ ] `reviewStatus` badge: Ön uygunluk / Manuel inceleme / Uygun değil / Değerlendirilmedi
+- [ ] Liste veya badge’de önerilen paket + inceleme durumu kısaca görünüyor
+- [ ] `riskReasons` yalnızca admin kartında Türkçe notlar olarak görünüyor
+- [ ] Applicant success mesajında `riskReasons` / internal key yok (network/UI)
+- [ ] “Ön uygunluk nihai onay değildir” disclaimer kartta var
 
-Code references: `lib/wexpay-eligibility.ts` (`toApplicantEligibilitySummary`), `lib/wexon-pre-application-persistence.ts`.
+Code references: `lib/wexpay-eligibility.ts`, `lib/wexpay-eligibility-admin-display.ts`, `components/marketing/WexPayEligibilityAdminCard.tsx`.
 
 ## Public pricing parity (non-Access)
 

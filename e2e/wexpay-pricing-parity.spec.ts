@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const PRICING_PATHS = ["/packages", "/products/wexpay"] as const;
+const VIEWPORTS = [390, 768, 1024, 1440, 1728] as const;
 
 test.describe("wexpay public pricing parity", () => {
   for (const path of PRICING_PATHS) {
@@ -26,6 +27,25 @@ test.describe("wexpay public pricing parity", () => {
 
       const checkoutCta = page.locator('a[href*="/checkout"][href*="wexpay"]');
       await expect(checkoutCta).toHaveCount(0);
+    });
+  }
+
+  for (const path of PRICING_PATHS) {
+    test(`${path} has no horizontal overflow across key viewports`, async ({ page }) => {
+      for (const width of VIEWPORTS) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(path);
+        await expect(page.getByRole("note", { name: "İşlem oranları uyarısı" }).first()).toBeVisible();
+
+        const metrics = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(
+          metrics.scrollWidth,
+          `${path} @ ${width}px should not overflow horizontally`,
+        ).toBeLessThanOrEqual(metrics.clientWidth + 1);
+      }
     });
   }
 });

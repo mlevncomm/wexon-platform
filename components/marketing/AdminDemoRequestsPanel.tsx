@@ -23,6 +23,12 @@ import {
   type DemoLeadStatus,
 } from "@/lib/wexon-demo-request-leads";
 import { demoRequestSourceLabels } from "@/lib/wexon-public-validation";
+import WexPayEligibilityAdminCard from "@/components/marketing/WexPayEligibilityAdminCard";
+import {
+  buildWexPayEligibilityAdminView,
+  eligibilityListBadges,
+  type ReviewStatusBadgeTone,
+} from "@/lib/wexpay-eligibility-admin-display";
 
 type DemoRequestMeta = {
   fullName?: string;
@@ -107,6 +113,39 @@ function sourceBadgeClass(sourceKey: string) {
     default:
       return "bg-slate-100 text-slate-600 ring-slate-200/80";
   }
+}
+
+function eligibilityToneBadgeClass(tone: ReviewStatusBadgeTone) {
+  switch (tone) {
+    case "success":
+      return "bg-emerald-50 text-emerald-800 ring-emerald-100";
+    case "warning":
+      return "bg-amber-50 text-amber-900 ring-amber-100";
+    case "danger":
+      return "bg-rose-50 text-rose-800 ring-rose-100";
+    default:
+      return "bg-slate-100 text-slate-600 ring-slate-200/80";
+  }
+}
+
+function EligibilityListBadges({ metadataJson }: { metadataJson: unknown }) {
+  const badges = eligibilityListBadges(metadataJson);
+  if (!badges.recommendedTierLabel && !badges.reviewStatusLabel) return null;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      {badges.recommendedTierLabel ? (
+        <DemoBadge className="bg-emerald-50 text-emerald-800 ring-emerald-100">
+          {badges.recommendedTierLabel.replace(/^WexPay\s+/i, "")}
+        </DemoBadge>
+      ) : null}
+      {badges.reviewStatusLabel ? (
+        <DemoBadge className={eligibilityToneBadgeClass(badges.reviewStatusTone)}>
+          {badges.reviewStatusLabel}
+        </DemoBadge>
+      ) : null}
+    </div>
+  );
 }
 
 function DemoBadge({ children, className }: { children: string; className: string }) {
@@ -325,6 +364,7 @@ function DemoRequestCard({
         <div className="mt-4 flex flex-wrap gap-2">
           <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
           <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
+          <EligibilityListBadges metadataJson={request.metadataJson} />
         </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -350,6 +390,8 @@ function DemoRequestCard({
           <p className="mt-2 break-words text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
         </div>
 
+        <WexPayEligibilityAdminCard metadataJson={request.metadataJson} />
+
         <MobileCollapsibleSection title="Durum güncelle">
           <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} compact />
         </MobileCollapsibleSection>
@@ -374,6 +416,7 @@ function DemoRequestTableRow({
   const source = resolveSource(meta);
   const email = meta.email?.trim();
   const phone = meta.phone?.trim();
+  const hasEligibilityDetail = buildWexPayEligibilityAdminView(request.metadataJson).hasEligibilitySignal;
 
   return (
     <tr className="align-top transition-colors hover:bg-slate-50/80">
@@ -406,13 +449,31 @@ function DemoRequestTableRow({
         <div className="flex min-w-[108px] flex-col gap-2">
           <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
           <DemoBadge className={`2xl:hidden ${sourceBadgeClass(source.key)}`}>{source.label}</DemoBadge>
+          <div className="xl:hidden">
+            <EligibilityListBadges metadataJson={request.metadataJson} />
+          </div>
         </div>
       </td>
       <td className="hidden min-w-[130px] px-4 py-5 2xl:table-cell xl:px-6">
         <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
       </td>
-      <td className="min-w-[240px] px-4 py-5 xl:min-w-[320px] xl:px-6">
-        <p className="line-clamp-4 break-words text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
+      <td className="hidden min-w-[140px] px-4 py-5 xl:table-cell xl:px-6">
+        <EligibilityListBadges metadataJson={request.metadataJson} />
+      </td>
+      <td className="min-w-[220px] px-4 py-5 xl:min-w-[280px] xl:px-6">
+        <div className="space-y-3">
+          <p className="line-clamp-4 break-words text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
+          {hasEligibilityDetail ? (
+            <details>
+              <summary className="cursor-pointer text-xs font-bold text-emerald-700 hover:underline">
+                Uygunluk detayı
+              </summary>
+              <div className="mt-3 max-w-xl">
+                <WexPayEligibilityAdminCard metadataJson={request.metadataJson} />
+              </div>
+            </details>
+          ) : null}
+        </div>
       </td>
       <td className="min-w-[280px] px-4 py-5 xl:min-w-[340px] xl:px-6">
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
@@ -450,6 +511,7 @@ function DemoRequestTable({
             <th className="hidden px-4 py-4 font-black xl:table-cell xl:px-6">Telefon</th>
             <th className="px-4 py-4 font-black xl:px-6">Ürün</th>
             <th className="hidden px-4 py-4 font-black 2xl:table-cell xl:px-6">Kaynak</th>
+            <th className="hidden px-4 py-4 font-black xl:table-cell xl:px-6">Uygunluk</th>
             <th className="px-4 py-4 font-black xl:px-6">Talep notu</th>
             <th className="px-4 py-4 font-black xl:px-6">Takip</th>
             <th className="px-4 py-4 font-black xl:px-6">Aksiyon</th>
