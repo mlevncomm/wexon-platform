@@ -58,12 +58,13 @@ export default function QrLanding({
               type="button"
               data-testid="qr-cta-order"
               onClick={onBrowseMenu}
-              disabled={menuEmpty}
               className={`${qrPrimaryCta} flex-col gap-1 !items-stretch !justify-start px-5 py-4 text-left sm:py-5`}
             >
               <span className="text-[15px] font-black leading-none sm:text-base">Menüyü İncele</span>
               <span className="text-xs font-semibold text-emerald-50/95 sm:text-[13px]">
-                Kategoriler, ürünler ve sepet — tek akışta sipariş
+                {menuEmpty
+                  ? "Menü şu an boş — personelden yardım isteyin"
+                  : "Kategoriler, ürünler ve sepet — tek akışta sipariş"}
               </span>
             </button>
 
@@ -104,8 +105,7 @@ export default function QrLanding({
           type="button"
           data-testid="qr-cta-browse"
           onClick={onBrowseMenu}
-          disabled={menuEmpty}
-          className={`${qrGhostCta} max-w-xs disabled:opacity-40`}
+          className={`${qrGhostCta} max-w-xs`}
         >
           Menüyü İncele
         </button>

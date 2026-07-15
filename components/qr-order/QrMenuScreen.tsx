@@ -126,14 +126,27 @@ export default function QrMenuScreen({
               className="min-h-11 w-full rounded-2xl border border-slate-200/90 bg-white/90 px-4 text-sm font-semibold text-slate-950 outline-none focus-visible:border-emerald-300 focus-visible:ring-4 focus-visible:ring-emerald-100"
             />
           </label>
+
+          {tabs.length > 0 ? (
+            <div className="mt-3 lg:hidden">
+              <QrCategoryTabs
+                categories={tabs}
+                activeId={activeCategoryId || tabs[0].id}
+                onSelect={setActiveCategoryId}
+                embedded
+              />
+            </div>
+          ) : null}
         </header>
 
         {tabs.length > 0 ? (
-          <QrCategoryTabs
-            categories={tabs}
-            activeId={activeCategoryId || tabs[0].id}
-            onSelect={setActiveCategoryId}
-          />
+          <div className="hidden lg:block">
+            <QrCategoryTabs
+              categories={tabs}
+              activeId={activeCategoryId || tabs[0].id}
+              onSelect={setActiveCategoryId}
+            />
+          </div>
         ) : null}
 
         <div

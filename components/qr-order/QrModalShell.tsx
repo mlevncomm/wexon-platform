@@ -72,7 +72,7 @@ export default function QrModalShell({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/35 backdrop-blur-[2px] sm:items-center sm:p-4"
       role="presentation"
     >
       <button type="button" className="absolute inset-0" aria-label="Paneli kapat" onClick={onClose} />
