@@ -380,6 +380,11 @@ function CashierTableBody({
                       <span>
                         {item.quantity}× {item.name}
                         <span className="ml-1 font-medium text-slate-400">@{formatLira(item.unitPrice)}</span>
+                        {item.modifiers?.length ? (
+                          <span className="mt-0.5 block text-[11px] font-medium text-slate-400">
+                            {item.modifiers.map((modifier) => `${modifier.groupName}: ${modifier.optionName}`).join(" · ")}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="tabular-nums text-slate-800">{formatLira(item.lineTotal)}</span>
                     </li>
