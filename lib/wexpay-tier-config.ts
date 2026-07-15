@@ -18,7 +18,7 @@ export const WEXPAY_LEGACY_PLAN_KEY_MAP: Record<string, WexPayTierKey> = {
 };
 
 export const WEXPAY_PROCESSING_DISCLAIMER =
-  "İş modeli, işlem hacmi, risk değerlendirmesi ve ödeme sağlayıcısı onayına bağlıdır.";
+  "İşlem oranları; iş modeli, işlem hacmi, risk değerlendirmesi ve ödeme sağlayıcısı onayına bağlıdır.";
 
 export const WEXPAY_COMMITMENT_LABEL = "Aylık minimum işlem taahhüdü";
 export const WEXPAY_COMMITMENT_NOTE =
