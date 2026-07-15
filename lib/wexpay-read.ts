@@ -1,7 +1,7 @@
 import { OrderStatus, PaymentStatus, TableStatus } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { coreEntitlementNumber, type CoreEntitlementMap, evaluateProductAccess } from "@/lib/wexon-core-access";
-import { filterOperationalOrders, resolveOperationalTableSession } from "@/lib/wexpay-account";
+import { filterChargeableOrders, filterOperationalOrders, resolveOperationalTableSession } from "@/lib/wexpay-account";
 
 /**
  * Tenant-scoped read queries for the real WexPay operator UI.
@@ -329,7 +329,10 @@ export type OperationsTable = {
   remainingAmount: number;
   receiptRequested: boolean;
   orderCount: number;
+  /** NEW/PREPARING — kitchen-open waves */
   activeOrders: OperationsOrder[];
+  /** NEW/PREPARING/SERVED session bill waves (CANCELLED excluded) */
+  billOrders: OperationsOrder[];
   payments: OperationsPayment[];
   orderHistory: OperationsOrder[];
 };
@@ -442,6 +445,7 @@ export async function listBranchTableOperations(
         receiptRequested: false,
         orderCount: 0,
         activeOrders: [],
+        billOrders: [],
         payments: [],
         orderHistory,
       };
@@ -454,6 +458,9 @@ export async function listBranchTableOperations(
       receiptRequests: table.receiptRequests,
     });
     const operationalOrders = filterOperationalOrders(session.orders);
+    const billOrders = filterChargeableOrders(session.orders).slice().sort((a, b) => {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
     const account = session.account;
 
     return {
@@ -466,8 +473,9 @@ export async function listBranchTableOperations(
       paidAmount: account.paidAmount,
       remainingAmount: account.remainingAmount,
       receiptRequested: account.receiptRequested,
-      orderCount: operationalOrders.length,
+      orderCount: billOrders.length,
       activeOrders: mapTableOrders(operationalOrders),
+      billOrders: mapTableOrders(billOrders),
       orderHistory,
       payments: session.payments.map((payment) => ({
         id: payment.id,

@@ -27,9 +27,35 @@ export type TableAccountSnapshot = {
   status: TableStatus;
 };
 
+export type TableBillWaveLine = {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+export type TableBillWave = {
+  orderId: string;
+  orderNo: string;
+  status: string;
+  createdAt: string;
+  note: string | null;
+  subtotal: number;
+  items: TableBillWaveLine[];
+};
+
 const OPEN_ORDER_STATUSES = new Set<string>([OrderStatus.NEW, OrderStatus.PREPARING]);
 const CHARGEABLE_ORDER_STATUSES = new Set<string>([OrderStatus.NEW, OrderStatus.PREPARING, OrderStatus.SERVED]);
 const PAID_LIKE_PAYMENT_STATUSES = new Set<string>([PaymentStatus.PAID, PaymentStatus.PARTIAL]);
+
+export function isOpenOrderStatus(status: string) {
+  return OPEN_ORDER_STATUSES.has(String(status));
+}
+
+export function isChargeableOrderStatus(status: string) {
+  return CHARGEABLE_ORDER_STATUSES.has(String(status));
+}
 
 function money(value: number | { toString(): string }) {
   const amount = typeof value === "number" ? value : Number(value);
@@ -165,6 +191,11 @@ export function filterOperationalOrders<T extends { status: string }>(orders: T[
   return orders.filter((order) => OPEN_ORDER_STATUSES.has(String(order.status)));
 }
 
+/** Bill-visible waves: NEW/PREPARING/SERVED. CANCELLED excluded. */
+export function filterChargeableOrders<T extends { status: string }>(orders: T[]): T[] {
+  return orders.filter((order) => CHARGEABLE_ORDER_STATUSES.has(String(order.status)));
+}
+
 export function filterTableSessionRecords<T extends { createdAt: Date }>(
   records: T[],
   lastClosedAt: Date | null | undefined,
@@ -176,6 +207,86 @@ export function filterTableSessionRecords<T extends { createdAt: Date }>(
 
   const scopedRecords = scopeRecordsAfterClose(records, lastClosedAt);
   return filterRecordsFromSessionStart(scopedRecords, sessionStart, lastClosedAt);
+}
+
+/**
+ * Honest table-close gate from account snapshot.
+ * Payment-request notifications never affect remainingAmount / hasOpenOrders.
+ */
+export function canCloseTableFromAccount(account: Pick<TableAccountSnapshot, "hasOpenOrders" | "remainingAmount">) {
+  return !account.hasOpenOrders && account.remainingAmount <= 0;
+}
+
+export function closeTableBlockReason(
+  account: Pick<TableAccountSnapshot, "hasOpenOrders" | "remainingAmount">,
+): string | null {
+  if (account.hasOpenOrders) {
+    return "Aktif NEW/PREPARING sipariş varken masa kapatılamaz. Önce siparişleri servis edin veya iptal edin.";
+  }
+  if (account.remainingAmount > 0) {
+    return "Kalan ödeme varken masa kapatılamaz. Önce adisyonu kapatın. Ödeme talebi tahsilat değildir.";
+  }
+  return null;
+}
+
+/** Server-side wave totals from line items (never trust client subtotal alone). */
+export function sumOrderItemsSubtotal(
+  items: Array<{ quantity: number; unitPrice: number | { toString(): string } }>,
+) {
+  return roundMoney(
+    items.reduce((sum, item) => sum + money(item.unitPrice) * Math.max(0, item.quantity), 0),
+  );
+}
+
+export function buildTableBillWaves<
+  T extends {
+    id: string;
+    orderNo: string;
+    status: string;
+    note?: string | null;
+    createdAt: Date | string;
+    subtotal: number | { toString(): string };
+    items: Array<{
+      id: string;
+      productName?: string;
+      name?: string;
+      quantity: number;
+      unitPrice: number | { toString(): string };
+      totalPrice?: number | { toString(): string };
+    }>;
+  },
+>(orders: T[]): TableBillWave[] {
+  return filterChargeableOrders(orders)
+    .slice()
+    .sort((a, b) => {
+      const aTime = new Date(a.createdAt).getTime();
+      const bTime = new Date(b.createdAt).getTime();
+      return aTime - bTime;
+    })
+    .map((order) => {
+      const items = order.items.map((item) => {
+        const unitPrice = money(item.unitPrice);
+        const lineTotal =
+          item.totalPrice !== undefined ? money(item.totalPrice) : roundMoney(unitPrice * item.quantity);
+        return {
+          id: item.id,
+          name: item.productName ?? item.name ?? "Ürün",
+          quantity: item.quantity,
+          unitPrice,
+          lineTotal,
+        };
+      });
+      const itemSubtotal = sumOrderItemsSubtotal(items);
+      return {
+        orderId: order.id,
+        orderNo: order.orderNo,
+        status: String(order.status),
+        createdAt: typeof order.createdAt === "string" ? order.createdAt : order.createdAt.toISOString(),
+        note: order.note ?? null,
+        subtotal: itemSubtotal > 0 ? itemSubtotal : roundMoney(money(order.subtotal)),
+        items,
+      };
+    });
 }
 
 export function calculateTableAccount(input: {
