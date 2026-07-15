@@ -24,6 +24,7 @@
     "test:e2e:core": "playwright test e2e/core-wide-workspace.spec.ts",
     "test:e2e:wexpay": "playwright test e2e/wexpay-app-wide-workspace.spec.ts",
     "test:e2e:wexpay-ops": "playwright test e2e/wexpay-ops-workspace.spec.ts",
+    "test:e2e:wexpay-guest": "playwright test e2e/wexpay-guest-experience.spec.ts e2e/qr-customer-order.spec.ts",
     "test:e2e:security": "playwright test e2e/security.spec.ts",
     "test:e2e:qr": "playwright test e2e/qr-customer-order.spec.ts e2e/public-checkout.spec.ts e2e/qr-order-api.spec.ts",
     "test:api": "playwright test e2e/qr-order-api.spec.ts e2e/public-checkout.spec.ts",
