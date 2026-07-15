@@ -1,19 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import QrStatusBadge from "@/components/qr-order/QrStatusBadge";
-import { qrCard, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta, qrFrameNarrow } from "@/components/qr-order/qr-theme";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import QrModalShell from "@/components/qr-order/QrModalShell";
+import { qrCard, qrFrameNarrow, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
-import type { QrBillSnapshot, QrTableContext } from "@/lib/qr-order/types";
+import { orderStatusLabel, type QrBillSnapshot, type QrTableContext } from "@/lib/qr-order/types";
+
+const COOLDOWN_MS = 20_000;
 
 export default function QrBillScreen({
   context,
   onBack,
   onCallWaiter,
+  onTrackOrders,
 }: {
   context: QrTableContext;
   onBack: () => void;
   onCallWaiter: () => void;
+  onTrackOrders?: () => void;
 }) {
   const [bill, setBill] = useState<QrBillSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,37 +25,41 @@ export default function QrBillScreen({
   const [requestPending, setRequestPending] = useState(false);
   const [requestSuccess, setRequestSuccess] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const titleId = useId();
+  const inFlight = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`/api/wexpay/public/${encodeURIComponent(context.qrCode)}/bill`);
-        const payload = (await response.json().catch(() => ({}))) as {
-          error?: string;
-          bill?: QrBillSnapshot;
-        };
-        if (!response.ok) {
-          if (!cancelled) setError(payload.error ?? "Hesap yüklenemedi.");
-          return;
-        }
-        if (!cancelled) setBill(payload.bill ?? null);
-      } catch {
-        if (!cancelled) setError("Bağlantı hatası. Lütfen tekrar deneyin.");
-      } finally {
-        if (!cancelled) setLoading(false);
+  const load = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setError(null);
+    try {
+      const response = await fetch(`/api/wexpay/public/${encodeURIComponent(context.qrCode)}/bill`);
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        bill?: QrBillSnapshot;
+      };
+      if (!response.ok) {
+        setError(payload.error ?? "Hesap yüklenemedi.");
+        return;
       }
+      setBill(payload.bill ?? null);
+    } catch {
+      setError("Bağlantı hatası. Lütfen tekrar deneyin.");
+    } finally {
+      setLoading(false);
+      inFlight.current = false;
     }
-    void load();
-    return () => {
-      cancelled = true;
-    };
   }, [context.qrCode]);
 
-  async function requestPayment(mode: string) {
-    if (requestPending) return;
+  useEffect(() => {
+    setLoading(true);
+    void load();
+  }, [load]);
+
+  async function requestPayment() {
+    if (requestPending || Date.now() < cooldownUntil) return;
     setRequestPending(true);
     setRequestError(null);
     try {
@@ -60,21 +68,28 @@ export default function QrBillScreen({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode }),
+          body: JSON.stringify({ mode: "full_bill" }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        charged?: boolean;
+      };
       if (!response.ok) {
         setRequestError(payload.error ?? "Ödeme talebi gönderilemedi.");
         return;
       }
       setRequestSuccess(true);
+      setConfirmOpen(false);
+      setCooldownUntil(Date.now() + COOLDOWN_MS);
     } catch {
       setRequestError("Bağlantı hatası. Lütfen tekrar deneyin.");
     } finally {
       setRequestPending(false);
     }
   }
+
+  const coolingDown = Date.now() < cooldownUntil;
 
   return (
     <div className={`${qrFrameNarrow} min-h-[100dvh] pb-10 pt-4`}>
@@ -83,7 +98,7 @@ export default function QrBillScreen({
           ←
         </button>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-800">
             Masa hesabı
           </p>
           <h1 className="truncate text-lg font-black tracking-tight text-slate-950">
@@ -94,13 +109,13 @@ export default function QrBillScreen({
 
       {loading ? (
         <div className="mt-6 space-y-3" data-testid="qr-bill-loading">
-          <div className="h-28 animate-pulse rounded-[28px] bg-white/70" />
-          <div className="h-44 animate-pulse rounded-[28px] bg-white/70" />
+          <div className="h-28 animate-pulse rounded-[28px] bg-white/70 motion-reduce:animate-none" />
+          <div className="h-44 animate-pulse rounded-[28px] bg-white/70 motion-reduce:animate-none" />
         </div>
       ) : null}
 
       {error ? (
-        <p className="mt-6 rounded-[24px] bg-rose-50 px-4 py-4 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
+        <p role="alert" className="mt-6 rounded-[24px] bg-rose-50 px-4 py-4 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
           {error}
         </p>
       ) : null}
@@ -124,7 +139,7 @@ export default function QrBillScreen({
                         {line.quantity}× {line.name}
                       </p>
                       <p className="mt-0.5 text-xs font-semibold text-slate-400">
-                        {line.orderNo} · {line.status}
+                        {line.orderNo} · {orderStatusLabel(line.status)}
                       </p>
                     </div>
                     <p className="shrink-0 text-sm font-black tabular-nums text-slate-950">
@@ -145,7 +160,7 @@ export default function QrBillScreen({
                 </div>
                 <div className="mt-3 flex justify-between border-t border-emerald-100/80 pt-3 text-lg font-black text-slate-950">
                   <span>Kalan</span>
-                  <span data-testid="qr-bill-remaining" className="tabular-nums text-emerald-700">
+                  <span data-testid="qr-bill-remaining" className="tabular-nums text-emerald-800">
                     {formatTry(bill.remainingAmount)}
                   </span>
                 </div>
@@ -154,36 +169,14 @@ export default function QrBillScreen({
           )}
 
           <div
-            className="rounded-[28px] border border-emerald-100/80 bg-gradient-to-br from-emerald-50/90 to-lime-50/70 p-5"
-            data-testid="qr-online-pay-soon"
+            className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5"
+            data-testid="qr-pay-in-restaurant"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-black text-emerald-950">Online ödeme yakında</p>
-                <p className="mt-1.5 text-xs font-semibold leading-relaxed text-emerald-900/80">
-                  Bu ekrandan kart ile ödeme başlatılmıyor. Garsona ödeme talebi gönderebilir veya
-                  masada ödeme yapabilirsiniz.
-                </p>
-              </div>
-              <QrStatusBadge tone="mint">Pilot</QrStatusBadge>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <p className="px-1 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
-              Bölüşerek ödeme
+            <p className="text-sm font-black text-slate-950">Ödeme restoranda alınır</p>
+            <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-500">
+              Bu ekrandan kart veya online tahsilat başlatılmaz. Ödeme talebi yalnızca restorana
+              bildirim gönderir; tutar tahsil edilmiş sayılmaz.
             </p>
-            {["Tüm hesabı öde", "Kendi ürünlerimi öde", "Tutar girerek öde"].map((label) => (
-              <button
-                key={label}
-                type="button"
-                disabled
-                className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-slate-200/80 bg-white/60 px-4 text-sm font-bold text-slate-400"
-              >
-                <span>{label}</span>
-                <span className="text-[10px] font-black uppercase tracking-wide">Yakında</span>
-              </button>
-            ))}
           </div>
 
           {requestSuccess ? (
@@ -191,27 +184,35 @@ export default function QrBillScreen({
               className={`${qrCard} border-emerald-200 bg-emerald-50/80 p-5`}
               data-testid="qr-payment-request-success"
             >
-              <p className="text-sm font-black text-emerald-950">Ödeme talebi restorana iletildi</p>
+              <p className="text-sm font-black text-emerald-950">
+                Ödeme talebiniz restorana iletildi.
+              </p>
               <p className="mt-1 text-xs font-semibold text-emerald-800">
-                Garson ödeme için masanıza yönlendirilecek.
+                Bu bir tahsilat değildir. Personel masanıza yönlendirilebilir.
               </p>
             </div>
           ) : (
             <button
               type="button"
               data-testid="qr-payment-request"
-              onClick={() => void requestPayment("full_bill")}
-              disabled={requestPending}
+              onClick={() => setConfirmOpen(true)}
+              disabled={requestPending || coolingDown}
               className={qrPrimaryCta}
             >
-              {requestPending ? "Gönderiliyor…" : "Garsona ödeme talebi gönder"}
+              {coolingDown ? "Lütfen biraz bekleyin…" : "Ödeme talebi gönder"}
             </button>
           )}
 
           {requestError ? (
-            <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
+            <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
               {requestError}
             </p>
+          ) : null}
+
+          {onTrackOrders ? (
+            <button type="button" onClick={onTrackOrders} className={qrGhostCta}>
+              Siparişleri takip et
+            </button>
           ) : null}
 
           <button type="button" onClick={onCallWaiter} className={qrGhostCta}>
@@ -219,6 +220,31 @@ export default function QrBillScreen({
           </button>
         </div>
       ) : null}
+
+      <QrModalShell open={confirmOpen} titleId={titleId} onClose={() => setConfirmOpen(false)}>
+        <div className="w-full max-w-md rounded-[28px] border border-white/70 bg-white p-6 shadow-2xl">
+          <h2 id={titleId} className="text-xl font-black text-slate-950">
+            Ödeme talebi gönderilsin mi?
+          </h2>
+          <p className="mt-2 text-sm font-semibold text-slate-500">
+            Restorana bildirim gider. Karttan veya cüzdandan otomatik tahsilat yapılmaz.
+          </p>
+          <div className="mt-5 space-y-2">
+            <button
+              type="button"
+              data-testid="qr-payment-request-confirm"
+              onClick={() => void requestPayment()}
+              disabled={requestPending}
+              className={qrPrimaryCta}
+            >
+              {requestPending ? "Gönderiliyor…" : "Evet, talep gönder"}
+            </button>
+            <button type="button" data-qr-modal-close onClick={() => setConfirmOpen(false)} className={qrGhostCta}>
+              Vazgeç
+            </button>
+          </div>
+        </div>
+      </QrModalShell>
     </div>
   );
 }

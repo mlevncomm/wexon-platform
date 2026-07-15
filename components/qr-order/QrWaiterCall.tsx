@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { qrCard, qrPrimaryCta } from "@/components/qr-order/qr-theme";
+import { useId, useState } from "react";
+import QrModalShell from "@/components/qr-order/QrModalShell";
+import { qrCard, qrGhostCta, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { WAITER_REASON_LABELS, type WaiterReason } from "@/lib/qr-order/types";
 
 const REASONS = Object.keys(WAITER_REASON_LABELS) as WaiterReason[];
+const COOLDOWN_MS = 20_000;
 
 export default function QrWaiterCall({
   qrCode,
@@ -15,16 +17,16 @@ export default function QrWaiterCall({
   open: boolean;
   onClose: () => void;
 }) {
+  const titleId = useId();
   const [reason, setReason] = useState<WaiterReason>("order_help");
   const [note, setNote] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  if (!open) return null;
+  const [cooldownUntil, setCooldownUntil] = useState(0);
 
   async function submit() {
-    if (pending) return;
+    if (pending || Date.now() < cooldownUntil) return;
     setPending(true);
     setError(null);
     try {
@@ -39,6 +41,7 @@ export default function QrWaiterCall({
         return;
       }
       setSuccess(true);
+      setCooldownUntil(Date.now() + COOLDOWN_MS);
     } catch {
       setError("Bağlantı hatası. Lütfen tekrar deneyin.");
     } finally {
@@ -46,24 +49,21 @@ export default function QrWaiterCall({
     }
   }
 
+  const coolingDown = Date.now() < cooldownUntil;
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-[2px] sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="qr-waiter-title"
-    >
+    <QrModalShell open={open} titleId={titleId} onClose={onClose}>
       <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur-md sm:max-w-lg sm:p-6">
         {success ? (
-          <div className="text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-2xl font-black text-white">
+          <div className="text-center" data-testid="qr-waiter-success">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-2xl font-black text-white">
               ✓
             </div>
-            <p id="qr-waiter-title" className="mt-4 text-xl font-black text-slate-950">
-              Garson çağrıldı
+            <p id={titleId} className="mt-4 text-xl font-black text-slate-950">
+              Garson çağrınız restorana iletildi.
             </p>
             <p className="mt-2 text-sm font-semibold text-slate-500">
-              Talebiniz masanıza bağlı olarak iletildi. Personel en kısa sürede gelecek.
+              Bu bir bildirimdir. Çağrı kabul veya takip durumu bu ekranda gösterilmez.
             </p>
             <button
               type="button"
@@ -82,13 +82,16 @@ export default function QrWaiterCall({
           <>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p id="qr-waiter-title" className="text-xl font-black text-slate-950">
+                <p id={titleId} className="text-xl font-black text-slate-950">
                   Garson çağır
                 </p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">Nasıl yardımcı olalım?</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">
+                  Talebiniz restorana iletilir. Durum takibi yoktur.
+                </p>
               </div>
               <button
                 type="button"
+                data-qr-modal-close
                 onClick={onClose}
                 className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border border-slate-200 text-sm font-bold text-slate-600"
                 aria-label="Kapat"
@@ -122,12 +125,13 @@ export default function QrWaiterCall({
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={2}
-                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold text-slate-950 outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                maxLength={200}
+                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold text-slate-950 outline-none focus-visible:border-emerald-300 focus-visible:ring-4 focus-visible:ring-emerald-100"
               />
             </label>
 
             {error ? (
-              <p className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
+              <p role="alert" className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
                 {error}
               </p>
             ) : null}
@@ -136,14 +140,17 @@ export default function QrWaiterCall({
               type="button"
               data-testid="qr-waiter-submit"
               onClick={() => void submit()}
-              disabled={pending}
+              disabled={pending || coolingDown}
               className={`${qrPrimaryCta} mt-4`}
             >
-              {pending ? "Gönderiliyor…" : "Garsonu çağır"}
+              {pending ? "Gönderiliyor…" : coolingDown ? "Lütfen biraz bekleyin…" : "Garsonu çağır"}
+            </button>
+            <button type="button" onClick={onClose} className={`${qrGhostCta} mt-2`}>
+              Vazgeç
             </button>
           </>
         )}
       </div>
-    </div>
+    </QrModalShell>
   );
 }
