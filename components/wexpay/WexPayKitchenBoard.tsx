@@ -70,6 +70,11 @@ function KitchenOrderCard({
           <li key={item.id} className="flex items-center justify-between gap-2 text-xs">
             <span className="min-w-0 truncate font-medium text-slate-600">
               <span className="font-black text-slate-800">{item.quantity}×</span> {item.name}
+              {item.modifiers?.length ? (
+                <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">
+                  {item.modifiers.map((modifier) => `${modifier.groupName}: ${modifier.optionName}`).join(" · ")}
+                </span>
+              ) : null}
             </span>
             <span className="shrink-0 font-bold text-slate-700">{formatLira(item.lineTotal)}</span>
           </li>

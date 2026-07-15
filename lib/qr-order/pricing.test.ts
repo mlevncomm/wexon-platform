@@ -69,6 +69,12 @@ describe("qr-order pricing", () => {
     const b = buildCartLineKey("p1", "Soğansız");
     assert.notEqual(a, b);
   });
+
+  it("builds same cart key when modifier option order differs", () => {
+    const a = buildCartLineKey("p1", "", ["opt-b", "opt-a"]);
+    const b = buildCartLineKey("p1", "", ["opt-a", "opt-b"]);
+    assert.equal(a, b);
+  });
 });
 
 describe("qr-order cart key isolation", () => {

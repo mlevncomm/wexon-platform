@@ -1,6 +1,7 @@
 import { writeAuditFailure } from "@/lib/wexon-audit";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
 import { getPublicBranchMenu, resolvePublicTableByQr } from "@/lib/wexpay-read";
+import { toPublicMenuModifierGroups } from "@/lib/wexpay-order-pricing";
 
 /**
  * PUBLIC QR table resolution -> GET /api/wexpay/public/[qrCode]
@@ -40,15 +41,26 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
     menu: categories.map((category) => ({
       id: category.id,
       name: category.name,
-      products: category.products.map((product) => ({
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        price: Number(product.price),
-        currency: product.currency,
-        imageUrl: product.imageUrl,
-        isPopular: product.isPopular,
-      })),
+      products: category.products.map((product) => {
+        const modifierGroups = toPublicMenuModifierGroups(
+          product.productModifierGroups?.map((link) => ({
+            groupId: link.groupId,
+            sortOrder: link.sortOrder,
+            isActive: link.isActive,
+            group: link.group,
+          })),
+        );
+        return {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          price: Number(product.price),
+          currency: product.currency,
+          imageUrl: product.imageUrl,
+          isPopular: product.isPopular,
+          ...(modifierGroups.length > 0 ? { modifierGroups } : {}),
+        };
+      }),
     })),
   });
 }

@@ -1,5 +1,22 @@
 export type QrView = "landing" | "menu" | "cart" | "success" | "bill" | "status";
 
+export type QrModifierOption = {
+  id: string;
+  name: string;
+  priceDelta: number;
+  sortOrder: number;
+};
+
+export type QrModifierGroup = {
+  id: string;
+  name: string;
+  selectionType: string;
+  minSelect: number;
+  maxSelect: number;
+  sortOrder: number;
+  options: QrModifierOption[];
+};
+
 export type QrProduct = {
   id: string;
   name: string;
@@ -8,6 +25,8 @@ export type QrProduct = {
   currency: string;
   imageUrl?: string | null;
   isPopular?: boolean;
+  /** Present only when the product has active linked modifier groups. */
+  modifierGroups?: QrModifierGroup[];
 };
 
 export type QrCategory = {
@@ -49,6 +68,12 @@ export type QrBillLine = {
   lineTotal: number;
   orderNo: string;
   status: string;
+  modifiers?: Array<{
+    groupName: string;
+    optionName: string;
+    priceDelta: number;
+    sortOrder: number;
+  }>;
 };
 
 export type QrBillSnapshot = {

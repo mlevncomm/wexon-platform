@@ -33,6 +33,12 @@ export type TableBillWaveLine = {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  modifiers: Array<{
+    groupName: string;
+    optionName: string;
+    priceDelta: number;
+    sortOrder: number;
+  }>;
 };
 
 export type TableBillWave = {
@@ -229,12 +235,21 @@ export function closeTableBlockReason(
   return null;
 }
 
-/** Server-side wave totals from line items (never trust client subtotal alone). */
+/** Server-side wave totals from persisted line totals (modifier-aware). */
 export function sumOrderItemsSubtotal(
-  items: Array<{ quantity: number; unitPrice: number | { toString(): string } }>,
+  items: Array<{
+    quantity: number;
+    unitPrice: number | { toString(): string };
+    lineTotal?: number | { toString(): string };
+    totalPrice?: number | { toString(): string };
+  }>,
 ) {
   return roundMoney(
-    items.reduce((sum, item) => sum + money(item.unitPrice) * Math.max(0, item.quantity), 0),
+    items.reduce((sum, item) => {
+      if (item.lineTotal !== undefined) return sum + money(item.lineTotal);
+      if (item.totalPrice !== undefined) return sum + money(item.totalPrice);
+      return sum + money(item.unitPrice) * Math.max(0, item.quantity);
+    }, 0),
   );
 }
 
@@ -253,6 +268,12 @@ export function buildTableBillWaves<
       quantity: number;
       unitPrice: number | { toString(): string };
       totalPrice?: number | { toString(): string };
+      modifiers?: Array<{
+        groupName: string;
+        optionName: string;
+        priceDelta: number | { toString(): string };
+        sortOrder: number;
+      }>;
     }>;
   },
 >(orders: T[]): TableBillWave[] {
@@ -274,6 +295,15 @@ export function buildTableBillWaves<
           quantity: item.quantity,
           unitPrice,
           lineTotal,
+          modifiers: (item.modifiers ?? [])
+            .slice()
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((modifier) => ({
+              groupName: modifier.groupName,
+              optionName: modifier.optionName,
+              priceDelta: money(modifier.priceDelta),
+              sortOrder: modifier.sortOrder,
+            })),
         };
       });
       const itemSubtotal = sumOrderItemsSubtotal(items);

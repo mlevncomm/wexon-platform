@@ -5,18 +5,15 @@ import {
   type WexPayPaymentProviderKey,
 } from "@/lib/wexpay-payment-provider";
 import { WEXPAY_PSP_PROVIDER_KEYS, type WexPayPspProviderKey } from "@/lib/wexpay-provider-credentials";
+import { WexPayValidationError } from "@/lib/wexpay-validation-error";
+
+export { WexPayValidationError };
 
 /**
  * Input validation for the real WexPay operator app. Mirrors the existing
  * customer/admin validation style: pure functions that read a FormData and
  * throw `WexPayValidationError` on invalid input.
  */
-export class WexPayValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "WexPayValidationError";
-  }
-}
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -220,7 +217,12 @@ export function parseProductUpdate(formData: FormData) {
 // FormData server-action parsers and the JSON API payload parsers.
 // ---------------------------------------------------------------------------
 
-export type OrderItemInput = { productId: string; quantity: number };
+export type OrderItemInput = {
+  productId: string;
+  quantity: number;
+  /** Server-validated modifier option IDs only — no names/prices from client. */
+  modifierOptionIds?: string[];
+};
 
 export const PUBLIC_NOTE_MAX_LENGTH = 500;
 export const PUBLIC_ORDER_ITEMS_MAX = 50;
@@ -250,7 +252,7 @@ export function validatePublicNote(raw: unknown, label = "Not"): string | null {
   return note;
 }
 
-/** Accepts an array or a JSON string of `{ productId, quantity }` items. */
+/** Accepts an array or a JSON string of `{ productId, quantity, modifierOptionIds? }` items. */
 export function validateOrderItems(raw: unknown): OrderItemInput[] {
   let value: unknown = raw;
   if (typeof raw === "string") {
@@ -270,15 +272,58 @@ export function validateOrderItems(raw: unknown): OrderItemInput[] {
     if (!item || typeof item !== "object") {
       throw new WexPayValidationError("Geçersiz sipariş kalemi.");
     }
-    const candidate = item as { productId?: unknown; quantity?: unknown; unitPrice?: unknown; price?: unknown };
-    // Reject client-supplied money fields — totals are always server-computed.
-    if ("unitPrice" in candidate || "price" in candidate || "total" in candidate || "lineTotal" in candidate) {
-      throw new WexPayValidationError("Fiyat alanı gönderilemez; tutar sunucuda hesaplanır.");
+    const candidate = item as Record<string, unknown>;
+    // Reject client-supplied money / snapshot fields — totals & names are always server-computed.
+    const forbidden = [
+      "unitPrice",
+      "price",
+      "total",
+      "lineTotal",
+      "subtotal",
+      "priceDelta",
+      "groupName",
+      "optionName",
+      "modifiers",
+      "branchId",
+      "organizationId",
+    ];
+    for (const key of forbidden) {
+      if (key in candidate) {
+        throw new WexPayValidationError("Fiyat veya seçenek alanı gönderilemez; tutar sunucuda hesaplanır.");
+      }
     }
     if (typeof candidate.productId !== "string" || !candidate.productId.trim()) {
       throw new WexPayValidationError("Ürün seçimi geçersiz.");
     }
-    return { productId: candidate.productId.trim(), quantity: toQuantity(candidate.quantity) };
+
+    let modifierOptionIds: string[] | undefined;
+    if ("modifierOptionIds" in candidate) {
+      if (candidate.modifierOptionIds === undefined || candidate.modifierOptionIds === null) {
+        modifierOptionIds = undefined;
+      } else if (!Array.isArray(candidate.modifierOptionIds)) {
+        throw new WexPayValidationError("Modifier seçimleri geçersiz.");
+      } else {
+        const seen = new Set<string>();
+        modifierOptionIds = [];
+        for (const value of candidate.modifierOptionIds) {
+          if (typeof value !== "string" || !value.trim()) {
+            throw new WexPayValidationError("Modifier seçimi geçersiz.");
+          }
+          const id = value.trim();
+          if (seen.has(id)) {
+            throw new WexPayValidationError("Aynı seçenek birden fazla gönderilemez.");
+          }
+          seen.add(id);
+          modifierOptionIds.push(id);
+        }
+      }
+    }
+
+    return {
+      productId: candidate.productId.trim(),
+      quantity: toQuantity(candidate.quantity),
+      ...(modifierOptionIds && modifierOptionIds.length > 0 ? { modifierOptionIds } : {}),
+    };
   });
 }
 

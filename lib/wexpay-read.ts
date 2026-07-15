@@ -128,7 +128,7 @@ export async function listBranchKitchenOrders(
     },
     include: {
       table: { select: { label: true } },
-      items: { orderBy: { id: "asc" } },
+      items: { orderBy: { id: "asc" }, include: { modifiers: { orderBy: { sortOrder: "asc" } } } },
     },
     orderBy: [{ createdAt: "asc" }],
   });
@@ -150,6 +150,12 @@ export async function listBranchKitchenOrders(
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice),
         lineTotal: Number(item.totalPrice),
+        modifiers: item.modifiers.map((modifier) => ({
+          groupName: modifier.groupName,
+          optionName: modifier.optionName,
+          priceDelta: Number(modifier.priceDelta),
+          sortOrder: modifier.sortOrder,
+        })),
       })),
     }))
     .sort((left, right) => {
@@ -262,7 +268,7 @@ export async function resolvePublicTableByQr(qrCode: string): Promise<PublicTabl
   };
 }
 
-/** Public-safe menu (active categories + active in-stock products) for a branch. */
+/** Public-safe menu (active categories + active in-stock products + modifiers) for a branch. */
 export async function getPublicBranchMenu(organizationId: string, branchId: string) {
   return prisma.menuCategory.findMany({
     where: { branchId, isActive: true, branch: { restaurant: { organizationId } } },
@@ -279,6 +285,39 @@ export async function getPublicBranchMenu(organizationId: string, branchId: stri
           currency: true,
           imageUrl: true,
           isPopular: true,
+          productModifierGroups: {
+            where: { isActive: true, group: { isActive: true, branchId } },
+            orderBy: [{ sortOrder: "asc" }],
+            select: {
+              sortOrder: true,
+              isActive: true,
+              groupId: true,
+              group: {
+                select: {
+                  id: true,
+                  branchId: true,
+                  name: true,
+                  selectionType: true,
+                  minSelect: true,
+                  maxSelect: true,
+                  sortOrder: true,
+                  isActive: true,
+                  options: {
+                    where: { isActive: true },
+                    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                    select: {
+                      id: true,
+                      groupId: true,
+                      name: true,
+                      priceDelta: true,
+                      sortOrder: true,
+                      isActive: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -291,12 +330,20 @@ export async function getPublicBranchMenu(organizationId: string, branchId: stri
 // payment). No demo slug, no global fallback.
 // ---------------------------------------------------------------------------
 
+export type OperationsOrderItemModifier = {
+  groupName: string;
+  optionName: string;
+  priceDelta: number;
+  sortOrder: number;
+};
+
 export type OperationsOrderItem = {
   id: string;
   name: string;
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  modifiers: OperationsOrderItemModifier[];
 };
 
 export type OperationsOrder = {
@@ -350,6 +397,12 @@ type TableOrderRecord = {
     quantity: number;
     unitPrice: number | { toString(): string };
     totalPrice: number | { toString(): string };
+    modifiers?: Array<{
+      groupName: string;
+      optionName: string;
+      priceDelta: number | { toString(): string };
+      sortOrder: number;
+    }>;
   }>;
 };
 
@@ -367,6 +420,15 @@ function mapTableOrders(orders: TableOrderRecord[]): OperationsOrder[] {
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
       lineTotal: Number(item.totalPrice),
+      modifiers: (item.modifiers ?? [])
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((modifier) => ({
+          groupName: modifier.groupName,
+          optionName: modifier.optionName,
+          priceDelta: Number(modifier.priceDelta),
+          sortOrder: modifier.sortOrder,
+        })),
     })),
   }));
 }
@@ -420,7 +482,7 @@ export async function listBranchTableOperations(
     where: { branchId, isActive: true, branch: { restaurant: { organizationId } } },
     include: {
       orders: {
-        include: { items: { orderBy: { id: "asc" } } },
+        include: { items: { orderBy: { id: "asc" }, include: { modifiers: { orderBy: { sortOrder: "asc" } } } } },
         orderBy: { createdAt: "desc" },
       },
       payments: { orderBy: { createdAt: "desc" } },

@@ -1,4 +1,5 @@
 import { getPublicBranchMenu, resolvePublicTableByQr } from "@/lib/wexpay-read";
+import { toPublicMenuModifierGroups } from "@/lib/wexpay-order-pricing";
 import QrCustomerApp from "@/components/qr-order/QrCustomerApp";
 import QrErrorState from "@/components/qr-order/QrErrorState";
 
@@ -73,15 +74,26 @@ export default async function PublicTablePage({ params }: PageProps) {
       categories={categories.map((category) => ({
         id: category.id,
         name: category.name,
-        products: category.products.map((product) => ({
-          id: product.id,
-          name: product.name,
-          description: product.description,
-          price: Number(product.price),
-          currency: product.currency,
-          imageUrl: product.imageUrl,
-          isPopular: product.isPopular,
-        })),
+        products: category.products.map((product) => {
+          const modifierGroups = toPublicMenuModifierGroups(
+            product.productModifierGroups?.map((link) => ({
+              groupId: link.groupId,
+              sortOrder: link.sortOrder,
+              isActive: link.isActive,
+              group: link.group,
+            })),
+          );
+          return {
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            price: Number(product.price),
+            currency: product.currency,
+            imageUrl: product.imageUrl,
+            isPopular: product.isPopular,
+            ...(modifierGroups.length > 0 ? { modifierGroups } : {}),
+          };
+        }),
       }))}
     />
   );

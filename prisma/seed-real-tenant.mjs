@@ -308,11 +308,149 @@ async function seedRealWexPayOperations(organization) {
     });
   }
 
+  // Fixture modifiers (isolated E2E):
+  // Mercimek: required SINGLE size (Standart 0 / Büyük +25)
+  // Izgara Tavuk: optional MULTI extras (min 0, max 2)
+  const mercimekId = `${branch.id}-mercimek-corbasi`;
+  const izgaraId = `${branch.id}-izgara-tavuk`;
+
+  const sizeGroup = await prisma.menuModifierGroup.upsert({
+    where: { branchId_name: { branchId: branch.id, name: "Boyut" } },
+    update: {
+      selectionType: "SINGLE",
+      minSelect: 1,
+      maxSelect: 1,
+      sortOrder: 0,
+      isActive: true,
+    },
+    create: {
+      id: `${branch.id}-mod-boyut`,
+      branchId: branch.id,
+      name: "Boyut",
+      selectionType: "SINGLE",
+      minSelect: 1,
+      maxSelect: 1,
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+
+  const sizeStd = await prisma.menuModifierOption.upsert({
+    where: { groupId_name: { groupId: sizeGroup.id, name: "Standart" } },
+    update: { priceDelta: "0.00", sortOrder: 0, isActive: true },
+    create: {
+      id: `${branch.id}-opt-standart`,
+      groupId: sizeGroup.id,
+      name: "Standart",
+      priceDelta: "0.00",
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+
+  const sizeLarge = await prisma.menuModifierOption.upsert({
+    where: { groupId_name: { groupId: sizeGroup.id, name: "Büyük" } },
+    update: { priceDelta: "25.00", sortOrder: 1, isActive: true },
+    create: {
+      id: `${branch.id}-opt-buyuk`,
+      groupId: sizeGroup.id,
+      name: "Büyük",
+      priceDelta: "25.00",
+      sortOrder: 1,
+      isActive: true,
+    },
+  });
+
+  await prisma.menuProductModifierGroup.upsert({
+    where: { productId_groupId: { productId: mercimekId, groupId: sizeGroup.id } },
+    update: { branchId: branch.id, sortOrder: 0, isActive: true },
+    create: {
+      id: `${branch.id}-link-mercimek-boyut`,
+      branchId: branch.id,
+      productId: mercimekId,
+      groupId: sizeGroup.id,
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+
+  const extrasGroup = await prisma.menuModifierGroup.upsert({
+    where: { branchId_name: { branchId: branch.id, name: "Ekstra" } },
+    update: {
+      selectionType: "MULTI",
+      minSelect: 0,
+      maxSelect: 2,
+      sortOrder: 1,
+      isActive: true,
+    },
+    create: {
+      id: `${branch.id}-mod-ekstra`,
+      branchId: branch.id,
+      name: "Ekstra",
+      selectionType: "MULTI",
+      minSelect: 0,
+      maxSelect: 2,
+      sortOrder: 1,
+      isActive: true,
+    },
+  });
+
+  const extraCheese = await prisma.menuModifierOption.upsert({
+    where: { groupId_name: { groupId: extrasGroup.id, name: "Peynir" } },
+    update: { priceDelta: "15.00", sortOrder: 0, isActive: true },
+    create: {
+      id: `${branch.id}-opt-peynir`,
+      groupId: extrasGroup.id,
+      name: "Peynir",
+      priceDelta: "15.00",
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+
+  const extraSauce = await prisma.menuModifierOption.upsert({
+    where: { groupId_name: { groupId: extrasGroup.id, name: "Sos" } },
+    update: { priceDelta: "10.00", sortOrder: 1, isActive: true },
+    create: {
+      id: `${branch.id}-opt-sos`,
+      groupId: extrasGroup.id,
+      name: "Sos",
+      priceDelta: "10.00",
+      sortOrder: 1,
+      isActive: true,
+    },
+  });
+
+  await prisma.menuProductModifierGroup.upsert({
+    where: { productId_groupId: { productId: izgaraId, groupId: extrasGroup.id } },
+    update: { branchId: branch.id, sortOrder: 0, isActive: true },
+    create: {
+      id: `${branch.id}-link-izgara-ekstra`,
+      branchId: branch.id,
+      productId: izgaraId,
+      groupId: extrasGroup.id,
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+
   return {
     restaurant,
     branch,
     qrCode: REAL_OPS.tables[0].qrCode,
     secondaryQrCode: REAL_OPS.tables[1].qrCode,
+    products: {
+      mercimekId,
+      izgaraId,
+    },
+    modifiers: {
+      sizeGroupId: sizeGroup.id,
+      sizeStdId: sizeStd.id,
+      sizeLargeId: sizeLarge.id,
+      extrasGroupId: extrasGroup.id,
+      extraCheeseId: extraCheese.id,
+      extraSauceId: extraSauce.id,
+    },
   };
 }
 
