@@ -1,6 +1,16 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
+import {
+  classifyE2EDatabase as classifyFromGuards,
+  describeDatabaseSafely as describeFromGuards,
+  databaseUrlsPointAtSameIsolatedDb as urlsAlignedFromGuards,
+  isE2eTestDatabaseName as isE2eNameFromGuards,
+  isLocalDatabaseHost as isLocalFromGuards,
+  isRemoteSharedDatabaseHost as isRemoteFromGuards,
+  wexPayMutationBlockedReason as mutationBlockedFromGuards,
+  assertIsolatedWexPayDatabase as assertIsolatedFromGuards,
+} from "../scripts/e2e-isolated-guards.mjs";
 
 export const E2E_LEAD_PREFIX = "E2E[WXP]";
 export const E2E_ELIGIBILITY_SOURCE_BASE = "e2e-eligibility-safety";
@@ -28,177 +38,18 @@ export type SafeDbDescriptor = {
   database: string;
 };
 
+export const describeDatabaseSafely = describeFromGuards as (rawUrl: string) => SafeDbDescriptor | null;
+export const isLocalDatabaseHost = isLocalFromGuards as (url: string) => boolean;
+export const isRemoteSharedDatabaseHost = isRemoteFromGuards as (url: string) => boolean;
+export const isE2eTestDatabaseName = isE2eNameFromGuards as (url: string) => boolean;
+export const databaseUrlsPointAtSameIsolatedDb = urlsAlignedFromGuards as () => boolean;
+export const classifyE2EDatabase = classifyFromGuards as () => DbClassification;
+export const wexPayMutationBlockedReason = mutationBlockedFromGuards as () => string | null;
+export const guestMutationBlockedReason = wexPayMutationBlockedReason;
+export const assertIsolatedWexPayDatabase = assertIsolatedFromGuards as (actionLabel?: string) => void;
+
 function databaseUrl() {
   return (process.env.DIRECT_URL || process.env.DATABASE_URL || "").trim();
-}
-
-function poolerOrDirectUrl() {
-  return (process.env.DATABASE_URL || "").trim();
-}
-
-function directUrl() {
-  return (process.env.DIRECT_URL || "").trim();
-}
-
-/** Parse connection URL without exposing credentials. */
-export function describeDatabaseSafely(rawUrl: string): SafeDbDescriptor | null {
-  const url = rawUrl.trim();
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return {
-      host: (parsed.hostname || "unknown").toLowerCase(),
-      port: parsed.port || (parsed.protocol === "postgresql:" || parsed.protocol === "postgres:" ? "5432" : ""),
-      database: decodeURIComponent((parsed.pathname || "/").replace(/^\//, "").split("?")[0] || "").toLowerCase(),
-    };
-  } catch {
-    // Fallback for non-URL forms: never echo the raw string.
-    return { host: "unparseable", port: "", database: "unparseable" };
-  }
-}
-
-function e2eBaseUrl() {
-  return (
-    process.env.E2E_BASE_URL ||
-    process.env.SMOKE_BASE_URL ||
-    process.env.E2E_PUBLIC_ORIGIN ||
-    ""
-  );
-}
-
-function looksProductionHost(base: string, target: string) {
-  return target === "production" || /https?:\/\/([a-z0-9-]+\.)?wexon\.dev\b/i.test(base);
-}
-
-export function isLocalDatabaseHost(url: string): boolean {
-  const desc = describeDatabaseSafely(url);
-  if (!desc) return false;
-  return /^(localhost|127\.0\.0\.1|host\.docker\.internal)$/i.test(desc.host);
-}
-
-export function isRemoteSharedDatabaseHost(url: string): boolean {
-  const desc = describeDatabaseSafely(url);
-  if (!desc) return true;
-  if (isLocalDatabaseHost(url)) return false;
-  return /supabase\.com|neon\.tech|amazonaws\.com|pooler|vercel-storage|railway\.app|render\.com/i.test(
-    `${desc.host} ${url}`,
-  );
-}
-
-/** Dedicated E2E/test database name — fail closed on generic `postgres` / prod names. */
-export function isE2eTestDatabaseName(url: string): boolean {
-  const desc = describeDatabaseSafely(url);
-  if (!desc?.database) return false;
-  const name = desc.database;
-  if (name === "postgres" || name === "template0" || name === "template1") return false;
-  return /(^|[_\-])(e2e|test)([_\-]|$)/i.test(name) || /^wexon_e2e$/i.test(name);
-}
-
-export function databaseUrlsPointAtSameIsolatedDb(): boolean {
-  const a = describeDatabaseSafely(poolerOrDirectUrl() || databaseUrl());
-  const b = describeDatabaseSafely(directUrl() || databaseUrl());
-  if (!a || !b) return false;
-  if (a.host === "unparseable" || b.host === "unparseable") return false;
-  return a.host === b.host && a.port === b.port && a.database === b.database;
-}
-
-export function classifyE2EDatabase(): DbClassification {
-  const url = databaseUrl();
-  if (!url) return "missing-db";
-
-  const target = (process.env.WEXON_E2E_TARGET ?? "local").trim().toLowerCase();
-  const confirmProduction = process.env.WEXON_E2E_CONFIRM_PRODUCTION === "true";
-  const confirmIsolated = process.env.WEXON_E2E_CONFIRM_ISOLATED === "true";
-  const base = e2eBaseUrl();
-
-  if (looksProductionHost(base, target) && target === "production" && confirmProduction) {
-    return "production-confirmed";
-  }
-
-  if (process.env.VERCEL_ENV === "production" && target === "production" && confirmProduction) {
-    return "production-confirmed";
-  }
-
-  // Remote shared hosts can never be "isolated" — even when TARGET=isolated.
-  if (isRemoteSharedDatabaseHost(url)) {
-    return "shared remote-unverified";
-  }
-
-  if (isLocalDatabaseHost(url)) {
-    const isolatedReady =
-      target === "isolated" &&
-      confirmIsolated &&
-      process.env.VERCEL_ENV !== "production" &&
-      isE2eTestDatabaseName(url) &&
-      databaseUrlsPointAtSameIsolatedDb() &&
-      !looksProductionHost(base, target);
-
-    if (isolatedReady) return "isolated";
-    return "local";
-  }
-
-  if (/vercel\.app/i.test(base) || /preview/i.test(base)) {
-    return "preview";
-  }
-
-  return "shared remote-unverified";
-}
-
-/**
- * Fail-closed gate for WexPay seed/mutation/cleanup against real customer data.
- * Production-confirmed cannot be bypassed by any allow flag.
- */
-export function wexPayMutationBlockedReason(): string | null {
-  if (process.env.VERCEL_ENV === "production") {
-    return "WexPay E2E mutation blocked while VERCEL_ENV=production.";
-  }
-
-  const classification = classifyE2EDatabase();
-
-  if (classification === "production-confirmed") {
-    return "WexPay E2E mutation is hard-blocked on production-confirmed targets (no allow-flag bypass).";
-  }
-
-  if (classification === "missing-db") {
-    return "DATABASE_URL/DIRECT_URL missing; cannot run WexPay E2E mutations.";
-  }
-
-  if (classification === "shared remote-unverified") {
-    return [
-      "WexPay E2E mutation blocked on shared remote-unverified database.",
-      "Use WEXON_E2E_TARGET=isolated with a local e2e Postgres (see npm run e2e:db:prepare).",
-    ].join(" ");
-  }
-
-  if (classification !== "isolated") {
-    return [
-      `WexPay E2E mutation requires confirmed isolated DB (got ${classification}).`,
-      "Set WEXON_E2E_TARGET=isolated, WEXON_E2E_CONFIRM_ISOLATED=true,",
-      "point DATABASE_URL/DIRECT_URL at local wexon_e2e, and avoid production hosts.",
-    ].join(" ");
-  }
-
-  if (process.env.WEXON_E2E_CONFIRM_ISOLATED !== "true") {
-    return "WEXON_E2E_CONFIRM_ISOLATED=true is required for WexPay E2E mutations.";
-  }
-
-  return null;
-}
-
-/** Alias used by suites that previously checked guest-only flags. */
-export function guestMutationBlockedReason(): string | null {
-  return wexPayMutationBlockedReason();
-}
-
-export function assertIsolatedWexPayDatabase(actionLabel = "WexPay E2E"): void {
-  const reason = wexPayMutationBlockedReason();
-  if (reason) {
-    const desc = describeDatabaseSafely(databaseUrl());
-    const safeWhere = desc
-      ? `host=${desc.host} port=${desc.port || "?"} db=${desc.database}`
-      : "db=missing";
-    throw new Error(`${actionLabel} refused (${safeWhere}): ${reason}`);
-  }
 }
 
 export function leadMutationBlockedReason(): string | null {

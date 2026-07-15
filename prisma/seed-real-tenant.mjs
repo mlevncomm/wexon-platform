@@ -5,12 +5,20 @@ import { randomBytes, scrypt } from "crypto";
 import { promisify } from "util";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import {
+  assertIsolatedWexPayDatabase,
+  describeDatabaseSafely,
+} from "../scripts/e2e-isolated-guards.mjs";
 
 function loadLocalEnvFile(fileName, { override = false } = {}) {
   const fullPath = resolve(process.cwd(), fileName);
   if (!existsSync(fullPath)) return;
   const parsed = dotenv.parse(readFileSync(fullPath));
+  const isolatedPinned = process.env.WEXON_E2E_CONFIRM_ISOLATED === "true";
   for (const [key, value] of Object.entries(parsed)) {
+    if (isolatedPinned && (key === "DATABASE_URL" || key === "DIRECT_URL" || key === "WEXON_E2E_TARGET")) {
+      continue;
+    }
     if (override || !process.env[key]) {
       process.env[key] = value;
     }
@@ -22,6 +30,15 @@ loadLocalEnvFile(".env.local", { override: true });
 
 if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") {
   throw new Error("seed-real-tenant production ortaminda calistirilamaz.");
+}
+
+// Fail-closed: never seed shared remote / production. Isolated local e2e DB only.
+assertIsolatedWexPayDatabase("prisma:seed:real");
+{
+  const desc = describeDatabaseSafely(process.env.DIRECT_URL || process.env.DATABASE_URL || "");
+  console.log(
+    `[seed-real-tenant] isolated OK host=${desc?.host ?? "?"} port=${desc?.port || "?"} db=${desc?.database ?? "?"}`,
+  );
 }
 
 const scryptAsync = promisify(scrypt);
@@ -58,8 +75,10 @@ const REAL_OPS = {
   restaurantName: "WexPay Real Test Restaurant",
   branchSlug: "merkez-sube",
   branchName: "Merkez Şube",
-  tableLabel: "Masa 01",
-  qrCode: "WEXPAY-real-test-MASA-01",
+  tables: [
+    { label: "Masa 01", seats: 4, qrCode: "WEXPAY-real-test-MASA-01" },
+    { label: "Masa 02", seats: 2, qrCode: "WEXPAY-real-test-MASA-02" },
+  ],
   categoryName: "Ana Yemekler",
   products: [
     {
@@ -221,26 +240,28 @@ async function seedRealWexPayOperations(organization) {
     },
   });
 
-  await prisma.restaurantTable.upsert({
-    where: {
-      branchId_label: {
-        branchId: branch.id,
-        label: REAL_OPS.tableLabel,
+  for (const table of REAL_OPS.tables) {
+    await prisma.restaurantTable.upsert({
+      where: {
+        branchId_label: {
+          branchId: branch.id,
+          label: table.label,
+        },
       },
-    },
-    update: {
-      qrCode: REAL_OPS.qrCode,
-      isActive: true,
-      seats: 4,
-    },
-    create: {
-      branchId: branch.id,
-      label: REAL_OPS.tableLabel,
-      seats: 4,
-      qrCode: REAL_OPS.qrCode,
-      isActive: true,
-    },
-  });
+      update: {
+        qrCode: table.qrCode,
+        isActive: true,
+        seats: table.seats,
+      },
+      create: {
+        branchId: branch.id,
+        label: table.label,
+        seats: table.seats,
+        qrCode: table.qrCode,
+        isActive: true,
+      },
+    });
+  }
 
   const category = await prisma.menuCategory.upsert({
     where: {
@@ -287,7 +308,12 @@ async function seedRealWexPayOperations(organization) {
     });
   }
 
-  return { restaurant, branch, qrCode: REAL_OPS.qrCode };
+  return {
+    restaurant,
+    branch,
+    qrCode: REAL_OPS.tables[0].qrCode,
+    secondaryQrCode: REAL_OPS.tables[1].qrCode,
+  };
 }
 
 async function seedInactiveWexPayTenant(product) {
@@ -606,6 +632,8 @@ async function main() {
   const ops = await seedRealWexPayOperations(organization);
   const inactiveOrg = await seedInactiveWexPayTenant(product);
 
+  // Never print fixture passwords in logs when running under isolated E2E harness.
+  const revealPassword = process.env.WEXON_E2E_SEED_REVEAL_PASSWORD === "true";
   console.log(
     JSON.stringify(
       {
@@ -615,10 +643,11 @@ async function main() {
         },
         user: {
           email: user.email,
-          password: REAL_TENANT.userPassword,
+          ...(revealPassword ? { password: REAL_TENANT.userPassword } : { passwordSet: true }),
         },
         smoke: {
           qrCode: ops.qrCode,
+          secondaryQrCode: ops.secondaryQrCode,
           inactiveQrCode: inactiveOrg.inactiveQrCode,
           inactiveWexPayOrgSlug: inactiveOrg.slug,
         },
