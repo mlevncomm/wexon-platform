@@ -44,21 +44,39 @@ If no safe fixture: verify UI forms and server actions exist in code only; **do 
 
 ## E. Eligibility admin görünümü — demo/lead detail (`/admin/support`, `/admin/applications`)
 
-- [ ] Lead kartında **WexPay Uygunluk Değerlendirmesi** bölümü görünüyor
-- [ ] `recommendedTier` (Önerilen paket) görünüyor
-- [ ] `reviewStatus` badge: Ön uygunluk / Manuel inceleme / Uygun değil / Değerlendirilmedi
-- [ ] Liste veya badge’de önerilen paket + inceleme durumu kısaca görünüyor
-- [ ] `riskReasons` yalnızca admin kartında Türkçe notlar olarak görünüyor
-- [ ] Applicant success mesajında `riskReasons` / internal key yok (network/UI)
-- [ ] “Ön uygunluk nihai onay değildir” disclaimer kartta var
+- [x] Lead kartında **WexPay Uygunluk Değerlendirmesi** bölümü görünüyor — **PASS** (Cloudflare Access manuel smoke)
+- [x] `recommendedTier` (Önerilen paket) görünüyor — **PASS**
+- [x] `reviewStatus` badge: Ön uygunluk / Manuel inceleme / Uygun değil / Değerlendirilmedi — **PASS**
+- [x] Liste veya badge’de önerilen paket + inceleme durumu kısaca görünüyor — **PASS**
+- [x] `riskReasons` yalnızca admin kartında Türkçe notlar olarak görünüyor — **PASS** (raw JSON / risk key sızıntısı yok)
+- [x] Applicant success mesajında `riskReasons` / internal key yok (network/UI) — **PASS** (unit + e2e)
+- [x] “Ön uygunluk nihai onay değildir” disclaimer kartta var — **PASS**
 
 Code references: `lib/wexpay-eligibility.ts`, `lib/wexpay-eligibility-admin-display.ts`, `components/marketing/WexPayEligibilityAdminCard.tsx`.
 
+### Access smoke — confirmed 2026-07-15
+
+| Check | Result |
+|------|--------|
+| Cloudflare Access smoke | **PASS** |
+| Eligibility admin list/detail | **PASS** |
+| riskReasons admin-only | **PASS** |
+| Layout / no raw JSON dump | **PASS** |
+
+## E2E lead hygiene (do not auto-delete on shared remote)
+
+Local Playwright can write DemoRequest audit rows into the **shared remote-unverified** Supabase DB used by admin CRM.
+
+- Inventory/dry-run: `node --import ./scripts/load-local-env.mjs scripts/cleanup-e2e-demo-leads.mjs`
+- Apply (requires explicit dual confirm on shared remote):
+  `$env:CONFIRM_E2E_LEAD_CLEANUP="true"; $env:ALLOW_SHARED_REMOTE_E2E_CLEANUP="true"; node --import ./scripts/load-local-env.mjs scripts/cleanup-e2e-demo-leads.mjs`
+- Lead-mutating eligibility e2e is skipped on shared remote unless `WEXON_E2E_ALLOW_SHARED_LEAD_MUTATION=true`, and always cleans its own marker rows when it runs.
+
 ## Public pricing parity (non-Access)
 
-- [ ] `/packages` and `/products/wexpay` share `WexPayPricingGrid` + `PricingCard` commercial fields
-- [ ] Disclaimer present on both surfaces
-- [ ] No direct WexPay `/checkout` CTA
+- [x] `/packages` and `/products/wexpay` share `WexPayPricingGrid` + `PricingCard` commercial fields
+- [x] Disclaimer present on both surfaces
+- [x] No direct WexPay `/checkout` CTA
 
 ## Sign-off
 
@@ -68,6 +86,8 @@ Code references: `lib/wexpay-eligibility.ts`, `lib/wexpay-eligibility-admin-disp
 | Legacy safety | | |
 | Migration preview | | |
 | Entitlement lifecycle | | |
-| Eligibility admin | | |
+| Eligibility admin | **PASS** | Access manual smoke 2026-07-15 |
+| Access smoke | **PASS** | |
+| riskReasons admin-only | **PASS** | |
 
 **Automated note:** CI agents cannot complete Access-protected admin routes without a scoped service token. Temporary sign-off tokens must be deleted after use per `docs/production-signoff.md`.
