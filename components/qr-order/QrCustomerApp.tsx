@@ -6,6 +6,7 @@ import QrCartSheet from "@/components/qr-order/QrCartSheet";
 import QrCheckoutSuccess from "@/components/qr-order/QrCheckoutSuccess";
 import QrLanding from "@/components/qr-order/QrLanding";
 import QrMenuScreen from "@/components/qr-order/QrMenuScreen";
+import QrOrderStatusScreen from "@/components/qr-order/QrOrderStatusScreen";
 import QrWaiterCall from "@/components/qr-order/QrWaiterCall";
 import {
   clearCartStorage,
@@ -14,7 +15,6 @@ import {
   upsertCartLine,
   writeCartToStorage,
 } from "@/lib/qr-order/cart";
-import { getMockOptionGroups } from "@/lib/qr-order/mock-options";
 import { buildOrderNote } from "@/lib/qr-order/pricing";
 import type {
   QrCartLine,
@@ -23,6 +23,13 @@ import type {
   QrTableContext,
   QrView,
 } from "@/lib/qr-order/types";
+
+function newIdempotencyKey() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `qr-order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 export default function QrCustomerApp({
   context,
@@ -40,6 +47,7 @@ export default function QrCustomerApp({
   const [success, setSuccess] = useState<QrOrderSuccess | null>(null);
   const [waiterOpen, setWaiterOpen] = useState(false);
   const submitLock = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
   const [, startCartTransition] = useTransition();
 
   useEffect(() => {
@@ -54,16 +62,6 @@ export default function QrCustomerApp({
     if (!cartReady) return;
     writeCartToStorage(context.qrCode, lines);
   }, [context.qrCode, lines, cartReady]);
-
-  const groupsByProductId = (() => {
-    const map: Record<string, ReturnType<typeof getMockOptionGroups>> = {};
-    for (const category of categories) {
-      for (const product of category.products) {
-        map[product.id] = getMockOptionGroups(product.name);
-      }
-    }
-    return map;
-  })();
 
   const menuEmpty = categories.every((category) => category.products.length === 0);
 
@@ -90,14 +88,20 @@ export default function QrCustomerApp({
     submitLock.current = true;
     setOrderPending(true);
     setOrderError(null);
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = newIdempotencyKey();
+    }
 
     try {
-      const note = buildOrderNote(lines, groupsByProductId, generalNote);
+      const note = buildOrderNote(lines, generalNote);
       const response = await fetch(
         `/api/wexpay/public/${encodeURIComponent(context.qrCode)}/order`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKeyRef.current,
+          },
           body: JSON.stringify({
             note,
             items: lines.map((line) => ({
@@ -112,10 +116,17 @@ export default function QrCustomerApp({
         id?: string;
         orderNo?: string;
         subtotal?: number;
+        status?: string;
       };
 
       if (!response.ok) {
-        setOrderError(payload.error ?? "Sipariş gönderilemedi. Lütfen tekrar deneyin.");
+        const message = payload.error ?? "Sipariş gönderilemedi. Lütfen tekrar deneyin.";
+        setOrderError(message);
+        if (/stok|fiyat|bulunamad|aktif değil/i.test(message)) {
+          setOrderError(
+            `${message} Menüdeki güncel fiyat ve stok için ürünleri kontrol edip tekrar deneyin.`,
+          );
+        }
         return;
       }
 
@@ -123,13 +134,15 @@ export default function QrCustomerApp({
         orderId: payload.id ?? "",
         orderNo: payload.orderNo ?? "-",
         subtotal: Number(payload.subtotal ?? 0),
+        status: payload.status ?? "NEW",
       });
       setLines([]);
       setGeneralNote("");
       clearCartStorage(context.qrCode);
+      idempotencyKeyRef.current = null;
       setView("success");
     } catch {
-      setOrderError("Bağlantı hatası. Lütfen tekrar deneyin.");
+      setOrderError("Bağlantı hatası. Lütfen tekrar deneyin. Sepetiniz korundu.");
     } finally {
       setOrderPending(false);
       submitLock.current = false;
@@ -144,24 +157,24 @@ export default function QrCustomerApp({
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed -left-24 top-0 -z-10 h-[28rem] w-[28rem] rounded-full bg-emerald-200/45 blur-3xl sm:h-[36rem] sm:w-[36rem]"
+        className="pointer-events-none fixed -left-24 top-0 -z-10 h-[28rem] w-[28rem] rounded-full bg-emerald-200/45 blur-3xl motion-reduce:hidden sm:h-[36rem] sm:w-[36rem]"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed -right-20 top-32 -z-10 h-[24rem] w-[24rem] rounded-full bg-lime-200/40 blur-3xl sm:top-16 sm:h-[32rem] sm:w-[32rem]"
+        className="pointer-events-none fixed -right-20 top-32 -z-10 h-[24rem] w-[24rem] rounded-full bg-lime-200/40 blur-3xl motion-reduce:hidden sm:top-16 sm:h-[32rem] sm:w-[32rem]"
       />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed bottom-0 left-1/3 -z-10 h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-sky-100/50 blur-3xl"
-      />
+
+      <div aria-live="polite" className="sr-only">
+        {orderPending ? "Sipariş gönderiliyor" : null}
+        {success && view === "success" ? `Sipariş alındı ${success.orderNo}` : null}
+      </div>
 
       {view === "landing" ? (
         <QrLanding
           context={context}
           menuEmpty={menuEmpty}
-          onOrder={() => setView("menu")}
-          onPay={() => setView("bill")}
           onBrowseMenu={() => setView("menu")}
+          onPay={() => setView("bill")}
           onCallWaiter={() => setWaiterOpen(true)}
         />
       ) : null}
@@ -182,7 +195,6 @@ export default function QrCustomerApp({
         <QrCartSheet
           context={context}
           lines={lines}
-          groupsByProductId={groupsByProductId}
           generalNote={generalNote}
           error={orderError}
           pending={orderPending}
@@ -200,15 +212,25 @@ export default function QrCustomerApp({
         <QrCheckoutSuccess
           context={context}
           order={success}
-          onBackHome={() => {
+          onTrack={() => setView("status")}
+          onNewOrder={() => {
             setSuccess(null);
             setView("menu");
           }}
-          onViewBill={() => {
-            setSuccess(null);
-            setView("bill");
-          }}
           onCallWaiter={() => setWaiterOpen(true)}
+        />
+      ) : null}
+
+      {view === "status" ? (
+        <QrOrderStatusScreen
+          context={context}
+          highlightOrderNo={success?.orderNo ?? null}
+          onBack={() => setView(success ? "success" : "landing")}
+          onNewOrder={() => {
+            setSuccess(null);
+            setView("menu");
+          }}
+          onViewBill={() => setView("bill")}
         />
       ) : null}
 
@@ -217,6 +239,7 @@ export default function QrCustomerApp({
           context={context}
           onBack={() => setView("landing")}
           onCallWaiter={() => setWaiterOpen(true)}
+          onTrackOrders={() => setView("status")}
         />
       ) : null}
 
