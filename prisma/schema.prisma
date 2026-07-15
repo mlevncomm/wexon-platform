@@ -46,6 +46,12 @@ enum NotificationType {
   MENU_UPDATED
 }
 
+/// Menu modifier group selection mode (WexPay MenuProduct options).
+enum MenuModifierSelectionType {
+  SINGLE
+  MULTI
+}
+
 enum MembershipRole {
   OWNER
   ADMIN
@@ -558,13 +564,14 @@ model Branch {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  restaurant    Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  tables        RestaurantTable[]
-  categories    MenuCategory[]
-  products      MenuProduct[]
-  orders        CustomerOrder[]
-  payments      Payment[]
-  notifications BusinessNotification[]
+  restaurant      Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tables          RestaurantTable[]
+  categories      MenuCategory[]
+  products        MenuProduct[]
+  modifierGroups  MenuModifierGroup[]
+  orders          CustomerOrder[]
+  payments        Payment[]
+  notifications   BusinessNotification[]
 
   @@unique([restaurantId, slug])
   @@index([restaurantId])
@@ -623,12 +630,74 @@ model MenuProduct {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  branch     Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  category   MenuCategory @relation(fields: [categoryId], references: [id])
-  orderItems OrderItem[]
+  branch                 Branch                    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category               MenuCategory              @relation(fields: [categoryId], references: [id])
+  orderItems             OrderItem[]
+  productModifierGroups  MenuProductModifierGroup[]
 
   @@index([branchId])
   @@index([categoryId])
+}
+
+/// Branch-scoped modifier group (size, extras, removals). Shareable across products via join table.
+model MenuModifierGroup {
+  id            String                    @id @default(cuid())
+  branchId      String
+  name          String
+  selectionType MenuModifierSelectionType @default(SINGLE)
+  isRequired    Boolean                   @default(false)
+  minSelect     Int                       @default(0)
+  maxSelect     Int?
+  sortOrder     Int                       @default(0)
+  isActive      Boolean                   @default(true)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  branch       Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  options      MenuModifierOption[]
+  productLinks MenuProductModifierGroup[]
+  orderItemModifiers OrderItemModifier[]
+
+  @@unique([branchId, name])
+  @@index([branchId])
+  @@index([isActive])
+}
+
+model MenuModifierOption {
+  id         String   @id @default(cuid())
+  groupId    String
+  name       String
+  priceDelta Decimal  @default(0) @db.Decimal(10, 2)
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  group              MenuModifierGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  orderItemModifiers OrderItemModifier[]
+
+  @@unique([groupId, name])
+  @@index([groupId])
+  @@index([isActive])
+}
+
+/// Optional M:N link so one modifier group can attach to many menu products.
+model MenuProductModifierGroup {
+  id        String   @id @default(cuid())
+  productId String
+  groupId   String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product MenuProduct       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  group   MenuModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, groupId])
+  @@index([productId])
+  @@index([groupId])
+  @@index([isActive])
 }
 
 model CustomerOrder {
@@ -667,11 +736,32 @@ model OrderItem {
   totalPrice  Decimal @db.Decimal(10, 2)
   note        String?
 
-  order   CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product MenuProduct   @relation(fields: [productId], references: [id])
+  order     CustomerOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   MenuProduct         @relation(fields: [productId], references: [id])
+  modifiers OrderItemModifier[]
 
   @@index([orderId])
   @@index([productId])
+}
+
+/// Immutable line-item modifier snapshot (names + delta). Soft FKs survive catalog edits/deletes.
+model OrderItemModifier {
+  id          String  @id @default(cuid())
+  orderItemId String
+  groupId     String?
+  optionId    String?
+  groupName   String
+  optionName  String
+  priceDelta  Decimal @db.Decimal(10, 2)
+  sortOrder   Int     @default(0)
+
+  orderItem OrderItem          @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  group     MenuModifierGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  option    MenuModifierOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@index([groupId])
+  @@index([optionId])
 }
 
 model Payment {
