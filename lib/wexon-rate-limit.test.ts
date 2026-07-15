@@ -42,6 +42,8 @@ describe("login rate limits", () => {
     withEnv(
       {
         WEXON_E2E_RELAX_RATE_LIMIT: "true",
+        // Never inherit a stale FORCE pin from a polluted parent shell.
+        WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT: undefined,
         NODE_ENV: "development",
         VERCEL_ENV: undefined,
         WEXON_E2E_TARGET: "local",
@@ -59,6 +61,7 @@ describe("login rate limits", () => {
     withEnv(
       {
         WEXON_E2E_RELAX_RATE_LIMIT: "true",
+        WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT: undefined,
         NODE_ENV: "production",
         VERCEL_ENV: "production",
         WEXON_E2E_TARGET: "local",
@@ -76,6 +79,7 @@ describe("login rate limits", () => {
     withEnv(
       {
         WEXON_E2E_RELAX_RATE_LIMIT: "true",
+        WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT: undefined,
         NODE_ENV: "production",
         VERCEL_ENV: undefined,
         WEXON_E2E_TARGET: "local",
