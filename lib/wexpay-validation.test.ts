@@ -13,13 +13,29 @@ describe("validateOrderItems", () => {
     assert.deepEqual(items, [{ productId: "p1", quantity: 2 }]);
   });
 
+  it("accepts modifierOptionIds", () => {
+    const items = validateOrderItems([{ productId: "p1", quantity: 1, modifierOptionIds: ["o1", "o2"] }]);
+    assert.deepEqual(items, [{ productId: "p1", quantity: 1, modifierOptionIds: ["o1", "o2"] }]);
+  });
+
   it("rejects client price manipulation fields", () => {
     assert.throws(
       () => validateOrderItems([{ productId: "p1", quantity: 1, unitPrice: 1 }]),
-      (error: unknown) => error instanceof WexPayValidationError && /Fiyat alanı/i.test(error.message),
+      (error: unknown) => error instanceof WexPayValidationError && /Fiyat|seçenek/i.test(error.message),
     );
     assert.throws(
       () => validateOrderItems([{ productId: "p1", quantity: 1, price: 9.99 }]),
+      WexPayValidationError,
+    );
+    assert.throws(
+      () => validateOrderItems([{ productId: "p1", quantity: 1, priceDelta: 5 }]),
+      WexPayValidationError,
+    );
+  });
+
+  it("rejects duplicate modifier option ids in payload", () => {
+    assert.throws(
+      () => validateOrderItems([{ productId: "p1", quantity: 1, modifierOptionIds: ["o1", "o1"] }]),
       WexPayValidationError,
     );
   });
