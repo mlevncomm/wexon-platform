@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { dashboardNavigation } from "@/lib/wexon-core-navigation";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { dashboardNavigation, dashboardNavSectionLabels } from "@/lib/wexon-core-navigation";
 import { appNavigationUrl, coreNavigationUrl } from "@/lib/wexon/urls";
 
 function NavIcon({ type }: { type: string }) {
   const className = "h-4 w-4";
-
   if (type === "products") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -16,7 +16,6 @@ function NavIcon({ type }: { type: string }) {
       </svg>
     );
   }
-
   if (type === "license") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -25,7 +24,6 @@ function NavIcon({ type }: { type: string }) {
       </svg>
     );
   }
-
   if (type === "billing") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -34,7 +32,6 @@ function NavIcon({ type }: { type: string }) {
       </svg>
     );
   }
-
   if (type === "organization") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -43,7 +40,6 @@ function NavIcon({ type }: { type: string }) {
       </svg>
     );
   }
-
   if (type === "users") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -52,7 +48,6 @@ function NavIcon({ type }: { type: string }) {
       </svg>
     );
   }
-
   if (type === "integrations") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -60,15 +55,13 @@ function NavIcon({ type }: { type: string }) {
       </svg>
     );
   }
-
-  if (type === "activity") {
+  if (type === "activity" || type === "support") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-7" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
-
   if (type === "wexpay") {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -77,7 +70,6 @@ function NavIcon({ type }: { type: string }) {
       </svg>
     );
   }
-
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="4" y="4" width="7" height="7" rx="1.5" />
@@ -88,10 +80,8 @@ function NavIcon({ type }: { type: string }) {
   );
 }
 
-export default function WexonDashboardNav() {
-  const pathname = usePathname();
+function useNavHref() {
   const searchParams = useSearchParams();
-  const [open, setOpen] = useState(false);
   const organizationId = searchParams.get("organizationId");
   const organizationSlug = searchParams.get("organizationSlug");
   const contextQuery = organizationId
@@ -99,86 +89,203 @@ export default function WexonDashboardNav() {
     : organizationSlug
       ? `?organizationSlug=${encodeURIComponent(organizationSlug)}`
       : "";
-  const navigationHref = (href: string) =>
-    href.startsWith("/apps/wexpay")
-      ? appNavigationUrl(href, contextQuery)
-      : coreNavigationUrl(href, contextQuery);
-  const activeItem =
-    dashboardNavigation.find((item) =>
-      item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href),
-    ) ?? dashboardNavigation[0];
+  return (href: string) =>
+    href.startsWith("/apps/wexpay") ? appNavigationUrl(href, contextQuery) : coreNavigationUrl(href, contextQuery);
+}
+
+function NavLinkItem({
+  item,
+  pathname,
+  href,
+  onNavigate,
+}: {
+  item: (typeof dashboardNavigation)[number];
+  pathname: string;
+  href: string;
+  onNavigate?: () => void;
+}) {
+  const isActive = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className={`group relative flex min-h-[44px] min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition-colors ${
+        isActive
+          ? "border border-emerald-100 bg-emerald-50 text-emerald-800"
+          : "border border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+      }`}
+    >
+      {isActive ? (
+        <span className="absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-emerald-500" aria-hidden />
+      ) : null}
+      <span
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
+          isActive ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white"
+        }`}
+      >
+        <NavIcon type={item.icon} />
+      </span>
+      <span className="truncate">{item.label}</span>
+    </Link>
+  );
+}
+
+function DesktopNavList({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const navigationHref = useNavHref();
+  const sections = ["genel", "hesap", "yonetim", "destek"] as const;
 
   return (
-    <div>
+    <nav className="flex flex-col gap-1" aria-label="Core menü">
+      {sections.map((section) => {
+        const items = dashboardNavigation.filter((item) => item.section === section);
+        if (items.length === 0) return null;
+        return (
+          <div key={section} className="mb-3">
+            <p className="mb-1.5 px-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+              {dashboardNavSectionLabels[section]}
+            </p>
+            <div className="flex flex-col gap-1">
+              {items.map((item) => (
+                <NavLinkItem
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  href={navigationHref(item.href)}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function WexonDashboardMobileNavDrawer({
+  userEmail,
+  mustChangePassword,
+  isAdminPreview,
+}: {
+  userEmail?: string | null;
+  mustChangePassword?: boolean;
+  isAdminPreview?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+  const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    if (!open) return;
+    previouslyFocused.current = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "";
+      previouslyFocused.current?.focus?.();
+    };
+  }, [close, open]);
+
+  return (
+    <>
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 ring-1 ring-slate-200 transition-colors hover:bg-emerald-50 lg:hidden"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-700 transition-colors hover:bg-slate-50 lg:hidden"
+        aria-label="Menüyü aç"
         aria-expanded={open}
+        onClick={() => setOpen(true)}
       >
-        <span className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 text-[11px] font-black text-emerald-700">
-            <NavIcon type={activeItem.icon} />
-          </span>
-          {activeItem.label}
-        </span>
-        <span className={`transition-transform ${open ? "rotate-180" : ""}`} aria-hidden>
-          ↓
-        </span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+        </svg>
       </button>
 
-      <nav className={`${open ? "grid" : "hidden"} mt-3 grid-cols-2 gap-2 sm:grid-cols-4 lg:hidden`}>
-        {dashboardNavigation.map((item) => {
-          const isActive =
-            item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
-
-          return (
-            <Link
-              key={item.href}
-              href={navigationHref(item.href)}
-              onClick={() => setOpen(false)}
-              className={`min-w-0 rounded-2xl px-3 py-2.5 text-center text-xs font-bold transition-colors sm:text-sm ${
-                isActive
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
-              }`}
-            >
-              <span className="mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[11px] font-black text-emerald-700 shadow-sm">
-                <NavIcon type={item.icon} />
-              </span>
-              {item.shortLabel}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <nav className="hidden flex-col gap-2 lg:flex">
-        {dashboardNavigation.map((item) => {
-          const isActive =
-            item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
-
-          return (
-            <Link
-              key={item.href}
-              href={navigationHref(item.href)}
-              className={`group flex min-w-0 items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all lg:px-4 ${
-                isActive
-                  ? "bg-emerald-50 text-emerald-700 shadow-sm"
-                  : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
-              }`}
-            >
-              <span
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${
-                  isActive ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white"
-                }`}
+      {open
+        ? createPortal(
+            <div className="fixed inset-0 z-[60] lg:hidden" role="presentation">
+              <button
+                type="button"
+                className="absolute inset-0 bg-slate-950/40"
+                aria-label="Menü arka planını kapat"
+                onClick={close}
+              />
+              <div
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className="absolute inset-y-0 left-0 flex w-[min(20rem,88vw)] flex-col border-r border-slate-200 bg-white shadow-xl"
               >
-                <NavIcon type={item.icon} />
-              </span>
-              <span className="truncate">{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                  <div>
+                    <p id={titleId} className="text-sm font-black text-slate-950">
+                      Wexon Core
+                    </p>
+                    <p className="text-xs font-semibold text-slate-500">Navigasyon</p>
+                    {userEmail ? <p className="mt-1 truncate text-xs font-semibold text-slate-400">{userEmail}</p> : null}
+                    {mustChangePassword ? (
+                      <p className="mt-1 text-[10px] font-black text-amber-800">Şifre değişimi gerekli</p>
+                    ) : null}
+                    {isAdminPreview ? (
+                      <p className="mt-1 text-[10px] font-black text-amber-800">Admin önizleme</p>
+                    ) : null}
+                  </div>
+                  <button
+                    ref={closeButtonRef}
+                    type="button"
+                    onClick={close}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    aria-label="Menüyü kapat"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-3 py-4">
+                  <DesktopNavList onNavigate={close} />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+/** Desktop sidebar navigation (hidden on mobile — drawer used instead). */
+export default function WexonDashboardNav() {
+  return (
+    <div className="hidden lg:block">
+      <DesktopNavList />
     </div>
   );
 }

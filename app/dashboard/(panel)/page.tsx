@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { publicUrl } from "@/lib/wexon/urls";
 import {
   DashboardAccountStatusNotice,
   DashboardCompactPanel,
   DashboardEmptyState,
   DashboardInfoRow,
+  DashboardKpiGrid,
   DashboardMetricList,
   DashboardMetricRow,
+  DashboardPageHeader,
   DashboardStatusBar,
   DashboardStatusItem,
+  DashboardSummaryCard,
   DashboardUsageRow,
 } from "@/components/marketing/WexonDashboardCards";
 import {
@@ -51,12 +53,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
   const hasPendingOnboarding = onboarding?.onboardingStatus === "PENDING_SETUP";
   const hasWexPayAccess = wexPayAccess?.allowed === true;
   const wexpayAppHref = wexpayHref("/apps/wexpay", organizationContext.organizationId);
-  const attentionItems = [
-    !hasWexPayAccess ? "WexPay erişimi Core tarafından aktif değil" : null,
-    organization.restaurants.length === 0 ? "Bağlı restoran bulunmuyor" : null,
-    menuProductCount === 0 ? "Menü ürünü bulunmuyor" : null,
-    organization.invoices.length === 0 ? "Fatura kaydı yok" : null,
-  ].filter(Boolean) as string[];
   const todoItems = [
     {
       title: "Bağlı restoran ekleyin",
@@ -84,85 +80,126 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
     },
   ].filter((item) => item.show);
 
+  const activeUsers = organization.memberships.filter((membership) => membership.status === "ACTIVE").length;
+  const activeProducts = organization.appInstallations.filter((installation) => installation.status === "ACTIVE").length;
+  const activeLicenses = organization.licenses.filter((license) => license.status === "ACTIVE").length;
+  const openSupport = organization.auditLogs.filter((log) => {
+    if (log.action !== "customer.support_ticket.created") return false;
+    const meta =
+      typeof log.metadataJson === "object" && log.metadataJson !== null
+        ? (log.metadataJson as { status?: string })
+        : {};
+    const status = meta.status ?? "OPEN";
+    return status === "OPEN" || status === "IN_PROGRESS";
+  }).length;
+  const subscription = organization.subscriptions[0];
+  const renewalSoon =
+    wexPayLicense?.endsAt != null
+      ? wexPayLicense.endsAt.getTime() - new Date().getTime() <= 30 * 24 * 60 * 60 * 1000 &&
+        wexPayLicense.endsAt.getTime() > new Date().getTime()
+      : false;
+
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
+      <DashboardPageHeader
+        badge="Genel bakış"
+        title={displayOrganizationName}
+        description="Hesap durumu, ürün erişimleri ve operasyon özetini tek yerden takip edin."
+        actions={
+          <>
+            <Link
+              href={wexpayAppHref}
+              className="inline-flex rounded-full bg-emerald-500 px-4 py-2 text-xs font-black text-white hover:bg-emerald-600"
+            >
+              WexPay uygulaması
+            </Link>
+            <Link
+              href={dashboardHref("/dashboard/users", organizationContext)}
+              className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Kullanıcılar
+            </Link>
+            <Link
+              href={dashboardHref("/dashboard/support", organizationContext)}
+              className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Destek
+            </Link>
+          </>
+        }
+      />
+
       {isCheckoutSuccess && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
           <p className="text-sm font-black">Aboneliğiniz başarıyla başlatıldı.</p>
-          <p className="mt-2 text-sm font-semibold leading-relaxed">WexPay lisansınız aktif edildi ve kurulum süreciniz başlatıldı. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçecektir.</p>
+          <p className="mt-2 text-sm font-semibold leading-relaxed">
+            WexPay lisansınız aktif edildi ve kurulum süreciniz başlatıldı. Ekibimiz 5 iş günü içinde kurulum detaylarını
+            netleştirmek için sizinle iletişime geçecektir.
+          </p>
         </div>
       )}
       {!isCheckoutSuccess && hasPendingOnboarding && (
         <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-black text-slate-950">WexPay kurulum süreci devam ediyor.</p>
-          <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">Kurulum süreciniz başlatıldı. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçecektir.</p>
+          <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
+            Kurulum süreciniz başlatıldı. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime
+            geçecektir.
+          </p>
         </div>
       )}
       {!organization.isActive && <DashboardAccountStatusNotice />}
-          <section className="relative min-w-0 overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_15%_0%,#0f3024_0%,transparent_48%),linear-gradient(180deg,#050b16_0%,#081424_100%)] p-5 text-white shadow-2xl shadow-slate-950/20 sm:rounded-[32px] sm:p-8">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-[0.14]"
-              style={{
-                backgroundImage:
-                  "linear-gradient(rgba(255,255,255,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.09) 1px, transparent 1px)",
-                backgroundSize: "56px 56px",
-              }}
-            />
-            <div className="relative grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,440px)] lg:items-center">
-              <div className="min-w-0 max-w-4xl">
-                <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
-                  Wexon Core
-                </span>
-                <h1 className="break-words text-3xl font-black leading-tight tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl">
-                  Hoş geldiniz, {displayOrganizationName}
-                </h1>
-                <p className="mt-6 max-w-3xl text-base leading-relaxed text-slate-300 sm:text-lg">
-                  Wexon Core üzerinden hesabınızı, ürün erişimlerinizi ve operasyon durumunuzu tek yerden takip edin.
-                </p>
-                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                  <Link
-                    href={wexpayAppHref}
-                    className="inline-flex w-full items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-600 sm:w-auto"
-                  >
-                    WexPay uygulamasına git
-                  </Link>
-                  <Link
-                    href={publicUrl("/contact")}
-                    className="inline-flex w-full items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10 sm:w-auto"
-                  >
-                    Destek talebi oluştur
-                  </Link>
-                </div>
-              </div>
-              <div className="min-w-0 rounded-[24px] border border-white/10 bg-white/[0.07] p-4 shadow-2xl shadow-slate-950/20 backdrop-blur sm:rounded-[28px]">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-300">Bugün dikkat gerekenler</p>
-                    <p className="mt-1 text-lg font-black text-white">Operasyon uyarıları</p>
-                  </div>
-                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                    {attentionItems.length}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {attentionItems.length === 0 ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-sm font-bold text-slate-200">
-                      Şu anda kritik bir uyarı bulunmuyor.
-                    </div>
-                  ) : (
-                    attentionItems.map((item) => (
-                      <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-sm font-bold text-slate-200">
-                        {item}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
+
+      <DashboardKpiGrid>
+        <DashboardSummaryCard
+          label="Aktif kullanıcı"
+          value={activeUsers}
+          helper={`Toplam üyelik: ${organization.memberships.length}`}
+          href={dashboardHref("/dashboard/users", organizationContext)}
+        />
+        <DashboardSummaryCard
+          label="Aktif ürün"
+          value={activeProducts}
+          helper="Aktif ürün kurulumları"
+          href={dashboardHref("/dashboard/products", organizationContext)}
+        />
+        <DashboardSummaryCard
+          label="Aktif lisans"
+          value={activeLicenses}
+          helper={wexPayLicense ? wexPayLicense.plan.name : "Lisans kaydı yok"}
+          href={dashboardHref("/dashboard/subscription", organizationContext)}
+        />
+        <DashboardSummaryCard
+          label="Abonelik"
+          value={subscription ? formatCoreStatus(subscription.status) : "Yok"}
+          helper={
+            subscription
+              ? "Otomatik ödeme durumu sağlayıcı yapılandırmasına bağlıdır."
+              : "Henüz abonelik kaydı bulunmuyor."
+          }
+          href={dashboardHref("/dashboard/subscription", organizationContext)}
+        />
+        <DashboardSummaryCard
+          label="Açık destek"
+          value={openSupport}
+          helper="Yanıt bekleyen talepler"
+          href={dashboardHref("/dashboard/support", organizationContext)}
+          tone={openSupport > 0 ? "warning" : "default"}
+        />
+        {wexPayLicense?.endsAt ? (
+          <DashboardSummaryCard
+            label="Yenileme"
+            value={wexPayLicense.endsAt.toLocaleDateString("tr-TR")}
+            helper={renewalSoon ? "30 gün içinde yaklaşıyor" : "Lisans bitiş tarihi"}
+            tone={renewalSoon ? "warning" : "default"}
+            href={dashboardHref("/dashboard/subscription", organizationContext)}
+          />
+        ) : null}
+        <DashboardSummaryCard label="WexPay erişimi" value={hasWexPayAccess ? "Aktif" : "Kapalı"} helper="Core erişim kararı" />
+        <DashboardSummaryCard label="Şube / masa" value={`${branchCount} / ${tableCount}`} helper="Operasyon kapsamı" />
+      </DashboardKpiGrid>
 
           <DashboardStatusBar>
-            <DashboardStatusItem label="Organizasyon" value="Oluşturuldu" />
+            <DashboardStatusItem label="Organizasyon" value={organization.isActive ? "Aktif" : "Pasif"} />
             <DashboardStatusItem label="WexPay erişimi" value={hasWexPayAccess ? "Aktif" : "Bekliyor"} />
             <DashboardStatusItem label="İlk kullanıcı" value={organization.memberships.length > 0 ? "Eklendi" : "Eksik"} />
             <DashboardStatusItem label="Restoran" value={organization.restaurants.length > 0 ? "Eklendi" : "Eklenmedi"} />

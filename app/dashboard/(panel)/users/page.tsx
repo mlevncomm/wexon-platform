@@ -1,9 +1,17 @@
+import Link from "next/link";
+import { Suspense } from "react";
+import DashboardDetailDrawer from "@/components/marketing/DashboardDetailDrawer";
 import {
   DashboardAccountStatusNotice,
   DashboardEmptyState,
+  DashboardFilterBar,
+  DashboardInfoRow,
+  DashboardKpiGrid,
   DashboardPanel,
   DashboardRoleCard,
   DashboardSectionTitle,
+  DashboardSummaryCard,
+  DashboardTableShell,
 } from "@/components/marketing/WexonDashboardCards";
 import {
   addCustomerOrganizationUserAction,
@@ -12,13 +20,31 @@ import {
   updateCustomerMembershipRoleAction,
 } from "@/lib/wexon-customer-actions";
 import { canManageOrganizationUsers, getCurrentCustomerUser } from "@/lib/wexon-customer-auth";
-import { formatCoreDate, formatCoreStatus, getCustomerDashboardData, roleDescriptions } from "@/lib/wexon-core-dashboard";
+import { dashboardHref, formatCoreDate, formatCoreStatus, getCustomerDashboardData, roleDescriptions, type DashboardOrganizationContext } from "@/lib/wexon-core-dashboard";
 
-type DashboardSearchParams = Promise<{ organizationId?: string; organizationSlug?: string; customerError?: string }>;
+type DashboardSearchParams = Promise<{
+  organizationId?: string;
+  organizationSlug?: string;
+  customerError?: string;
+  userId?: string;
+  q?: string;
+}>;
+
+function usersHref(context: DashboardOrganizationContext, extra?: Record<string, string | undefined>) {
+  const base = dashboardHref("/dashboard/users", context);
+  const url = new URL(base, "http://local");
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+  }
+  return `${url.pathname}${url.search}`;
+}
 
 export default async function DashboardUsersPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
-  const [{ organization }, currentUser] = await Promise.all([
+  const [{ organization, organizationContext }, currentUser] = await Promise.all([
     getCustomerDashboardData(params),
     getCurrentCustomerUser(),
   ]);
@@ -43,8 +69,19 @@ export default async function DashboardUsersPage({ searchParams }: { searchParam
     ["VIEWER", "Görüntüleyici"],
   ];
 
+  const query = params.q?.trim().toLowerCase() ?? "";
+  const memberships = organization.memberships.filter((membership) => {
+    if (!query) return true;
+    const haystack = `${membership.user.name ?? ""} ${membership.user.email} ${membership.role}`.toLowerCase();
+    return haystack.includes(query);
+  });
+  const activeCount = organization.memberships.filter((m) => m.status === "ACTIVE").length;
+  const selected =
+    organization.memberships.find((m) => m.userId === params.userId || m.id === params.userId) ?? null;
+  const listHref = usersHref(organizationContext, { q: params.q });
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {!organization.isActive && <DashboardAccountStatusNotice />}
       <DashboardSectionTitle
         badge="Kullanıcılar"
@@ -57,56 +94,119 @@ export default async function DashboardUsersPage({ searchParams }: { searchParam
         </div>
       )}
 
+      <DashboardKpiGrid>
+        <DashboardSummaryCard label="Toplam üyelik" value={organization.memberships.length} />
+        <DashboardSummaryCard label="Aktif" value={activeCount} tone="success" />
+        <DashboardSummaryCard
+          label="Pasif / diğer"
+          value={organization.memberships.length - activeCount}
+          tone={organization.memberships.length - activeCount > 0 ? "warning" : "default"}
+        />
+        <DashboardSummaryCard label="Yönetim yetkisi" value={canManageUsers ? "Var" : "Yok"} />
+      </DashboardKpiGrid>
+
       <DashboardPanel>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-black tracking-tight text-slate-950">Organizasyon kullanıcıları</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Toplam kullanıcı: {organization.memberships.length}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              Gösterilen: {memberships.length} / {organization.memberships.length}
+            </p>
           </div>
         </div>
-      {organization.memberships.length === 0 ? (
-        <DashboardEmptyState
-          title="Henüz kullanıcı daveti oluşturulmadı."
-          description="Kullanıcılar ve roller bu alanda görüntülenecektir."
-        />
-      ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
+
+        <form method="get" className="mb-4">
+          {organizationContext.organizationId ? (
+            <input type="hidden" name="organizationId" value={organizationContext.organizationId} />
+          ) : null}
+          {organizationContext.organizationSlug ? (
+            <input type="hidden" name="organizationSlug" value={organizationContext.organizationSlug} />
+          ) : null}
+          <DashboardFilterBar>
+            <label className="block min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Ara</span>
+              <input
+                name="q"
+                defaultValue={params.q ?? ""}
+                placeholder="Ad, e-posta veya rol"
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              />
+            </label>
+            <button type="submit" className="rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white">
+              Filtrele
+            </button>
+          </DashboardFilterBar>
+        </form>
+
+        {memberships.length === 0 ? (
+          <DashboardEmptyState
+            title={query ? "Aramayla eşleşen kullanıcı yok." : "Henüz kullanıcı daveti oluşturulmadı."}
+            description="Kullanıcılar ve roller bu alanda görüntülenecektir."
+          />
+        ) : (
+          <DashboardTableShell>
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead className="text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  <th className="px-4 py-3 font-black">Ad</th>
-                  <th className="px-4 py-3 font-black">E-posta</th>
-                  <th className="px-4 py-3 font-black">Rol</th>
-                  <th className="px-4 py-3 font-black">Durum</th>
-                  <th className="px-4 py-3 font-black">Eklenme</th>
-                  <th className="px-4 py-3 font-black">Aksiyonlar</th>
+                  <th className="font-black">Ad</th>
+                  <th className="font-black">E-posta</th>
+                  <th className="font-black">Rol</th>
+                  <th className="font-black">Durum</th>
+                  <th className="font-black">Eklenme</th>
+                  <th className="font-black">Detay</th>
+                  <th className="font-black">Aksiyonlar</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-            {organization.memberships.map((membership) => (
-                  <tr key={membership.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-bold text-slate-950">{membership.user.name ?? "-"}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{membership.user.email}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatCoreStatus(membership.role)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatCoreStatus(membership.status)}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-600">{formatCoreDate(membership.createdAt)}</td>
-                    <td className="px-4 py-3">
+                {memberships.map((membership) => (
+                  <tr key={membership.id}>
+                    <td className="font-bold text-slate-950">{membership.user.name ?? "-"}</td>
+                    <td className="font-semibold text-slate-600">{membership.user.email}</td>
+                    <td className="font-semibold text-slate-600">{formatCoreStatus(membership.role)}</td>
+                    <td className="font-semibold text-slate-600">{formatCoreStatus(membership.status)}</td>
+                    <td className="font-semibold text-slate-600">{formatCoreDate(membership.createdAt)}</td>
+                    <td>
+                      <Link
+                        href={usersHref(organizationContext, { userId: membership.userId, q: params.q })}
+                        className="text-xs font-black text-emerald-700 hover:underline"
+                      >
+                        Aç
+                      </Link>
+                    </td>
+                    <td>
                       {canManageUsers ? (
                         <div className="flex flex-wrap gap-2">
                           <form action={updateCustomerMembershipRoleAction} className="flex gap-2">
                             <input type="hidden" name="organizationId" value={organization.id} />
                             <input type="hidden" name="membershipId" value={membership.id} />
-                            <select name="role" defaultValue={membership.role} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold">
+                            <select
+                              name="role"
+                              defaultValue={membership.role}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold"
+                            >
                               {roleOptions.map(([value, label]) => (
-                                <option key={value} value={value}>{label}</option>
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
                               ))}
                             </select>
-                            <button type="submit" className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white">Güncelle</button>
+                            <button type="submit" className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white">
+                              Güncelle
+                            </button>
                           </form>
-                          <form action={membership.status === "ACTIVE" ? deactivateCustomerMembershipAction : reactivateCustomerMembershipAction}>
+                          <form
+                            action={
+                              membership.status === "ACTIVE"
+                                ? deactivateCustomerMembershipAction
+                                : reactivateCustomerMembershipAction
+                            }
+                          >
                             <input type="hidden" name="organizationId" value={organization.id} />
                             <input type="hidden" name="membershipId" value={membership.id} />
-                            <button type="submit" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
+                            <button
+                              type="submit"
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50"
+                            >
                               {membership.status === "ACTIVE" ? "Pasife al" : "Aktif et"}
                             </button>
                           </form>
@@ -116,11 +216,11 @@ export default async function DashboardUsersPage({ searchParams }: { searchParam
                       )}
                     </td>
                   </tr>
-            ))}
+                ))}
               </tbody>
             </table>
-          </div>
-      )}
+          </DashboardTableShell>
+        )}
       </DashboardPanel>
 
       {canManageUsers ? (
@@ -134,29 +234,56 @@ export default async function DashboardUsersPage({ searchParams }: { searchParam
             <input type="hidden" name="organizationId" value={organization.id} />
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Ad</span>
-              <input name="name" className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+              <input
+                name="name"
+                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              />
             </label>
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">E-posta</span>
-              <input name="email" type="email" required className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+              <input
+                name="email"
+                type="email"
+                required
+                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              />
             </label>
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Rol</span>
-              <select name="role" defaultValue="STAFF" className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
+              <select
+                name="role"
+                defaultValue="STAFF"
+                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              >
                 {roleOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
                 ))}
               </select>
             </label>
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Geçici şifre</span>
-              <input name="temporaryPassword" type="password" required className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+              <input
+                name="temporaryPassword"
+                type="password"
+                required
+                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              />
             </label>
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-              <input name="mustChangePassword" value="true" type="checkbox" defaultChecked className="mt-1 h-4 w-4 rounded border-slate-300" />
+              <input
+                name="mustChangePassword"
+                value="true"
+                type="checkbox"
+                defaultChecked
+                className="mt-1 h-4 w-4 rounded border-slate-300"
+              />
               <span>
                 <span className="block text-sm font-black text-slate-950">İlk girişte şifre değiştirmeye zorla</span>
-                <span className="mt-1 block text-xs font-semibold text-slate-500">Kullanıcı ilk girişten sonra kendi şifresini belirler.</span>
+                <span className="mt-1 block text-xs font-semibold text-slate-500">
+                  Kullanıcı ilk girişten sonra kendi şifresini belirler.
+                </span>
               </span>
             </label>
             <div className="md:col-span-2">
@@ -183,6 +310,24 @@ export default async function DashboardUsersPage({ searchParams }: { searchParam
           ))}
         </div>
       </DashboardPanel>
+
+      <Suspense fallback={null}>
+        <DashboardDetailDrawer
+          open={Boolean(selected)}
+          title={selected?.user.name ?? selected?.user.email ?? "Kullanıcı"}
+          subtitle={selected ? selected.user.email : undefined}
+          closeHref={listHref}
+        >
+          {selected ? (
+            <div className="space-y-3">
+              <DashboardInfoRow label="Rol" value={formatCoreStatus(selected.role)} />
+              <DashboardInfoRow label="Durum" value={formatCoreStatus(selected.status)} />
+              <DashboardInfoRow label="Eklenme" value={formatCoreDate(selected.createdAt)} />
+              <DashboardInfoRow label="Üyelik kimliği" value={selected.id} />
+            </div>
+          ) : null}
+        </DashboardDetailDrawer>
+      </Suspense>
     </div>
   );
 }
