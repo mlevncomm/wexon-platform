@@ -395,7 +395,7 @@ export default function WexonAdminHeaderToolbar({
         </div>
       </div>
 
-      <div className="hidden h-14 items-center gap-3 px-4 sm:px-6 lg:gap-4 lg:px-8 xl:px-10 2xl:px-12 md:flex">
+      <div className="hidden h-14 items-center gap-3 px-[15px] lg:gap-4 md:flex">
         <AdminBrandLink />
         <div className="flex min-w-0 flex-1 items-center justify-center px-2 lg:px-6">
           <button type="button" onClick={openCommand} className={`${searchTriggerClassName} max-w-sm`}>

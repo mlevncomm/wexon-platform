@@ -68,7 +68,7 @@ test.describe.serial("admin wide workspace", () => {
       );
     }
 
-    // Desktop: sidebar keeps a fixed rail and content uses the majority of the screen.
+    // Desktop: exact 15px symmetry — edge / sidebar / 15px / content / 15px / edge.
     for (const width of [1440, 1728, 1920] as const) {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto("/admin");
@@ -83,11 +83,24 @@ test.describe.serial("admin wide workspace", () => {
       const content = page.locator(".admin-content");
       const contentBox = await content.boundingBox();
       expect(contentBox).toBeTruthy();
-      // Content should use the majority of the viewport after the sidebar rail.
-      expect(contentBox!.width, `content at ${width}`).toBeGreaterThan(width * 0.6);
-      // And should not be capped far below the available area (no huge empty margins).
-      const rightEdge = contentBox!.x + contentBox!.width;
-      expect(width - rightEdge, `right gutter at ${width}`).toBeLessThanOrEqual(120);
+
+      // Use layout width so a classic scrollbar cannot skew the right-gap math.
+      const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth);
+
+      const leftOuterGap = sidebarBox!.x;
+      const contentGap = contentBox!.x - (sidebarBox!.x + sidebarBox!.width);
+      const rightOuterGap = layoutWidth - (contentBox!.x + contentBox!.width);
+
+      expect(leftOuterGap, `left outer gap at ${width}`).toBeGreaterThanOrEqual(14);
+      expect(leftOuterGap, `left outer gap at ${width}`).toBeLessThanOrEqual(16);
+      expect(contentGap, `sidebar-content gap at ${width}`).toBeGreaterThanOrEqual(14);
+      expect(contentGap, `sidebar-content gap at ${width}`).toBeLessThanOrEqual(16);
+      expect(rightOuterGap, `right outer gap at ${width}`).toBeGreaterThanOrEqual(14);
+      expect(rightOuterGap, `right outer gap at ${width}`).toBeLessThanOrEqual(16);
+
+      // Content occupies the entire remaining area after the rail + 3 × 15px gaps.
+      const expectedContentWidth = layoutWidth - sidebarBox!.width - 45;
+      expect(Math.abs(contentBox!.width - expectedContentWidth), `content width at ${width}`).toBeLessThanOrEqual(3);
     }
 
     // Mobile: nav collapses into the toggle button; menu opens and closes.
