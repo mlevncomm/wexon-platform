@@ -124,7 +124,27 @@ test.describe.serial("admin wide workspace", () => {
       expect(overflow.scrollWidth, `route ${path}`).toBeLessThanOrEqual(overflow.clientWidth + 2);
     }
 
-    // Table-heavy pages stay usable wide: header row visible, no page-level overflow.
+    // Table-heavy pages stay usable wide: header row visible, no page-level overflow,
+    // and no inner horizontal scroll inside table shells at ≥1440px.
+    for (const tableRoute of [
+      "/admin/users",
+      "/admin/licenses",
+      "/admin/subscriptions",
+      "/admin/billing",
+      "/admin/integrations",
+      "/admin/support",
+      "/admin/audit-logs",
+    ]) {
+      await page.goto(tableRoute);
+      const innerTableScroll = await page.evaluate(() => {
+        const overflows = Array.from(document.querySelectorAll("table")).map((tableEl) => {
+          const wrap = tableEl.closest("div[class*='overflow-x-auto']");
+          return wrap ? wrap.scrollWidth - wrap.clientWidth : 0;
+        });
+        return Math.max(0, ...overflows);
+      });
+      expect(innerTableScroll, `inner table scroll on ${tableRoute} at 1440`).toBeLessThanOrEqual(1);
+    }
     await page.goto("/admin/users");
     await expect(page.locator("table thead").first()).toBeVisible();
 

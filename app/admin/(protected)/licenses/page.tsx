@@ -95,32 +95,32 @@ export default async function AdminLicensesPage({ searchParams }: { searchParams
         <AdminEmptyState>Henüz lisans bulunmuyor.</AdminEmptyState>
       ) : (
         <AdminTableShell>
-          <table className="w-full min-w-[1040px] text-left text-sm">
+          <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
               <tr>
-                <th className="px-5 py-4 font-bold">Müşteri</th>
-                <th className="px-5 py-4 font-bold">Ürün / Plan</th>
-                <th className="px-5 py-4 font-bold">Dönem</th>
-                <th className="px-5 py-4 font-bold">Durum</th>
-                <th className="px-5 py-4 font-bold">İşlem</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Ürün / Plan</th>
+                <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Dönem</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
+                <th className="px-3 py-4 font-bold sm:px-5">İşlem</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {licenses.map((license) => (
                 <tr key={license.id}>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-4 sm:px-5">
                     <AdminOrgLink id={license.organizationId} name={license.organization.name} />
                   </td>
-                  <td className="px-5 py-4 text-slate-600">
+                  <td className="px-3 py-4 text-slate-600 sm:px-5">
                     {license.product.name} · {displayPlanName(license.plan.name)}
                   </td>
-                  <td className="px-5 py-4 text-slate-600">
+                  <td className="hidden px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">
                     {formatAdminDate(license.startsAt)} → {formatAdminDate(license.endsAt)}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-4 sm:px-5">
                     <AdminStatusPill active={license.status === "ACTIVE"}>{formatAdminStatus(license.status)}</AdminStatusPill>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-4 sm:px-5">
                     <AdminInlineSelectForm
                       action={changeAdminLicenseStatusAction.bind(null, license.organizationId, license.id)}
                       returnTo="/admin/licenses"
