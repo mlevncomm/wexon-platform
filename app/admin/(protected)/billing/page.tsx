@@ -139,32 +139,32 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
           <AdminEmptyState>Henüz fatura kaydı bulunmuyor.</AdminEmptyState>
         ) : (
           <AdminTableShell>
-            <table className="w-full min-w-[920px] text-left text-sm">
+            <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  <th className="px-5 py-4 font-bold">Fatura no</th>
-                  <th className="px-5 py-4 font-bold">Müşteri</th>
-                  <th className="px-5 py-4 font-bold">Tutar</th>
-                  <th className="px-5 py-4 font-bold">Vade</th>
-                  <th className="px-5 py-4 font-bold">Durum</th>
-                  <th className="px-5 py-4 font-bold">Güncelle</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Fatura no</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Tutar</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Vade</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Güncelle</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {invoices.map((invoice) => (
                   <tr key={invoice.id}>
-                    <td className="px-5 py-4 font-semibold text-slate-950">{invoice.invoiceNo}</td>
-                    <td className="px-5 py-4">
+                    <td className="hidden px-3 py-4 font-semibold text-slate-950 sm:px-5 lg:table-cell">{invoice.invoiceNo}</td>
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminOrgLink id={invoice.organizationId} name={invoice.organization.name} />
                     </td>
-                    <td className="px-5 py-4 text-slate-600">
+                    <td className="px-3 py-4 text-slate-600 sm:px-5">
                       {String(invoice.total)} {invoice.currency}
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{formatAdminDate(invoice.dueAt)}</td>
-                    <td className="px-5 py-4">
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">{formatAdminDate(invoice.dueAt)}</td>
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminStatusPill active={invoice.status === "PAID"}>{formatAdminStatus(invoice.status)}</AdminStatusPill>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminInlineSelectForm
                         action={updateAdminInvoiceStatusAction.bind(null, invoice.id)}
                         returnTo="/admin/billing"
@@ -187,44 +187,44 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
           <AdminEmptyState>Henüz PayTR abonelik ödemesi yok.</AdminEmptyState>
         ) : (
           <AdminTableShell>
-            <table className="w-full min-w-[1100px] text-left text-sm">
+            <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  <th className="px-5 py-4 font-bold">merchantOid</th>
-                  <th className="px-5 py-4 font-bold">Provider</th>
-                  <th className="px-5 py-4 font-bold">Müşteri</th>
-                  <th className="px-5 py-4 font-bold">Plan</th>
-                  <th className="px-5 py-4 font-bold">Customer</th>
-                  <th className="px-5 py-4 font-bold">Tutar</th>
-                  <th className="px-5 py-4 font-bold">Durum</th>
-                  <th className="px-5 py-4 font-bold">paidAt</th>
-                  <th className="px-5 py-4 font-bold">Callback</th>
-                  <th className="px-5 py-4 font-bold">Failed</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">merchantOid</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 2xl:table-cell">Provider</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Plan</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Customer</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Tutar</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">paidAt</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 2xl:table-cell">Callback</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 2xl:table-cell">Failed</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {subscriptionPayments.map((payment) => (
                   <tr key={payment.id}>
-                    <td className="px-5 py-4 font-mono text-xs text-slate-700">{payment.merchantOid}</td>
-                    <td className="px-5 py-4 text-slate-600">
+                    <td className="hidden break-all px-3 py-4 font-mono text-xs text-slate-700 sm:px-5 xl:table-cell">{payment.merchantOid}</td>
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 2xl:table-cell">
                       {payment.provider}/{payment.providerMode}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminOrgLink id={payment.organizationId} name={payment.organization.name} />
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{displayPlanName(payment.plan.name)}</td>
-                    <td className="px-5 py-4 text-slate-600">{payment.user?.email ?? "-"}</td>
-                    <td className="px-5 py-4 text-slate-600">
+                    <td className="px-3 py-4 text-slate-600 sm:px-5">{displayPlanName(payment.plan.name)}</td>
+                    <td className="hidden break-all px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">{payment.user?.email ?? "-"}</td>
+                    <td className="px-3 py-4 text-slate-600 sm:px-5">
                       {String(payment.amount)} {payment.currency}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminStatusPill active={payment.status === "PAID"}>{formatAdminStatus(payment.status)}</AdminStatusPill>
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{formatAdminDate(payment.paidAt)}</td>
-                    <td className="px-5 py-4 text-slate-600">
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{formatAdminDate(payment.paidAt)}</td>
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 2xl:table-cell">
                       {payment.callbackStatus ? `${payment.callbackStatus}` : "—"}
                     </td>
-                    <td className="px-5 py-4 text-xs text-rose-700">
+                    <td className="hidden px-3 py-4 text-xs text-rose-700 sm:px-5 2xl:table-cell">
                       {payment.failedReasonMsg ?? payment.failedReasonCode ?? "—"}
                     </td>
                   </tr>
@@ -241,28 +241,28 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
           <AdminEmptyState>Henüz tahsilat kaydı bulunmuyor.</AdminEmptyState>
         ) : (
           <AdminTableShell>
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[480px] text-left text-sm lg:min-w-0">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  <th className="px-5 py-4 font-bold">Müşteri</th>
-                  <th className="px-5 py-4 font-bold">Fatura</th>
-                  <th className="px-5 py-4 font-bold">Tutar</th>
-                  <th className="px-5 py-4 font-bold">Ödenme</th>
-                  <th className="px-5 py-4 font-bold">Durum</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Fatura</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Tutar</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Ödenme</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {billingPayments.map((payment) => (
                   <tr key={payment.id}>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminOrgLink id={payment.organizationId} name={payment.organization.name} />
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{payment.invoice?.invoiceNo ?? "-"}</td>
-                    <td className="px-5 py-4 text-slate-600">
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{payment.invoice?.invoiceNo ?? "-"}</td>
+                    <td className="px-3 py-4 text-slate-600 sm:px-5">
                       {String(payment.amount)} {payment.currency}
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{formatAdminDate(payment.paidAt)}</td>
-                    <td className="px-5 py-4">
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{formatAdminDate(payment.paidAt)}</td>
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminStatusPill active={payment.status === "PAID"}>{formatAdminStatus(payment.status)}</AdminStatusPill>
                     </td>
                   </tr>

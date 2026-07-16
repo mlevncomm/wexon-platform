@@ -115,30 +115,30 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
           <AdminEmptyState>Henüz API anahtarı bulunmuyor.</AdminEmptyState>
         ) : (
           <AdminTableShell>
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  <th className="px-5 py-4 font-bold">Ad</th>
-                  <th className="px-5 py-4 font-bold">Müşteri</th>
-                  <th className="px-5 py-4 font-bold">Ürün</th>
-                  <th className="px-5 py-4 font-bold">Prefix</th>
-                  <th className="px-5 py-4 font-bold">Durum</th>
-                  <th className="px-5 py-4 font-bold">İşlem</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Ad</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Ürün</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Prefix</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">İşlem</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {apiKeys.map((apiKey) => (
                   <tr key={apiKey.id}>
-                    <td className="px-5 py-4 font-semibold text-slate-950">{apiKey.name}</td>
-                    <td className="px-5 py-4">
+                    <td className="break-words px-3 py-4 font-semibold text-slate-950 sm:px-5">{apiKey.name}</td>
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminOrgLink id={apiKey.organizationId} name={apiKey.organization.name} />
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{apiKey.product?.name ?? "-"}</td>
-                    <td className="px-5 py-4 font-mono text-xs text-slate-600">{apiKey.prefix}</td>
-                    <td className="px-5 py-4">
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{apiKey.product?.name ?? "-"}</td>
+                    <td className="hidden px-3 py-4 font-mono text-xs text-slate-600 sm:px-5 xl:table-cell">{apiKey.prefix}</td>
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminStatusPill active={!apiKey.revokedAt}>{apiKey.revokedAt ? "İptal" : "Aktif"}</AdminStatusPill>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-4 sm:px-5">
                       {apiKey.revokedAt ? (
                         <span className="text-xs text-slate-400">—</span>
                       ) : (

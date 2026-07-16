@@ -3,7 +3,7 @@ import WexonAdminHeaderToolbar from "@/components/marketing/WexonAdminHeaderTool
 import WexonAdminNav from "@/components/marketing/WexonAdminNav";
 import { getAdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
-import { WORKSPACE_CONTENT_MAX_PX, WORKSPACE_SIDEBAR_WIDTH_PX } from "@/lib/wexon-workspace-layout";
+import { WORKSPACE_SIDEBAR_WIDTH_PX } from "@/lib/wexon-workspace-layout";
 
 export default async function WexonAdminShell({ children }: { children: ReactNode }) {
   const [session, snapshot] = await Promise.all([getAdminSession(), getAdminHeaderSnapshot()]);
@@ -17,9 +17,9 @@ export default async function WexonAdminShell({ children }: { children: ReactNod
         </div>
       </header>
 
-      <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
+      <main className="px-[15px] py-4 sm:py-6">
         <div
-          className="admin-body mx-auto grid w-full max-w-none min-w-0 items-start gap-4 sm:gap-5 lg:grid-cols-[var(--workspace-sidebar)_minmax(0,1fr)]"
+          className="admin-body mx-auto grid w-full max-w-none min-w-0 items-start gap-[15px] lg:grid-cols-[var(--workspace-sidebar)_minmax(0,1fr)]"
           style={{ ["--workspace-sidebar" as string]: `${WORKSPACE_SIDEBAR_WIDTH_PX}px` }}
         >
           <aside className="min-w-0 lg:self-start">
@@ -43,10 +43,7 @@ export default async function WexonAdminShell({ children }: { children: ReactNod
               <WexonAdminNav />
             </div>
           </aside>
-          <div
-            className="admin-content wx-panel-enter min-w-0 w-full max-w-none"
-            style={{ maxWidth: `${WORKSPACE_CONTENT_MAX_PX}px` }}
-          >
+          <div className="admin-content wx-panel-enter min-w-0 w-full max-w-none justify-self-stretch">
             {children}
           </div>
         </div>

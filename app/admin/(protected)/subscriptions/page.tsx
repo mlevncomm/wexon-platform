@@ -90,35 +90,35 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
         <AdminEmptyState>Henüz abonelik kaydı bulunmuyor.</AdminEmptyState>
       ) : (
         <AdminTableShell>
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[600px] text-left text-sm lg:min-w-0">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
               <tr>
-                <th className="px-5 py-4 font-bold">Müşteri</th>
-                <th className="px-5 py-4 font-bold">Plan</th>
-                <th className="px-5 py-4 font-bold">Dönem</th>
-                <th className="px-5 py-4 font-bold">Başlangıç</th>
-                <th className="px-5 py-4 font-bold">Bitiş</th>
-                <th className="px-5 py-4 font-bold">Durum</th>
-                <th className="px-5 py-4 font-bold">Güncelle</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Plan</th>
+                <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Dönem</th>
+                <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Başlangıç</th>
+                <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Bitiş</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Güncelle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {subscriptions.map((subscription) => (
                 <tr key={subscription.id}>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-4 sm:px-5">
                     <AdminOrgLink id={subscription.organizationId} name={subscription.organization.name} />
                   </td>
-                  <td className="px-5 py-4 text-slate-600">{displayPlanName(subscription.plan.name)}</td>
-                  <td className="px-5 py-4 text-slate-600">{formatAdminStatus(subscription.interval)}</td>
-                  <td className="px-5 py-4 text-slate-600">{formatAdminDate(subscription.currentPeriodStart)}</td>
-                  <td className="px-5 py-4 text-slate-600">{formatAdminDate(subscription.currentPeriodEnd)}</td>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-4 text-slate-600 sm:px-5">{displayPlanName(subscription.plan.name)}</td>
+                  <td className="hidden px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">{formatAdminStatus(subscription.interval)}</td>
+                  <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{formatAdminDate(subscription.currentPeriodStart)}</td>
+                  <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{formatAdminDate(subscription.currentPeriodEnd)}</td>
+                  <td className="px-3 py-4 sm:px-5">
                     <AdminStatusPill active={subscription.status === "ACTIVE"}>{formatAdminStatus(subscription.status)}</AdminStatusPill>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-4 sm:px-5">
                     <form
                       action={updateAdminSubscriptionStatusAction.bind(null, subscription.id)}
-                      className="flex min-w-[220px] flex-col gap-2"
+                      className="flex w-full min-w-[180px] max-w-[260px] flex-col gap-2"
                     >
                       <input type="hidden" name="returnTo" value="/admin/subscriptions" />
                       <select

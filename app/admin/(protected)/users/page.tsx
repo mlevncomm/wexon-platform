@@ -68,15 +68,15 @@ export default async function AdminUsersPage({
         <AdminEmptyState>Kullanıcı bulunamadı.</AdminEmptyState>
       ) : (
         <AdminTableShell>
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[640px] text-left text-sm lg:min-w-0">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
               <tr>
-                <th className="px-5 py-4 font-bold">Kullanıcı</th>
-                <th className="px-5 py-4 font-bold">Üyelikler</th>
-                <th className="px-5 py-4 font-bold">Son giriş</th>
-                <th className="px-5 py-4 font-bold">Durum</th>
-                <th className="px-5 py-4 font-bold">Şifre sıfırla</th>
-                <th className="px-5 py-4 font-bold">Hesap</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Kullanıcı</th>
+                <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Üyelikler</th>
+                <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Son giriş</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Şifre sıfırla</th>
+                <th className="px-3 py-4 font-bold sm:px-5">Hesap</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -85,14 +85,14 @@ export default async function AdminUsersPage({
                 const toggleActive = toggleAdminUserActiveAction.bind(null, user.id);
                 return (
                   <tr key={user.id} className="align-top">
-                    <td className="px-5 py-4">
-                      <p className="font-black text-slate-950">{user.name ?? "—"}</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">{user.email}</p>
+                    <td className="min-w-0 px-3 py-4 sm:px-5">
+                      <p className="break-words font-black text-slate-950">{user.name ?? "—"}</p>
+                      <p className="mt-1 break-all text-xs font-semibold text-slate-500">{user.email}</p>
                       {user.mustChangePassword ? (
                         <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Şifre değişimi gerekli</span>
                       ) : null}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="hidden px-3 py-4 sm:px-5 lg:table-cell">
                       {user.memberships.length === 0 ? (
                         <span className="text-slate-400">Üyelik yok</span>
                       ) : (
@@ -108,11 +108,11 @@ export default async function AdminUsersPage({
                         </div>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{formatAdminDate(user.lastLoginAt)}</td>
-                    <td className="px-5 py-4">
+                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">{formatAdminDate(user.lastLoginAt)}</td>
+                    <td className="px-3 py-4 sm:px-5">
                       <AdminStatusPill active={user.isActive}>{user.isActive ? "Aktif" : "Pasif"}</AdminStatusPill>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-4 sm:px-5">
                       <form action={resetPassword} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="returnTo" value={`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`} />
                         <input
@@ -129,7 +129,7 @@ export default async function AdminUsersPage({
                         </button>
                       </form>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-4 sm:px-5">
                       <form action={toggleActive}>
                         <input type="hidden" name="returnTo" value={`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`} />
                         <button

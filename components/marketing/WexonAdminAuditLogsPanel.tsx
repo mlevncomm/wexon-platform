@@ -128,16 +128,16 @@ export default async function WexonAdminAuditLogsPanel({
       ) : (
         <>
           <AdminTableShell>
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
                 <tr>
-                  <th className="px-5 py-4 font-bold">Seviye</th>
-                  <th className="px-5 py-4 font-bold">Olay</th>
-                  <th className="px-5 py-4 font-bold">Müşteri</th>
-                  <th className="px-5 py-4 font-bold">Kullanıcı</th>
-                  <th className="px-5 py-4 font-bold">Kaynak</th>
-                  <th className="px-5 py-4 font-bold">Zaman</th>
-                  <th className="px-5 py-4 font-bold">Detay</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Seviye</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Olay</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Müşteri</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Kullanıcı</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 2xl:table-cell">Kaynak</th>
+                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Zaman</th>
+                  <th className="px-3 py-4 font-bold sm:px-5">Detay</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -146,7 +146,7 @@ export default async function WexonAdminAuditLogsPanel({
                   const source = readAuditMetadataSource(log.metadataJson);
                   return (
                     <tr key={log.id} className="align-top">
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-4 sm:px-5">
                         <div className="flex flex-col gap-1.5">
                           <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${levelTone(log.level, log.status)}`}>
                             {getAuditLevelLabel(log.level)}
@@ -154,16 +154,16 @@ export default async function WexonAdminAuditLogsPanel({
                           <span className="text-[11px] font-medium text-slate-400">{getAuditStatusLabel(log.status)}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-950">{getAuditActionLabel(log.action)}</p>
+                      <td className="min-w-0 px-3 py-4 sm:px-5">
+                        <p className="break-words font-semibold text-slate-950">{getAuditActionLabel(log.action)}</p>
                         {log.message ? <p className="mt-1 text-xs leading-relaxed text-slate-500">{log.message}</p> : null}
-                        <p className="mt-1 font-mono text-[10px] text-slate-400">{log.action}</p>
+                        <p className="mt-1 break-all font-mono text-[10px] text-slate-400">{log.action}</p>
                       </td>
-                      <td className="px-5 py-4 text-slate-600">{log.organization?.name ?? "Sistem"}</td>
-                      <td className="px-5 py-4 text-slate-600">{log.user?.email ?? "-"}</td>
-                      <td className="px-5 py-4 text-slate-500">{source ?? "-"}</td>
-                      <td className="px-5 py-4 whitespace-nowrap text-slate-600">{formatAdminDateTime(log.createdAt)}</td>
-                      <td className="px-5 py-4">
+                      <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{log.organization?.name ?? "Sistem"}</td>
+                      <td className="hidden break-all px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">{log.user?.email ?? "-"}</td>
+                      <td className="hidden px-3 py-4 text-slate-500 sm:px-5 2xl:table-cell">{source ?? "-"}</td>
+                      <td className="hidden whitespace-nowrap px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{formatAdminDateTime(log.createdAt)}</td>
+                      <td className="px-3 py-4 sm:px-5">
                         <details className="group">
                           <summary className="cursor-pointer list-none text-xs font-semibold text-emerald-700 hover:text-emerald-800">
                             Görüntüle

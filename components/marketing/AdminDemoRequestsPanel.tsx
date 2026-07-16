@@ -295,7 +295,7 @@ function LeadStatusUpdateForm({
   const updateStatus = updateAdminDemoRequestStatusAction.bind(null, requestId);
 
   return (
-    <form action={updateStatus} className={compact ? "flex min-w-[160px] flex-col gap-2" : "mt-4 space-y-2"}>
+    <form action={updateStatus} className={compact ? "flex min-w-0 flex-col gap-2" : "mt-4 space-y-2"}>
       <input type="hidden" name="returnTo" value={returnTo} />
       <select
         name="leadStatus"
@@ -420,47 +420,42 @@ function DemoRequestTableRow({
 
   return (
     <tr className="align-top transition-colors hover:bg-slate-50/80">
-      <td className="whitespace-nowrap px-4 py-5 text-xs font-semibold text-slate-500 xl:px-6">
-        <span className="block font-bold text-slate-700">{formatAdminDate(request.createdAt)}</span>
-      </td>
-      <td className="px-4 py-5 xl:px-6">
-        <div className="min-w-[168px] space-y-3">
+      <td className="px-3 py-5">
+        <div className="min-w-[132px] space-y-3">
           <LeadStatusBadge status={request.leadStatus} />
           <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} compact />
         </div>
       </td>
-      <td className="min-w-[180px] px-4 py-5 xl:min-w-[220px] xl:px-6">
+      <td className="min-w-[130px] px-3 py-5">
         <p className="break-words text-base font-black leading-snug text-slate-950">{meta.fullName ?? "—"}</p>
-        <p className="mt-1 break-words text-sm font-semibold text-slate-600 2xl:hidden">{meta.company ?? "—"}</p>
+        <p className="mt-1 break-words text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
+        <p className="mt-2 whitespace-nowrap text-xs font-bold text-slate-500 min-[1880px]:hidden">{formatAdminDate(request.createdAt)}</p>
       </td>
-      <td className="hidden min-w-[180px] px-4 py-5 2xl:table-cell xl:px-6">
-        <p className="break-words text-sm font-semibold text-slate-700">{meta.company ?? "—"}</p>
+      <td className="hidden whitespace-nowrap px-3 py-5 text-xs font-semibold text-slate-500 min-[1880px]:table-cell">
+        <span className="block font-bold text-slate-700">{formatAdminDate(request.createdAt)}</span>
       </td>
-      <td className="min-w-[220px] px-4 py-5 xl:min-w-[260px] xl:px-6">
+      <td className="min-w-[150px] px-3 py-5">
         <div className="space-y-2">
           <p className="break-all text-sm font-semibold text-slate-700">{email ?? "—"}</p>
-          <p className="break-words text-sm font-semibold text-slate-500 xl:hidden">{phone ?? "—"}</p>
+          <p className="break-words text-sm font-semibold text-slate-500 min-[1700px]:hidden">{phone ?? "—"}</p>
         </div>
       </td>
-      <td className="hidden min-w-[140px] px-4 py-5 xl:table-cell xl:px-6">
+      <td className="hidden min-w-[110px] px-3 py-5 min-[1700px]:table-cell">
         <p className="break-words text-sm font-semibold text-slate-600">{phone ?? "—"}</p>
       </td>
-      <td className="px-4 py-5 xl:px-6">
-        <div className="flex min-w-[108px] flex-col gap-2">
+      <td className="px-3 py-5">
+        <div className="flex min-w-[90px] flex-col gap-2">
           <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
-          <DemoBadge className={`2xl:hidden ${sourceBadgeClass(source.key)}`}>{source.label}</DemoBadge>
-          <div className="xl:hidden">
+          <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
+          <div className="min-[1780px]:hidden">
             <EligibilityListBadges metadataJson={request.metadataJson} />
           </div>
         </div>
       </td>
-      <td className="hidden min-w-[130px] px-4 py-5 2xl:table-cell xl:px-6">
-        <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
-      </td>
-      <td className="hidden min-w-[140px] px-4 py-5 xl:table-cell xl:px-6">
+      <td className="hidden min-w-[110px] px-3 py-5 min-[1780px]:table-cell">
         <EligibilityListBadges metadataJson={request.metadataJson} />
       </td>
-      <td className="min-w-[220px] px-4 py-5 xl:min-w-[280px] xl:px-6">
+      <td className="min-w-[140px] px-3 py-5">
         <div className="space-y-3">
           <p className="line-clamp-4 break-words text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
           {hasEligibilityDetail ? (
@@ -475,14 +470,14 @@ function DemoRequestTableRow({
           ) : null}
         </div>
       </td>
-      <td className="min-w-[280px] px-4 py-5 xl:min-w-[340px] xl:px-6">
+      <td className="min-w-[200px] px-3 py-5">
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
           <FollowUpSummary followUp={request.followUp} compact />
           <LeadFollowUpUpdateForm requestId={request.id} followUp={request.followUp} returnTo={returnTo} compact />
         </div>
       </td>
-      <td className="px-4 py-5 xl:px-6">
-        <div className="flex min-w-[112px] flex-col gap-2">
+      <td className="px-3 py-5">
+        <div className="flex min-w-[88px] flex-col gap-2">
           <QuickActionLink href={email ? `mailto:${email}` : "#"} label="E-posta" disabled={!email} />
           <QuickActionLink href={phone ? `tel:${phone.replace(/\s/g, "")}` : "#"} label="Telefon" disabled={!phone} />
         </div>
@@ -500,21 +495,19 @@ function DemoRequestTable({
 }) {
   return (
     <AdminTableShell>
-      <table className="w-full min-w-[960px] border-collapse text-left text-sm xl:min-w-[1280px] 2xl:min-w-[1480px]">
+      <table className="w-full min-w-[860px] border-collapse text-left text-sm min-[1440px]:min-w-0">
         <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 text-[11px] uppercase tracking-[0.14em] text-slate-500 backdrop-blur-sm">
           <tr>
-            <th className="px-4 py-4 font-black xl:px-6">Tarih</th>
-            <th className="px-4 py-4 font-black xl:px-6">Durum</th>
-            <th className="px-4 py-4 font-black xl:px-6">Ad soyad</th>
-            <th className="hidden px-4 py-4 font-black 2xl:table-cell xl:px-6">Firma</th>
-            <th className="px-4 py-4 font-black xl:px-6">E-posta</th>
-            <th className="hidden px-4 py-4 font-black xl:table-cell xl:px-6">Telefon</th>
-            <th className="px-4 py-4 font-black xl:px-6">Ürün</th>
-            <th className="hidden px-4 py-4 font-black 2xl:table-cell xl:px-6">Kaynak</th>
-            <th className="hidden px-4 py-4 font-black xl:table-cell xl:px-6">Uygunluk</th>
-            <th className="px-4 py-4 font-black xl:px-6">Talep notu</th>
-            <th className="px-4 py-4 font-black xl:px-6">Takip</th>
-            <th className="px-4 py-4 font-black xl:px-6">Aksiyon</th>
+            <th className="px-3 py-4 font-black">Durum</th>
+            <th className="px-3 py-4 font-black">Ad soyad</th>
+            <th className="hidden px-3 py-4 font-black min-[1880px]:table-cell">Tarih</th>
+            <th className="px-3 py-4 font-black">E-posta</th>
+            <th className="hidden px-3 py-4 font-black min-[1700px]:table-cell">Telefon</th>
+            <th className="px-3 py-4 font-black">Ürün</th>
+            <th className="hidden px-3 py-4 font-black min-[1780px]:table-cell">Uygunluk</th>
+            <th className="px-3 py-4 font-black">Talep notu</th>
+            <th className="px-3 py-4 font-black">Takip</th>
+            <th className="px-3 py-4 font-black">Aksiyon</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 bg-white">
