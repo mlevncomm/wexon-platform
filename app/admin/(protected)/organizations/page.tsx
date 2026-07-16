@@ -44,7 +44,7 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
       {organizations.length === 0 ? (
         <AdminEmptyState>Henüz organizasyon bulunmuyor.</AdminEmptyState>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
           {organizations.map((organization) => {
             const license = organization.licenses.find((item) => item.product.key === "wexpay") ?? organization.licenses[0];
             return (

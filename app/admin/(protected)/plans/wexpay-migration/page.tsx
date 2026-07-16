@@ -77,7 +77,7 @@ export default async function AdminWexPayMigrationPage() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 <AdminInfoRow label="Mevcut plan" value={row.currentPlanKey ?? "-"} />
                 <AdminInfoRow label="Önerilen kademe" value={row.suggestedTier} />
                 <AdminInfoRow label="Lisans durumu" value={row.licenseStatus} />
