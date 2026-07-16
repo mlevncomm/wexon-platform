@@ -3,21 +3,25 @@ import WexonAdminHeaderToolbar from "@/components/marketing/WexonAdminHeaderTool
 import WexonAdminNav from "@/components/marketing/WexonAdminNav";
 import { getAdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
+import { WORKSPACE_CONTENT_MAX_PX, WORKSPACE_SIDEBAR_WIDTH_PX } from "@/lib/wexon-workspace-layout";
 
 export default async function WexonAdminShell({ children }: { children: ReactNode }) {
   const [session, snapshot] = await Promise.all([getAdminSession(), getAdminHeaderSnapshot()]);
   const userInitial = session?.email?.[0]?.toUpperCase() ?? "A";
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#f6f8f7] text-slate-950">
+    <div className="admin-shell min-h-screen w-full overflow-x-clip bg-[#f6f8f7] text-slate-950">
       <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/95 backdrop-blur-xl">
-        <div className="mx-auto max-w-[1680px]">
+        <div className="mx-auto w-full max-w-none">
           <WexonAdminHeaderToolbar snapshot={snapshot} userInitial={userInitial} userEmail={session?.email} />
         </div>
       </header>
 
-      <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="mx-auto grid w-full max-w-[1680px] min-w-0 items-start gap-4 sm:gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8 xl:px-10 2xl:px-12">
+        <div
+          className="admin-body mx-auto grid w-full max-w-none min-w-0 items-start gap-4 sm:gap-5 lg:grid-cols-[var(--workspace-sidebar)_minmax(0,1fr)]"
+          style={{ ["--workspace-sidebar" as string]: `${WORKSPACE_SIDEBAR_WIDTH_PX}px` }}
+        >
           <aside className="min-w-0 lg:self-start">
             <div className="w-full min-w-0 rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/70 lg:sticky lg:top-24 lg:rounded-[28px] lg:p-3.5">
               <div className="mb-3 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 lg:mb-4">
@@ -39,7 +43,12 @@ export default async function WexonAdminShell({ children }: { children: ReactNod
               <WexonAdminNav />
             </div>
           </aside>
-          <div className="wx-panel-enter min-w-0 w-full">{children}</div>
+          <div
+            className="admin-content wx-panel-enter min-w-0 w-full max-w-none"
+            style={{ maxWidth: `${WORKSPACE_CONTENT_MAX_PX}px` }}
+          >
+            {children}
+          </div>
         </div>
       </main>
     </div>

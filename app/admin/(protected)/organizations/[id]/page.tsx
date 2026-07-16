@@ -90,7 +90,7 @@ export default async function AdminOrganizationDetailPage({
               <h1 className="break-words text-3xl font-black tracking-[-0.02em] text-white sm:text-5xl">{organization.name}</h1>
               <p className="mt-3 text-sm font-semibold text-slate-300">{organization.email ?? organization.slug}</p>
             </div>
-            <div className="grid min-w-0 gap-3 sm:grid-cols-3 lg:w-[520px]">
+            <div className="grid min-w-0 gap-3 sm:grid-cols-3 lg:w-[520px] xl:w-[640px]">
               <div className="rounded-2xl bg-white/10 p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Durum</p>
                 <p className="mt-2 text-sm font-black text-white">{organization.isActive ? "Aktif" : "Pasif"}</p>
@@ -104,7 +104,7 @@ export default async function AdminOrganizationDetailPage({
                 <p className="mt-2 text-sm font-black text-white">{licenseStatus}</p>
               </div>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:w-[520px] lg:col-start-2 lg:row-start-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:w-[520px] lg:col-start-2 lg:row-start-2 xl:w-[640px]">
               <div className="rounded-2xl bg-white/10 p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Core erişim</p>
                 <p className="mt-2 text-sm font-black text-white">{coreAccessLabel}</p>

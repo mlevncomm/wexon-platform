@@ -61,7 +61,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
         </form>
       </AdminFormPanel>
 
-      <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {products.map((product) => {
           const updateProduct = updateAdminProductAction.bind(null, product.id);
           return (
