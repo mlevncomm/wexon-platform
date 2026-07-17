@@ -11,6 +11,7 @@ import {
 import { WexPayCashierWorkspace } from "@/components/wexpay/WexPayCashierWorkspace";
 import { WexPayPaytrCheckoutNotice } from "@/components/wexpay/WexPayPaytrCheckoutNotice";
 import { createTableAction, updateTableAction } from "@/lib/wexpay-actions";
+import { buildPublicTableQrUrl } from "@/lib/wexpay-public-table-url";
 import {
   listBranchNotifications,
   listBranchOrderableProducts,
@@ -73,6 +74,11 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
     categoryName: product.category?.name ?? "",
   }));
 
+  const cashierTables = tables.map((table) => ({
+    ...table,
+    publicQrUrl: buildPublicTableQrUrl(table.qrCode),
+  }));
+
   return (
     <WexPayPage>
       {wexpayError && <WexPayErrorNotice message={wexpayError} />}
@@ -87,9 +93,10 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
 
       <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl bg-slate-100" />}>
         <WexPayCashierWorkspace
-          tables={tables}
+          tables={cashierTables}
           canManage={context.canManage}
           activeBranchId={activeBranch.id}
+          activeBranchName={activeBranch.name}
           redirectTo={redirectTo}
           products={productOptions}
           notifications={notifications}

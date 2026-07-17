@@ -64,6 +64,7 @@ async function runOnce(label) {
       "e2e/wexpay-guest-mutation.spec.ts",
       "e2e/wexpay-active-table.spec.ts",
       "e2e/wexpay-modifiers.spec.ts",
+      "e2e/wexpay-table-qr.spec.ts",
     ],
     env,
   );

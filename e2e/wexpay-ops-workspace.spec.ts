@@ -70,10 +70,44 @@ test.describe.serial("wexpay ops workspace (read-only)", () => {
 
     await page.goto(`/apps/wexpay/tables?${orgQ}`);
     await expect(page.getByText("Kasa workspace")).toBeVisible();
-    const firstTable = page.locator("button").filter({ hasText: /kişilik|Kalan/ }).first();
+
+    const masa01Card = page.locator('[data-testid="cashier-table-card"][data-table-label="Masa 01"]');
+    const qrButton = masa01Card.getByTestId("cashier-table-qr-button");
+    if ((await masa01Card.count()) > 0 && (await qrButton.count()) > 0) {
+      await expect(qrButton).toBeVisible();
+      await qrButton.click();
+      const qrDialog = page.getByTestId("table-qr-dialog");
+      await expect(qrDialog).toBeVisible();
+      await expect(qrDialog.getByRole("heading", { name: /Masa 01 QR kodu/i })).toBeVisible();
+      const publicUrl = await page.getByTestId("table-qr-url").inputValue();
+      expect(publicUrl).toContain(`/wexpay/t/${fixtures.qrCode}`);
+      expect(publicUrl).not.toMatch(/organizationId|branchId|tableId=/i);
+
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+      await page.getByTestId("table-qr-copy").click();
+      await expect(page.getByTestId("table-qr-copy-success")).toBeVisible();
+
+      const openHref = await page.getByTestId("table-qr-open").getAttribute("href");
+      expect(openHref).toBe(publicUrl);
+
+      await page.keyboard.press("Escape");
+      await expect(qrDialog).toHaveCount(0);
+      await expect(qrButton).toBeFocused();
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await qrButton.click();
+      await expect(page.getByTestId("table-qr-dialog")).toBeVisible();
+      const overflowMobile = await measureOverflow(page);
+      expect(overflowMobile.scrollWidth).toBeLessThanOrEqual(overflowMobile.clientWidth + 2);
+      await page.keyboard.press("Escape");
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+
+    const firstTable = page.locator('[data-testid="cashier-table-card"] button').filter({ hasText: /kişilik|Kalan/ }).first();
     if (await firstTable.count()) {
       await firstTable.click();
       await expect(page.getByRole("dialog")).toBeVisible();
+      await expect(page.getByTestId("drawer-table-qr-button")).toBeVisible();
       const drawerText = await page.getByRole("dialog").innerText();
       expect(drawerText).toMatch(/Masayı aç ve ilk siparişi oluştur|Masaya yeni sipariş ekle/);
       expect(drawerText).not.toMatch(/Mevcut siparişe ürün ekle/);
