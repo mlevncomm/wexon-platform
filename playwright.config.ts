@@ -66,6 +66,10 @@ export default defineConfig({
         timeout: 120_000,
         env: {
           ...process.env,
+          // Align server-side public QR URLs with the Playwright webServer origin.
+          NEXT_PUBLIC_APP_URL: looksProduction
+            ? process.env.NEXT_PUBLIC_APP_URL ?? baseURL
+            : process.env.E2E_PUBLIC_APP_URL?.trim() || baseURL,
           // Relax in-memory auth rate limits for serial local E2E only.
           WEXON_E2E_RELAX_RATE_LIMIT: looksProduction ? process.env.WEXON_E2E_RELAX_RATE_LIMIT ?? "" : "true",
           WEXON_E2E_TARGET: looksProduction ? e2eTarget : process.env.WEXON_E2E_TARGET || "local",
