@@ -1,24 +1,31 @@
 /**
  * DB-backed integration tests for subscription → access synchronization.
  *
- * These exercise the REAL Prisma client and a real transaction, so they require
- * an ISOLATED local Postgres (never shared Supabase / production). They are NOT
- * part of `npm run test:unit`; run explicitly with `npm run test:unit:db`.
+ * What is exercised here: the real Prisma client, a real `$transaction`, the
+ * production helper `syncSubscriptionAccessState`, and `evaluateProductAccess`.
+ * The cookie/session-bound admin server action is NOT exercised directly; these
+ * tests replicate its transactional body (subscription update + helper) instead.
  *
- * Guarded to refuse obviously non-local / production targets and to clean up
- * every row it creates.
+ * They require an ISOLATED local Postgres and are gated by
+ * `assertLocalDbTestGuard` (opt-in + loopback host + test/e2e database). They
+ * are NOT part of `npm run test:unit`; run explicitly with
+ * `npm run test:unit:db` after exporting `WEXON_ALLOW_LOCAL_DB_TESTS=1` and a
+ * local `*_test` DATABASE_URL. Every row created is cleaned up.
  */
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
-import { prisma } from "./prisma";
+import { assertLocalDbTestGuard } from "./wexon-local-db-test-guard";
 import { evaluateProductAccess } from "./wexon-core-access";
 import { syncSubscriptionAccessState, SubscriptionAccessSyncError } from "./wexon-subscription-lifecycle";
+import { prisma } from "./prisma";
 
-const connection = process.env.DATABASE_URL ?? process.env.DIRECT_URL ?? "";
-const looksProduction =
-  process.env.VERCEL_ENV === "production" || connection.includes("supabase.com") || connection.includes("pooler.supabase");
+// Evaluate the safety guard at module load, before ANY database query runs
+// (Prisma's pool is lazy — importing it opens no connection). If the target is
+// not an opt-in local test database this throws, so no before/it hook — and
+// therefore no create/update/delete — ever executes.
+assertLocalDbTestGuard(process.env);
 
 const suffix = randomUUID().slice(0, 8);
 const productKey = `test-wexpay-${suffix}`;
@@ -41,10 +48,6 @@ async function currentSub() {
 
 describe("subscription access sync (DB-backed)", () => {
   before(async () => {
-    if (looksProduction) {
-      throw new Error("Refusing to run DB integration tests against a production / shared Supabase target.");
-    }
-
     const product = await prisma.product.create({
       data: { key: productKey, name: `Test WexPay ${suffix}`, status: "ACTIVE", isActive: true },
     });
@@ -219,5 +222,63 @@ describe("subscription access sync (DB-backed)", () => {
     const license = await prisma.license.findUniqueOrThrow({ where: { id: ids.license! } });
     assert.equal(sub.status, "ACTIVE");
     assert.equal(license.status, "ACTIVE");
+  });
+
+  it("3 (half-active guard): terminal → ACTIVE with PENDING installation rolls back", async () => {
+    await prisma.subscription.update({ where: { id: ids.subscription! }, data: { status: "CANCELLED", cancelAt: new Date() } });
+    await prisma.license.update({ where: { id: ids.license! }, data: { status: "CANCELLED" } });
+    await prisma.appInstallation.update({ where: { id: ids.installation! }, data: { status: "PENDING" } });
+
+    await assert.rejects(
+      () =>
+        prisma.$transaction(async (tx) => {
+          const updated = await tx.subscription.update({ where: { id: ids.subscription! }, data: { status: "ACTIVE", cancelAt: null } });
+          await syncSubscriptionAccessState(tx, {
+            subscription: {
+              id: updated.id,
+              organizationId: updated.organizationId,
+              licenseId: updated.licenseId,
+              status: updated.status,
+              cancelAt: updated.cancelAt,
+              currentPeriodEnd: updated.currentPeriodEnd,
+            },
+            previousStatus: "CANCELLED",
+          });
+        }),
+      (error: unknown) => error instanceof SubscriptionAccessSyncError && error.reason === "reactivation_blocked",
+    );
+
+    const sub = await currentSub();
+    const installation = await prisma.appInstallation.findUniqueOrThrow({ where: { id: ids.installation! } });
+    assert.equal(sub.status, "CANCELLED"); // rolled back
+    assert.equal(installation.status, "PENDING"); // untouched
+  });
+
+  it("3 (half-active guard): terminal → ACTIVE with expired License rolls back", async () => {
+    await prisma.subscription.update({ where: { id: ids.subscription! }, data: { status: "CANCELLED", cancelAt: new Date() } });
+    await prisma.license.update({ where: { id: ids.license! }, data: { status: "CANCELLED", endsAt: new Date(Date.now() - 60_000) } });
+    await prisma.appInstallation.update({ where: { id: ids.installation! }, data: { status: "DISABLED" } });
+
+    await assert.rejects(
+      () =>
+        prisma.$transaction(async (tx) => {
+          const updated = await tx.subscription.update({ where: { id: ids.subscription! }, data: { status: "ACTIVE", cancelAt: null } });
+          await syncSubscriptionAccessState(tx, {
+            subscription: {
+              id: updated.id,
+              organizationId: updated.organizationId,
+              licenseId: updated.licenseId,
+              status: updated.status,
+              cancelAt: updated.cancelAt,
+              currentPeriodEnd: updated.currentPeriodEnd,
+            },
+            previousStatus: "CANCELLED",
+          });
+        }),
+      (error: unknown) => error instanceof SubscriptionAccessSyncError && error.reason === "reactivation_blocked",
+    );
+
+    const sub = await currentSub();
+    assert.equal(sub.status, "CANCELLED"); // rolled back; no half-active state
   });
 });

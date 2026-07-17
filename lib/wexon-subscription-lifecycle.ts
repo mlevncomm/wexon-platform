@@ -18,7 +18,7 @@ import type { TerminalSubscriptionDenialReason } from "@/lib/wexon-core-access";
 /** Works on both the root client and a `$transaction` client. */
 export type SubscriptionAccessSyncClient = Prisma.TransactionClient | typeof prisma;
 
-export type SubscriptionAccessSyncFailureReason = "tenant_mismatch" | "unsafe_transition";
+export type SubscriptionAccessSyncFailureReason = "tenant_mismatch" | "unsafe_transition" | "reactivation_blocked";
 
 /**
  * Thrown for integrity / unsafe-transition problems. When raised inside the
@@ -99,9 +99,18 @@ function resolveAccessPlan(
       return { intent: "close", reason: "subscription_cancelled", licenseStatus: "CANCELLED", installation: { from: "ACTIVE", to: "DISABLED" } };
 
     case "ACTIVE":
+      // Only a genuine terminal → ACTIVE transition reopens access. An
+      // ACTIVE → ACTIVE (idempotent) update must not independently re-enable a
+      // separately-suspended installation.
+      if (!TERMINAL_SUBSCRIPTION_STATUSES.has(previousStatus)) {
+        return { intent: "noop" };
+      }
       return { intent: "open", licenseStatus: "ACTIVE", installation: { from: "DISABLED", to: "ACTIVE" } };
 
     case "TRIALING":
+      if (!TERMINAL_SUBSCRIPTION_STATUSES.has(previousStatus)) {
+        return { intent: "noop" };
+      }
       return { intent: "open", licenseStatus: "TRIAL", installation: { from: "DISABLED", to: "ACTIVE" } };
 
     case "PAST_DUE":
@@ -171,6 +180,42 @@ export async function syncSubscriptionAccessState(
       license: { before: licenseBefore, after: licenseBefore },
       installation: { before: installationBeforeStatus, after: installationBeforeStatus },
     };
+  }
+
+  // Reactivation must never produce a half-active tenant (subscription ACTIVE but
+  // product effectively closed). Validate that access will truly be granted, and
+  // refuse loudly (rolling back) otherwise. Dates are NOT auto-extended here.
+  if (plan.intent === "open") {
+    if (license.startsAt.getTime() > now.getTime()) {
+      throw new SubscriptionAccessSyncError(
+        "Lisans başlangıç tarihi gelecekte; abonelik yeniden etkinleştirilemez. Önce lisans tarihlerini güncelleyin.",
+        "reactivation_blocked",
+      );
+    }
+    if (license.endsAt && license.endsAt.getTime() <= now.getTime()) {
+      throw new SubscriptionAccessSyncError(
+        "Lisans süresi dolmuş; abonelik yeniden etkinleştirilemez. Önce lisans bitiş tarihini güncelleyin.",
+        "reactivation_blocked",
+      );
+    }
+    if (subscription.currentPeriodEnd && subscription.currentPeriodEnd.getTime() <= now.getTime()) {
+      throw new SubscriptionAccessSyncError(
+        "Abonelik dönemi sona ermiş; yeniden etkinleştirmeden önce dönem yenilenmelidir.",
+        "reactivation_blocked",
+      );
+    }
+    if (!installationBefore) {
+      throw new SubscriptionAccessSyncError(
+        "Ürün kurulumu bulunamadı; abonelik yeniden etkinleştirilemez.",
+        "reactivation_blocked",
+      );
+    }
+    if (installationBefore.status === "PENDING") {
+      throw new SubscriptionAccessSyncError(
+        "Ürün kurulumu beklemede (PENDING); önce kurulum tamamlanmalıdır.",
+        "reactivation_blocked",
+      );
+    }
   }
 
   // License transition (idempotent: only write when the value actually changes).
