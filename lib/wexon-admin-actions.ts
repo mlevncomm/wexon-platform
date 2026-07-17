@@ -15,6 +15,7 @@ import { resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/wexon-passwords";
 import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
+import { syncSubscriptionAccessState } from "@/lib/wexon-subscription-lifecycle";
 import {
   AdminValidationError,
   parseApiKeyCreatePayload,
@@ -1009,13 +1010,36 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
       );
     }
 
+    // Clear cancelAt on explicit reactivation, stamp it now on cancellation.
+    const nextCancelAt =
+      payload.status === "CANCELLED"
+        ? new Date()
+        : payload.status === "ACTIVE" || payload.status === "TRIALING"
+          ? null
+          : subscription.cancelAt;
+
     await prisma.$transaction(async (tx) => {
       const updated = await tx.subscription.update({
         where: { id: subscriptionId },
         data: {
           status: payload.status,
-          cancelAt: payload.status === "CANCELLED" ? new Date() : subscription.cancelAt,
+          cancelAt: nextCancelAt,
         },
+      });
+
+      // Keep License + this org/product AppInstallation consistent with the
+      // deliberate status change (terminal close OR reactivation), atomically in
+      // this transaction. A future-dated cancellation is a no-op here.
+      const accessSync = await syncSubscriptionAccessState(tx, {
+        subscription: {
+          id: updated.id,
+          organizationId: updated.organizationId,
+          licenseId: updated.licenseId,
+          status: updated.status,
+          cancelAt: updated.cancelAt,
+          currentPeriodEnd: updated.currentPeriodEnd,
+        },
+        previousStatus: subscription.status,
       });
 
       await writeAdminAuditLog(
@@ -1026,11 +1050,18 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
           entityType: "Subscription",
           entityId: subscriptionId,
           metadata: {
-            before: { status: subscription.status },
-            after: { status: updated.status },
+            before: { subscriptionStatus: subscription.status },
+            after: { subscriptionStatus: updated.status, cancelAt: updated.cancelAt },
             auditNote: payload.auditNote,
             acknowledgePaytrPaid: payload.acknowledgePaytrPaid,
             paidPaytrMerchantOid: paidPaytr?.merchantOid ?? null,
+            accessSync: {
+              intent: accessSync.intent,
+              reason: accessSync.reason,
+              licenseId: accessSync.licenseId,
+              license: accessSync.license,
+              installation: accessSync.installation,
+            },
           },
         },
         tx,
@@ -1039,6 +1070,7 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
 
     revalidateCatalogRoutes();
     revalidateBillingRoutes();
+    revalidateLicenseRoutes(subscription.organizationId);
     redirect(returnTo);
   } catch (error) {
     throwIfRedirectError(error);
