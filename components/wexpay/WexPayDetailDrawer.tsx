@@ -10,6 +10,7 @@ type WexPayDetailDrawerProps = {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  headerActions?: ReactNode;
 };
 
 export default function WexPayDetailDrawer({
@@ -19,6 +20,7 @@ export default function WexPayDetailDrawer({
   onClose,
   children,
   footer,
+  headerActions,
 }: WexPayDetailDrawerProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -84,15 +86,18 @@ export default function WexPayDetailDrawer({
             </h2>
             {subtitle ? <p className="mt-1 truncate text-sm font-semibold text-slate-500">{subtitle}</p> : null}
           </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={close}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-            aria-label="Paneli kapat"
-          >
-            ✕
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {headerActions}
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={close}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+              aria-label="Paneli kapat"
+            >
+              ✕
+            </button>
+          </div>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">{children}</div>
         {footer ? (
