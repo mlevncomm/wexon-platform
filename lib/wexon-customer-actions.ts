@@ -19,6 +19,11 @@ import {
 } from "@/lib/wexon-customer-validation";
 import { hashPassword, verifyPassword } from "@/lib/wexon-passwords";
 import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
+import {
+  assertMembershipChangePreservesActiveOwners,
+  LastActiveOwnerError,
+  runWithTransactionRetry,
+} from "@/lib/wexon-active-owner";
 import { prisma } from "@/lib/prisma";
 import { customerLoginUrl } from "@/lib/wexon/urls";
 
@@ -330,44 +335,56 @@ export async function updateCustomerMembershipRoleAction(formData: FormData) {
     organizationId = payload.organizationId;
     const { user: actor, membership: actorMembership } = await assertCustomerOrganizationRole(payload.organizationId, ["OWNER", "ADMIN"]);
 
-    await prisma.$transaction(async (tx) => {
-      const target = await tx.membership.findFirst({
-        where: { id: payload.membershipId, organizationId: payload.organizationId },
-        include: { user: true },
-      });
+    await runWithTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const target = await tx.membership.findFirst({
+          where: { id: payload.membershipId, organizationId: payload.organizationId },
+          include: { user: true },
+        });
 
-      if (!target) throw new CustomerValidationError("Üyelik bulunamadı.");
+        if (!target) throw new CustomerValidationError("Üyelik bulunamadı.");
 
-      if (target.role === "OWNER" && payload.role !== "OWNER") {
-        const ownerCount = await tx.membership.count({ where: { organizationId: payload.organizationId, role: "OWNER", status: "ACTIVE" } });
-        if (ownerCount <= 1 || target.userId === actor.id) {
-          throw new CustomerValidationError("Son sahip rolü düşürülemez.");
+        if (target.role === "OWNER" && payload.role !== "OWNER") {
+          if (target.userId === actor.id) {
+            throw new CustomerValidationError("Son sahip rolü düşürülemez.");
+          }
+          try {
+            await assertMembershipChangePreservesActiveOwners(tx, {
+              organizationId: payload.organizationId,
+              excludingMembershipId: target.id,
+            });
+          } catch (error) {
+            if (error instanceof LastActiveOwnerError) {
+              throw new CustomerValidationError("Son sahip rolü düşürülemez.");
+            }
+            throw error;
+          }
         }
-      }
 
-      const updated = await tx.membership.update({
-        where: { id: target.id },
-        data: { role: payload.role },
-      });
+        const updated = await tx.membership.update({
+          where: { id: target.id },
+          data: { role: payload.role },
+        });
 
-      await tx.auditLog.create({
-        data: {
-          organizationId: payload.organizationId,
-          userId: actor.id,
-          action: "customer.membership.role_updated",
-          entityType: "Membership",
-          entityId: target.id,
-          metadataJson: {
-            actor: { type: "customer_session", userId: actor.id, email: actor.email, role: actorMembership.role },
-            source: "dashboard_user_management",
-            targetUserId: target.userId,
-            targetEmail: target.user.email,
-            before: { role: target.role },
-            after: { role: updated.role },
+        await tx.auditLog.create({
+          data: {
+            organizationId: payload.organizationId,
+            userId: actor.id,
+            action: "customer.membership.role_updated",
+            entityType: "Membership",
+            entityId: target.id,
+            metadataJson: {
+              actor: { type: "customer_session", userId: actor.id, email: actor.email, role: actorMembership.role },
+              source: "dashboard_user_management",
+              targetUserId: target.userId,
+              targetEmail: target.user.email,
+              before: { role: target.role },
+              after: { role: updated.role },
+            },
           },
-        },
-      });
-    });
+        });
+      }),
+    );
 
     revalidateCustomerUsers(payload.organizationId);
     redirect(`/dashboard/users?organizationId=${payload.organizationId}`);
@@ -387,40 +404,51 @@ export async function deactivateCustomerMembershipAction(formData: FormData) {
     organizationId = payload.organizationId;
     const { user: actor, membership: actorMembership } = await assertCustomerOrganizationRole(payload.organizationId, ["OWNER", "ADMIN"]);
 
-    await prisma.$transaction(async (tx) => {
-      const target = await tx.membership.findFirst({
-        where: { id: payload.membershipId, organizationId: payload.organizationId },
-        include: { user: true },
-      });
+    await runWithTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const target = await tx.membership.findFirst({
+          where: { id: payload.membershipId, organizationId: payload.organizationId },
+          include: { user: true },
+        });
 
-      if (!target) throw new CustomerValidationError("Üyelik bulunamadı.");
-      if (target.userId === actor.id) throw new CustomerValidationError("Kendi üyeliğinizi pasife alamazsınız.");
+        if (!target) throw new CustomerValidationError("Üyelik bulunamadı.");
+        if (target.userId === actor.id) throw new CustomerValidationError("Kendi üyeliğinizi pasife alamazsınız.");
 
-      if (target.role === "OWNER") {
-        const ownerCount = await tx.membership.count({ where: { organizationId: payload.organizationId, role: "OWNER", status: "ACTIVE" } });
-        if (ownerCount <= 1) throw new CustomerValidationError("Son sahip pasife alınamaz.");
-      }
+        if (target.role === "OWNER") {
+          try {
+            await assertMembershipChangePreservesActiveOwners(tx, {
+              organizationId: payload.organizationId,
+              excludingMembershipId: target.id,
+            });
+          } catch (error) {
+            if (error instanceof LastActiveOwnerError) {
+              throw new CustomerValidationError("Son sahip pasife alınamaz.");
+            }
+            throw error;
+          }
+        }
 
-      const updated = await tx.membership.update({ where: { id: target.id }, data: { status: "SUSPENDED" } });
+        const updated = await tx.membership.update({ where: { id: target.id }, data: { status: "SUSPENDED" } });
 
-      await tx.auditLog.create({
-        data: {
-          organizationId: payload.organizationId,
-          userId: actor.id,
-          action: "customer.membership.deactivated",
-          entityType: "Membership",
-          entityId: target.id,
-          metadataJson: {
-            actor: { type: "customer_session", userId: actor.id, email: actor.email, role: actorMembership.role },
-            source: "dashboard_user_management",
-            targetUserId: target.userId,
-            targetEmail: target.user.email,
-            before: { status: target.status },
-            after: { status: updated.status },
+        await tx.auditLog.create({
+          data: {
+            organizationId: payload.organizationId,
+            userId: actor.id,
+            action: "customer.membership.deactivated",
+            entityType: "Membership",
+            entityId: target.id,
+            metadataJson: {
+              actor: { type: "customer_session", userId: actor.id, email: actor.email, role: actorMembership.role },
+              source: "dashboard_user_management",
+              targetUserId: target.userId,
+              targetEmail: target.user.email,
+              before: { status: target.status },
+              after: { status: updated.status },
+            },
           },
-        },
-      });
-    });
+        });
+      }),
+    );
 
     revalidateCustomerUsers(payload.organizationId);
     redirect(`/dashboard/users?organizationId=${payload.organizationId}`);
