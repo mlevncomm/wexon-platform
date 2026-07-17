@@ -93,15 +93,20 @@ export type SubscriptionLifecycleResult =
  * both `evaluateProductAccess` (read path) and the transactional access-sync
  * helper (write path) share one source of truth.
  *
- * Rules:
+ * Rules (evaluated in this order):
  * - No subscription (manual license) → access preserved (unchanged behavior).
- * - `cancelAt` is the scheduled cancellation instant. A future `cancelAt` keeps
- *   access until then; a now/past `cancelAt` cuts access immediately.
- * - Terminal statuses (CANCELLED / EXPIRED) without a future `cancelAt` deny.
+ * - EXPIRED is always immediately terminal, regardless of any (stale or future)
+ *   `cancelAt`. A future `cancelAt` must never re-open an expired subscription.
+ * - `cancelAt` is the scheduled cancellation instant: a strictly-future
+ *   `cancelAt` keeps access until then; a `cancelAt` at/<= now cuts access.
+ * - CANCELLED without a future `cancelAt` denies immediately.
  * - PAST_DUE preserves the existing product policy (access retained). There is
  *   no explicit grace-period window in the codebase, so none is invented here.
- * - ACTIVE / TRIALING with an ended billing period (`currentPeriodEnd < now`)
+ * - ACTIVE / TRIALING with an ended billing period (`currentPeriodEnd <= now`)
  *   deny via `subscription_period_ended`.
+ *
+ * Boundary rule: `cancelAt == now` and `currentPeriodEnd == now` both count as
+ * elapsed (access denied / period ended).
  */
 export function evaluateSubscriptionLifecycle(
   subscription: SubscriptionLifecycleSnapshot,
@@ -109,19 +114,18 @@ export function evaluateSubscriptionLifecycle(
 ): SubscriptionLifecycleResult {
   if (!subscription) return { ok: true };
 
+  // EXPIRED wins over everything, including a future/stale cancelAt.
+  if (subscription.status === "EXPIRED") {
+    return { ok: false, reason: "subscription_expired" };
+  }
+
   if (subscription.cancelAt) {
     if (subscription.cancelAt.getTime() > now.getTime()) {
       return { ok: true };
     }
-    return {
-      ok: false,
-      reason: subscription.status === "EXPIRED" ? "subscription_expired" : "subscription_cancelled",
-    };
+    return { ok: false, reason: "subscription_cancelled" };
   }
 
-  if (subscription.status === "EXPIRED") {
-    return { ok: false, reason: "subscription_expired" };
-  }
   if (subscription.status === "CANCELLED") {
     return { ok: false, reason: "subscription_cancelled" };
   }
@@ -130,7 +134,7 @@ export function evaluateSubscriptionLifecycle(
     return { ok: true };
   }
 
-  if (subscription.currentPeriodEnd && subscription.currentPeriodEnd.getTime() < now.getTime()) {
+  if (subscription.currentPeriodEnd && subscription.currentPeriodEnd.getTime() <= now.getTime()) {
     return { ok: false, reason: "subscription_period_ended" };
   }
 

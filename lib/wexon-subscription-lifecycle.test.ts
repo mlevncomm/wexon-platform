@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { evaluateSubscriptionLifecycle } from "./wexon-core-access";
-import { syncSubscriptionTerminalAccess } from "./wexon-subscription-lifecycle";
+import { syncSubscriptionAccessState, SubscriptionAccessSyncError } from "./wexon-subscription-lifecycle";
 
 const NOW = new Date("2026-07-17T12:00:00.000Z");
 const FUTURE = new Date("2026-08-17T12:00:00.000Z");
 const PAST = new Date("2026-06-17T12:00:00.000Z");
 
 describe("evaluateSubscriptionLifecycle", () => {
-  it("A: manual license without subscription keeps access", () => {
+  it("A/N: manual license without subscription keeps access", () => {
     assert.deepEqual(evaluateSubscriptionLifecycle(null, NOW), { ok: true });
   });
 
@@ -19,81 +19,77 @@ describe("evaluateSubscriptionLifecycle", () => {
     );
   });
 
-  it("C: future-dated cancelAt keeps access until that date", () => {
+  it("1: EXPIRED + future cancelAt still denies (EXPIRED wins)", () => {
     assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "ACTIVE", cancelAt: FUTURE, currentPeriodEnd: FUTURE }, NOW),
-      { ok: true },
+      evaluateSubscriptionLifecycle({ status: "EXPIRED", cancelAt: FUTURE, currentPeriodEnd: FUTURE }, NOW),
+      { ok: false, reason: "subscription_expired" },
     );
-    // CANCELLED status but effective in the future must still keep access.
+  });
+
+  it("2: EXPIRED + null cancelAt denies", () => {
+    assert.deepEqual(
+      evaluateSubscriptionLifecycle({ status: "EXPIRED", cancelAt: null, currentPeriodEnd: FUTURE }, NOW),
+      { ok: false, reason: "subscription_expired" },
+    );
+  });
+
+  it("3: CANCELLED + future cancelAt keeps access until that date", () => {
     assert.deepEqual(
       evaluateSubscriptionLifecycle({ status: "CANCELLED", cancelAt: FUTURE, currentPeriodEnd: null }, NOW),
       { ok: true },
     );
+    assert.deepEqual(
+      evaluateSubscriptionLifecycle({ status: "ACTIVE", cancelAt: FUTURE, currentPeriodEnd: FUTURE }, NOW),
+      { ok: true },
+    );
   });
 
-  it("D: cancelAt now/past denies access", () => {
+  it("4: cancelAt == now denies (boundary counts as elapsed)", () => {
     assert.deepEqual(evaluateSubscriptionLifecycle({ status: "ACTIVE", cancelAt: NOW, currentPeriodEnd: FUTURE }, NOW), {
       ok: false,
       reason: "subscription_cancelled",
     });
-    assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "ACTIVE", cancelAt: PAST, currentPeriodEnd: FUTURE }, NOW),
-      { ok: false, reason: "subscription_cancelled" },
-    );
+    assert.deepEqual(evaluateSubscriptionLifecycle({ status: "CANCELLED", cancelAt: PAST, currentPeriodEnd: FUTURE }, NOW), {
+      ok: false,
+      reason: "subscription_cancelled",
+    });
   });
 
-  it("E: terminal CANCELLED subscription denies access", () => {
-    assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "CANCELLED", cancelAt: NOW, currentPeriodEnd: FUTURE }, NOW),
-      { ok: false, reason: "subscription_cancelled" },
-    );
+  it("E: terminal CANCELLED (no cancelAt) denies", () => {
     assert.deepEqual(
       evaluateSubscriptionLifecycle({ status: "CANCELLED", cancelAt: null, currentPeriodEnd: FUTURE }, NOW),
       { ok: false, reason: "subscription_cancelled" },
     );
   });
 
-  it("F: EXPIRED subscription denies access", () => {
-    assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "EXPIRED", cancelAt: null, currentPeriodEnd: FUTURE }, NOW),
-      { ok: false, reason: "subscription_expired" },
-    );
-    // Effective cancelAt on an EXPIRED row reports the expired reason.
-    assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "EXPIRED", cancelAt: PAST, currentPeriodEnd: null }, NOW),
-      { ok: false, reason: "subscription_expired" },
-    );
+  it("5: currentPeriodEnd == now denies (period ended, boundary)", () => {
+    assert.deepEqual(evaluateSubscriptionLifecycle({ status: "ACTIVE", cancelAt: null, currentPeriodEnd: NOW }, NOW), {
+      ok: false,
+      reason: "subscription_period_ended",
+    });
+    assert.deepEqual(evaluateSubscriptionLifecycle({ status: "TRIALING", cancelAt: null, currentPeriodEnd: PAST }, NOW), {
+      ok: false,
+      reason: "subscription_period_ended",
+    });
   });
 
-  it("G: ended billing period denies access for ACTIVE/TRIALING", () => {
-    assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "ACTIVE", cancelAt: null, currentPeriodEnd: PAST }, NOW),
-      { ok: false, reason: "subscription_period_ended" },
-    );
-    assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "TRIALING", cancelAt: null, currentPeriodEnd: PAST }, NOW),
-      { ok: false, reason: "subscription_period_ended" },
-    );
-  });
-
-  it("H: PAST_DUE preserves existing policy (access retained, no invented grace)", () => {
+  it("8/H: PAST_DUE preserves existing policy (access retained, no invented grace)", () => {
     assert.deepEqual(
       evaluateSubscriptionLifecycle({ status: "PAST_DUE", cancelAt: null, currentPeriodEnd: PAST }, NOW),
-      { ok: true },
-    );
-    assert.deepEqual(
-      evaluateSubscriptionLifecycle({ status: "PAST_DUE", cancelAt: null, currentPeriodEnd: FUTURE }, NOW),
       { ok: true },
     );
   });
 });
 
-// --- Transactional access sync helper --------------------------------------
+// --- Transactional access sync helper (mock) --------------------------------
 
 type LicenseRow = { id: string; organizationId: string; productId: string; status: string };
 type InstallationRow = { organizationId: string; productId: string; status: string };
 
 function makeMockDb(licenses: LicenseRow[], installations: InstallationRow[]) {
+  const findInstall = (organizationId: string, productId: string) =>
+    installations.find((row) => row.organizationId === organizationId && row.productId === productId) ?? null;
+
   return {
     licenses,
     installations,
@@ -104,58 +100,69 @@ function makeMockDb(licenses: LicenseRow[], installations: InstallationRow[]) {
         const row = licenses.find((item) => item.id === id);
         if (!row) throw new Error("license not found");
         row.status = data.status;
-        return row;
+        return { ...row };
       },
     },
     appInstallation: {
-      updateMany: async ({
-        where,
+      findUnique: async ({
+        where: { organizationId_productId },
+      }: {
+        where: { organizationId_productId: { organizationId: string; productId: string } };
+      }) => {
+        const row = findInstall(organizationId_productId.organizationId, organizationId_productId.productId);
+        return row ? { ...row } : null;
+      },
+      update: async ({
+        where: { organizationId_productId },
         data,
       }: {
-        where: { organizationId: string; productId: string; status: string };
+        where: { organizationId_productId: { organizationId: string; productId: string } };
         data: { status: string };
       }) => {
-        const matches = installations.filter(
-          (row) =>
-            row.organizationId === where.organizationId &&
-            row.productId === where.productId &&
-            row.status === where.status,
-        );
-        for (const row of matches) row.status = data.status;
-        return { count: matches.length };
+        const row = findInstall(organizationId_productId.organizationId, organizationId_productId.productId);
+        if (!row) throw new Error("installation not found");
+        row.status = data.status;
+        return { ...row };
       },
     },
   };
 }
 
-describe("syncSubscriptionTerminalAccess", () => {
-  it("L: admin instant CANCELLED atomically closes License + this installation", async () => {
+const CANCELLED_NOW = {
+  id: "sub-1",
+  organizationId: "org-1",
+  licenseId: "lic-1",
+  status: "CANCELLED" as const,
+  cancelAt: NOW,
+  currentPeriodEnd: FUTURE,
+};
+
+describe("syncSubscriptionAccessState", () => {
+  it("C-close/L: CANCELLED now closes License + this installation atomically", async () => {
     const db = makeMockDb(
       [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
       [{ organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
     );
 
-    const result = await syncSubscriptionTerminalAccess(db as never, {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "CANCELLED", cancelAt: NOW, currentPeriodEnd: FUTURE },
-      now: NOW,
-    });
+    const result = await syncSubscriptionAccessState(db as never, { subscription: CANCELLED_NOW, previousStatus: "ACTIVE", now: NOW });
 
-    assert.equal(result.applied, true);
+    assert.equal(result.intent, "close");
     assert.equal(result.reason, "subscription_cancelled");
-    assert.equal(result.licenseStatusChanged, true);
-    assert.equal(result.installationDisabled, true);
+    assert.deepEqual(result.license, { before: "ACTIVE", after: "CANCELLED" });
+    assert.deepEqual(result.installation, { before: "ACTIVE", after: "DISABLED" });
     assert.equal(db.licenses[0].status, "CANCELLED");
     assert.equal(db.installations[0].status, "DISABLED");
   });
 
-  it("F-sync: EXPIRED maps License to EXPIRED", async () => {
+  it("D: EXPIRED maps License to EXPIRED and disables installation", async () => {
     const db = makeMockDb(
       [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
       [{ organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
     );
 
-    const result = await syncSubscriptionTerminalAccess(db as never, {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "EXPIRED", cancelAt: null, currentPeriodEnd: PAST },
+    const result = await syncSubscriptionAccessState(db as never, {
+      subscription: { ...CANCELLED_NOW, status: "EXPIRED", cancelAt: FUTURE },
+      previousStatus: "ACTIVE",
       now: NOW,
     });
 
@@ -164,61 +171,126 @@ describe("syncSubscriptionTerminalAccess", () => {
     assert.equal(db.installations[0].status, "DISABLED");
   });
 
+  it("6: CANCELLED → ACTIVE reopens License + this installation", async () => {
+    const db = makeMockDb(
+      [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "CANCELLED" }],
+      [{ organizationId: "org-1", productId: "prod-wexpay", status: "DISABLED" }],
+    );
+
+    const result = await syncSubscriptionAccessState(db as never, {
+      subscription: { ...CANCELLED_NOW, status: "ACTIVE", cancelAt: null },
+      previousStatus: "CANCELLED",
+      now: NOW,
+    });
+
+    assert.equal(result.intent, "open");
+    assert.deepEqual(result.license, { before: "CANCELLED", after: "ACTIVE" });
+    assert.deepEqual(result.installation, { before: "DISABLED", after: "ACTIVE" });
+    assert.equal(db.licenses[0].status, "ACTIVE");
+    assert.equal(db.installations[0].status, "ACTIVE");
+  });
+
+  it("7: EXPIRED → TRIALING reopens License as TRIAL + installation ACTIVE", async () => {
+    const db = makeMockDb(
+      [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "EXPIRED" }],
+      [{ organizationId: "org-1", productId: "prod-wexpay", status: "DISABLED" }],
+    );
+
+    const result = await syncSubscriptionAccessState(db as never, {
+      subscription: { ...CANCELLED_NOW, status: "TRIALING", cancelAt: null },
+      previousStatus: "EXPIRED",
+      now: NOW,
+    });
+
+    assert.equal(result.intent, "open");
+    assert.equal(db.licenses[0].status, "TRIAL");
+    assert.equal(db.installations[0].status, "ACTIVE");
+  });
+
+  it("8-policy: terminal → PAST_DUE is refused with a clear validation error", async () => {
+    const db = makeMockDb(
+      [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "CANCELLED" }],
+      [{ organizationId: "org-1", productId: "prod-wexpay", status: "DISABLED" }],
+    );
+
+    await assert.rejects(
+      () =>
+        syncSubscriptionAccessState(db as never, {
+          subscription: { ...CANCELLED_NOW, status: "PAST_DUE", cancelAt: null },
+          previousStatus: "CANCELLED",
+          now: NOW,
+        }),
+      (error: unknown) => error instanceof SubscriptionAccessSyncError && error.reason === "unsafe_transition",
+    );
+    assert.equal(db.licenses[0].status, "CANCELLED");
+    assert.equal(db.installations[0].status, "DISABLED");
+  });
+
+  it("PAST_DUE from ACTIVE preserves existing state (no-op)", async () => {
+    const db = makeMockDb(
+      [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
+      [{ organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
+    );
+
+    const result = await syncSubscriptionAccessState(db as never, {
+      subscription: { ...CANCELLED_NOW, status: "PAST_DUE", cancelAt: null },
+      previousStatus: "ACTIVE",
+      now: NOW,
+    });
+
+    assert.equal(result.intent, "noop");
+    assert.equal(db.licenses[0].status, "ACTIVE");
+    assert.equal(db.installations[0].status, "ACTIVE");
+  });
+
   it("M: future-dated cancellation does NOT close License/installation", async () => {
     const db = makeMockDb(
       [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
       [{ organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
     );
 
-    const result = await syncSubscriptionTerminalAccess(db as never, {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "CANCELLED", cancelAt: FUTURE, currentPeriodEnd: FUTURE },
+    const result = await syncSubscriptionAccessState(db as never, {
+      subscription: { ...CANCELLED_NOW, cancelAt: FUTURE },
+      previousStatus: "ACTIVE",
       now: NOW,
     });
 
-    assert.equal(result.applied, false);
+    assert.equal(result.intent, "noop");
     assert.equal(db.licenses[0].status, "ACTIVE");
     assert.equal(db.installations[0].status, "ACTIVE");
   });
 
-  it("period-ended is not an eager close (read-time gate only)", async () => {
+  it("12: idempotent — repeated close makes no further writes", async () => {
     const db = makeMockDb(
       [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
       [{ organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
     );
 
-    const result = await syncSubscriptionTerminalAccess(db as never, {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "ACTIVE", cancelAt: null, currentPeriodEnd: PAST },
-      now: NOW,
-    });
+    const first = await syncSubscriptionAccessState(db as never, { subscription: CANCELLED_NOW, previousStatus: "ACTIVE", now: NOW });
+    const second = await syncSubscriptionAccessState(db as never, { subscription: CANCELLED_NOW, previousStatus: "CANCELLED", now: NOW });
 
-    assert.equal(result.applied, false);
-    assert.equal(db.licenses[0].status, "ACTIVE");
-    assert.equal(db.installations[0].status, "ACTIVE");
-  });
-
-  it("K: idempotent — second run produces no further writes", async () => {
-    const db = makeMockDb(
-      [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
-      [{ organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
-    );
-    const input = {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "CANCELLED" as const, cancelAt: NOW, currentPeriodEnd: FUTURE },
-      now: NOW,
-    };
-
-    const first = await syncSubscriptionTerminalAccess(db as never, input);
-    const second = await syncSubscriptionTerminalAccess(db as never, input);
-
-    assert.equal(first.licenseStatusChanged, true);
-    assert.equal(first.installationDisabled, true);
-    assert.equal(second.applied, true);
-    assert.equal(second.licenseStatusChanged, false);
-    assert.equal(second.installationDisabled, false);
+    assert.deepEqual(first.installation, { before: "ACTIVE", after: "DISABLED" });
+    assert.deepEqual(second.license, { before: "CANCELLED", after: "CANCELLED" });
+    assert.deepEqual(second.installation, { before: "DISABLED", after: "DISABLED" });
     assert.equal(db.licenses[0].status, "CANCELLED");
     assert.equal(db.installations[0].status, "DISABLED");
   });
 
-  it("I: other product installation in the same organization is untouched", async () => {
+  it("12: idempotent — repeated reactivation makes no further writes", async () => {
+    const db = makeMockDb(
+      [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "CANCELLED" }],
+      [{ organizationId: "org-1", productId: "prod-wexpay", status: "DISABLED" }],
+    );
+    const reopen = { subscription: { ...CANCELLED_NOW, status: "ACTIVE" as const, cancelAt: null }, previousStatus: "CANCELLED", now: NOW };
+
+    await syncSubscriptionAccessState(db as never, reopen);
+    const second = await syncSubscriptionAccessState(db as never, { ...reopen, previousStatus: "ACTIVE" });
+
+    assert.deepEqual(second.license, { before: "ACTIVE", after: "ACTIVE" });
+    assert.deepEqual(second.installation, { before: "ACTIVE", after: "ACTIVE" });
+  });
+
+  it("9: other product installation in the same organization is untouched", async () => {
     const db = makeMockDb(
       [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
       [
@@ -227,16 +299,13 @@ describe("syncSubscriptionTerminalAccess", () => {
       ],
     );
 
-    await syncSubscriptionTerminalAccess(db as never, {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "CANCELLED", cancelAt: NOW, currentPeriodEnd: FUTURE },
-      now: NOW,
-    });
+    await syncSubscriptionAccessState(db as never, { subscription: CANCELLED_NOW, previousStatus: "ACTIVE", now: NOW });
 
     assert.equal(db.installations[0].status, "DISABLED");
     assert.equal(db.installations[1].status, "ACTIVE");
   });
 
-  it("J: another organization is untouched", async () => {
+  it("10: another organization is untouched", async () => {
     const db = makeMockDb(
       [{ id: "lic-1", organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
       [
@@ -245,27 +314,22 @@ describe("syncSubscriptionTerminalAccess", () => {
       ],
     );
 
-    await syncSubscriptionTerminalAccess(db as never, {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "CANCELLED", cancelAt: NOW, currentPeriodEnd: FUTURE },
-      now: NOW,
-    });
+    await syncSubscriptionAccessState(db as never, { subscription: CANCELLED_NOW, previousStatus: "ACTIVE", now: NOW });
 
     assert.equal(db.installations[0].status, "DISABLED");
     assert.equal(db.installations[1].status, "ACTIVE");
   });
 
-  it("defensive: license belonging to a different org is not modified", async () => {
+  it("11: license/organization mismatch throws and changes nothing", async () => {
     const db = makeMockDb(
       [{ id: "lic-1", organizationId: "org-OTHER", productId: "prod-wexpay", status: "ACTIVE" }],
       [{ organizationId: "org-1", productId: "prod-wexpay", status: "ACTIVE" }],
     );
 
-    const result = await syncSubscriptionTerminalAccess(db as never, {
-      subscription: { id: "sub-1", organizationId: "org-1", licenseId: "lic-1", status: "CANCELLED", cancelAt: NOW, currentPeriodEnd: FUTURE },
-      now: NOW,
-    });
-
-    assert.equal(result.applied, false);
+    await assert.rejects(
+      () => syncSubscriptionAccessState(db as never, { subscription: CANCELLED_NOW, previousStatus: "ACTIVE", now: NOW }),
+      (error: unknown) => error instanceof SubscriptionAccessSyncError && error.reason === "tenant_mismatch",
+    );
     assert.equal(db.licenses[0].status, "ACTIVE");
     assert.equal(db.installations[0].status, "ACTIVE");
   });
