@@ -13,7 +13,13 @@ export type ProductAccessDenialReason =
   | "license_expired"
   | "license_inactive"
   | "installation_missing"
-  | "installation_inactive";
+  | "installation_inactive"
+  | "subscription_cancelled"
+  | "subscription_expired"
+  | "subscription_period_ended";
+
+/** Terminal subscription denials that an effective (now/past) transition produces. */
+export type TerminalSubscriptionDenialReason = "subscription_cancelled" | "subscription_expired";
 
 type ProductAccessInput = {
   organizationId: string;
@@ -70,6 +76,65 @@ function getBillingState(subscription: { status: string; currentPeriodEnd: Date 
   if (subscription.status === "CANCELLED" || subscription.status === "EXPIRED") return "closed";
   if (subscription.currentPeriodEnd && subscription.currentPeriodEnd < now) return "period_ended";
   return "ok";
+}
+
+export type SubscriptionLifecycleSnapshot = {
+  status: string;
+  cancelAt: Date | null;
+  currentPeriodEnd: Date | null;
+} | null;
+
+export type SubscriptionLifecycleResult =
+  | { ok: true }
+  | { ok: false; reason: TerminalSubscriptionDenialReason | "subscription_period_ended" };
+
+/**
+ * Pure, request-time subscription lifecycle decision. Kept side-effect free so
+ * both `evaluateProductAccess` (read path) and the transactional access-sync
+ * helper (write path) share one source of truth.
+ *
+ * Rules:
+ * - No subscription (manual license) → access preserved (unchanged behavior).
+ * - `cancelAt` is the scheduled cancellation instant. A future `cancelAt` keeps
+ *   access until then; a now/past `cancelAt` cuts access immediately.
+ * - Terminal statuses (CANCELLED / EXPIRED) without a future `cancelAt` deny.
+ * - PAST_DUE preserves the existing product policy (access retained). There is
+ *   no explicit grace-period window in the codebase, so none is invented here.
+ * - ACTIVE / TRIALING with an ended billing period (`currentPeriodEnd < now`)
+ *   deny via `subscription_period_ended`.
+ */
+export function evaluateSubscriptionLifecycle(
+  subscription: SubscriptionLifecycleSnapshot,
+  now: Date,
+): SubscriptionLifecycleResult {
+  if (!subscription) return { ok: true };
+
+  if (subscription.cancelAt) {
+    if (subscription.cancelAt.getTime() > now.getTime()) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      reason: subscription.status === "EXPIRED" ? "subscription_expired" : "subscription_cancelled",
+    };
+  }
+
+  if (subscription.status === "EXPIRED") {
+    return { ok: false, reason: "subscription_expired" };
+  }
+  if (subscription.status === "CANCELLED") {
+    return { ok: false, reason: "subscription_cancelled" };
+  }
+
+  if (subscription.status === "PAST_DUE") {
+    return { ok: true };
+  }
+
+  if (subscription.currentPeriodEnd && subscription.currentPeriodEnd.getTime() < now.getTime()) {
+    return { ok: false, reason: "subscription_period_ended" };
+  }
+
+  return { ok: true };
 }
 
 export async function evaluateProductAccess({ organizationId, productKey, at }: ProductAccessInput) {
@@ -246,6 +311,21 @@ export async function evaluateProductAccess({ organizationId, productKey, at }: 
     };
   }
 
+  const subscriptionLifecycle = evaluateSubscriptionLifecycle(subscription, now);
+  if (!subscriptionLifecycle.ok) {
+    return {
+      allowed: false as const,
+      reason: subscriptionLifecycle.reason as ProductAccessDenialReason,
+      organization,
+      product,
+      license,
+      installation,
+      subscription,
+      billingState,
+      entitlementMap,
+    };
+  }
+
   return {
     allowed: true as const,
     reason: null,
@@ -277,6 +357,9 @@ const denialHttpStatus: Record<ProductAccessDenialReason, number> = {
   license_inactive: 403,
   installation_missing: 403,
   installation_inactive: 403,
+  subscription_cancelled: 403,
+  subscription_expired: 403,
+  subscription_period_ended: 403,
 };
 
 const denialMessages: Record<ProductAccessDenialReason, string> = {
@@ -290,6 +373,9 @@ const denialMessages: Record<ProductAccessDenialReason, string> = {
   license_inactive: "Lisans aktif değil.",
   installation_missing: "Ürün kurulumu tamamlanmamış.",
   installation_inactive: "Ürün kurulumu aktif değil.",
+  subscription_cancelled: "Abonelik iptal edildi.",
+  subscription_expired: "Abonelik süresi doldu.",
+  subscription_period_ended: "Abonelik dönemi sona erdi.",
 };
 
 export function coreAccessDenialStatus(reason: ProductAccessDenialReason) {

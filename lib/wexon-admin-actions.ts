@@ -15,6 +15,7 @@ import { resolveDemoLeadStatus } from "@/lib/wexon-demo-request-leads";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/wexon-passwords";
 import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
+import { syncSubscriptionTerminalAccess } from "@/lib/wexon-subscription-lifecycle";
 import {
   AdminValidationError,
   parseApiKeyCreatePayload,
@@ -1018,6 +1019,20 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
         },
       });
 
+      // Keep License + this org/product AppInstallation consistent with an
+      // effective terminal transition, atomically in this transaction. A
+      // future-dated cancellation is a no-op here (access continues until then).
+      const accessSync = await syncSubscriptionTerminalAccess(tx, {
+        subscription: {
+          id: updated.id,
+          organizationId: updated.organizationId,
+          licenseId: updated.licenseId,
+          status: updated.status,
+          cancelAt: updated.cancelAt,
+          currentPeriodEnd: updated.currentPeriodEnd,
+        },
+      });
+
       await writeAdminAuditLog(
         {
           action: "admin.subscription.status_changed",
@@ -1031,6 +1046,13 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
             auditNote: payload.auditNote,
             acknowledgePaytrPaid: payload.acknowledgePaytrPaid,
             paidPaytrMerchantOid: paidPaytr?.merchantOid ?? null,
+            accessSync: {
+              applied: accessSync.applied,
+              reason: accessSync.reason,
+              licenseId: accessSync.licenseId,
+              licenseStatusChanged: accessSync.licenseStatusChanged,
+              installationDisabled: accessSync.installationDisabled,
+            },
           },
         },
         tx,
@@ -1039,6 +1061,7 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
 
     revalidateCatalogRoutes();
     revalidateBillingRoutes();
+    revalidateLicenseRoutes(subscription.organizationId);
     redirect(returnTo);
   } catch (error) {
     throwIfRedirectError(error);
