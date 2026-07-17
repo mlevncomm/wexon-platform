@@ -6,9 +6,12 @@ import {
   isActiveOwnerRecord,
   isRetryableTransactionError,
   LastActiveOwnerError,
+  lockUserForUpdate,
+  resolveNextActiveFromLockedUser,
   runWithTransactionRetry,
   type ActiveOwnerClient,
   type ActiveOwnerOrganization,
+  type LockedUserRow,
 } from "./wexon-active-owner";
 
 type MembershipRow = {
@@ -88,6 +91,40 @@ describe("isActiveOwnerRecord", () => {
     assert.equal(isActiveOwnerRecord({ role: "OWNER", status: "INVITED", userIsActive: true }), false);
     assert.equal(isActiveOwnerRecord({ role: "ADMIN", status: "ACTIVE", userIsActive: true }), false);
     assert.equal(isActiveOwnerRecord({ role: "STAFF", status: "ACTIVE", userIsActive: true }), false);
+  });
+});
+
+describe("resolveNextActiveFromLockedUser", () => {
+  it("computes toggle only from the locked User snapshot", () => {
+    assert.equal(resolveNextActiveFromLockedUser({ isActive: true }), false);
+    assert.equal(resolveNextActiveFromLockedUser({ isActive: false }), true);
+  });
+
+  it("ignores any stale pre-transaction snapshot when locked state differs", () => {
+    const staleOutsideTx = { isActive: true };
+    const lockedInsideTx = { isActive: false }; // e.g. concurrent password-reset reactivated
+    // Callers must use lockedInsideTx — never staleOutsideTx.
+    assert.equal(resolveNextActiveFromLockedUser(lockedInsideTx), true);
+    assert.notEqual(resolveNextActiveFromLockedUser(lockedInsideTx), !staleOutsideTx.isActive);
+  });
+});
+
+describe("lockUserForUpdate", () => {
+  it("returns null when the user row is missing", async () => {
+    const tx = {
+      $queryRaw: async () => [],
+    } as unknown as ActiveOwnerClient;
+
+    assert.equal(await lockUserForUpdate(tx, "missing-user"), null);
+  });
+
+  it("returns the locked row from FOR UPDATE query results", async () => {
+    const locked: LockedUserRow = { id: "user-1", email: "a@example.test", isActive: true };
+    const tx = {
+      $queryRaw: async () => [locked],
+    } as unknown as ActiveOwnerClient;
+
+    assert.deepEqual(await lockUserForUpdate(tx, "user-1"), locked);
   });
 });
 

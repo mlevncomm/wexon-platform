@@ -9,6 +9,14 @@
  * SUSPENDED / REMOVED / INVITED memberships and globally inactive users do not
  * count. Callers that deactivate a User or strip OWNER/ACTIVE from a membership
  * must leave every affected organization with at least one active owner.
+ *
+ * Lock order (never reverse — avoids deadlocks across toggle / password-reset /
+ * membership mutations that may touch both tables):
+ * 1. User row(s), ascending by id
+ * 2. Organization row(s), ascending by id
+ *
+ * User-active toggles and password resets must call `lockUserForUpdate` first.
+ * Owner-preservation checks then lock organizations under that User lock.
  */
 
 import { Prisma, type PrismaClient } from ".prisma/client";
@@ -17,6 +25,12 @@ export type ActiveOwnerOrganization = {
   id: string;
   name: string;
   slug: string;
+};
+
+export type LockedUserRow = {
+  id: string;
+  email: string;
+  isActive: boolean;
 };
 
 export class LastActiveOwnerError extends Error {
@@ -64,8 +78,28 @@ function dedupeOrganizations(organizations: ReadonlyArray<ActiveOwnerOrganizatio
 }
 
 /**
+ * Lock a User row FOR UPDATE and return the fresh snapshot.
+ * Must be acquired before any Organization locks in the same transaction.
+ */
+export async function lockUserForUpdate(tx: ActiveOwnerClient, userId: string): Promise<LockedUserRow | null> {
+  const rows = await tx.$queryRaw<LockedUserRow[]>`
+    SELECT id, email, "isActive"
+    FROM "User"
+    WHERE id = ${userId}
+    FOR UPDATE
+  `;
+  return rows[0] ?? null;
+}
+
+/** Derive toggle target only from a locked, current User row — never a stale pre-tx snapshot. */
+export function resolveNextActiveFromLockedUser(user: Pick<LockedUserRow, "isActive">): boolean {
+  return !user.isActive;
+}
+
+/**
  * Lock Organization rows FOR UPDATE in ascending id order to serialize
  * concurrent owner mutations and avoid deadlocks.
+ * Call only after any required User locks in the same transaction.
  */
 export async function lockOrganizationsForUpdate(tx: ActiveOwnerClient, organizationIds: ReadonlyArray<string>): Promise<void> {
   const sorted = [...new Set(organizationIds)].filter(Boolean).sort();
@@ -104,7 +138,9 @@ export async function countOtherActiveOwners(
 /**
  * Before globally deactivating a user (isActive true → false), ensure every
  * organization where they are an ACTIVE OWNER still has another active owner.
- * Must run inside the same transaction as the User update, after org locks.
+ *
+ * Caller must already hold the target User row lock (`lockUserForUpdate`) so
+ * lock order stays User → Organization.
  */
 export async function assertUserDeactivationPreservesActiveOwners(
   tx: ActiveOwnerClient,

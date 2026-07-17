@@ -14,14 +14,74 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import {
+  assertMembershipChangePreservesActiveOwners,
   assertUserDeactivationPreservesActiveOwners,
   LastActiveOwnerError,
+  lockUserForUpdate,
+  resolveNextActiveFromLockedUser,
   runWithTransactionRetry,
 } from "./wexon-active-owner";
 import { assertLocalDbTestGuard } from "./wexon-local-db-test-guard";
 import { prisma } from "./prisma";
 
 assertLocalDbTestGuard(process.env);
+
+/** Mirrors toggleAdminUserActiveAction transactional body (no cookies/redirect). */
+async function toggleUserActiveInTransaction(userId: string) {
+  return runWithTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const locked = await lockUserForUpdate(tx, userId);
+      if (!locked) throw new Error("Kullanıcı bulunamadı.");
+      const nextActive = resolveNextActiveFromLockedUser(locked);
+      if (!nextActive) {
+        await assertUserDeactivationPreservesActiveOwners(tx, userId);
+      }
+      await tx.user.update({ where: { id: userId }, data: { isActive: nextActive } });
+      await tx.auditLog.create({
+        data: {
+          action: nextActive ? "admin.user.reactivated" : "admin.user.deactivated",
+          entityType: "User",
+          entityId: userId,
+          status: "SUCCESS",
+          metadataJson: {
+            email: locked.email,
+            before: { isActive: locked.isActive },
+            after: { isActive: nextActive },
+          },
+        },
+      });
+      return { before: locked.isActive, after: nextActive };
+    }),
+  );
+}
+
+/** Mirrors resetAdminUserPasswordAction transactional body (reactivation path). */
+async function passwordResetReactivateInTransaction(userId: string) {
+  return runWithTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const locked = await lockUserForUpdate(tx, userId);
+      if (!locked) throw new Error("Kullanıcı bulunamadı.");
+      await tx.user.update({
+        where: { id: userId },
+        data: { isActive: true, mustChangePassword: true, passwordSetAt: new Date() },
+      });
+      await tx.auditLog.create({
+        data: {
+          action: "admin.user.password_reset",
+          entityType: "User",
+          entityId: userId,
+          status: "SUCCESS",
+          metadataJson: {
+            email: locked.email,
+            before: { isActive: locked.isActive },
+            after: { isActive: true },
+          },
+        },
+      });
+      return { before: locked.isActive, after: true };
+    }),
+  );
+}
 
 const suffix = randomUUID().slice(0, 8);
 const ids: {
@@ -137,25 +197,7 @@ describe("last active owner lockout (DB-backed)", () => {
   });
 
   it("11/13: sole OWNER deactivation rolls back user + writes no success audit", async () => {
-    await assert.rejects(
-      () =>
-        runWithTransactionRetry(() =>
-          prisma.$transaction(async (tx) => {
-            await assertUserDeactivationPreservesActiveOwners(tx, ids.userSole!);
-            await tx.user.update({ where: { id: ids.userSole! }, data: { isActive: false } });
-            await tx.auditLog.create({
-              data: {
-                action: "admin.user.deactivated",
-                entityType: "User",
-                entityId: ids.userSole!,
-                status: "SUCCESS",
-                metadataJson: { after: { isActive: false } },
-              },
-            });
-          }),
-        ),
-      LastActiveOwnerError,
-    );
+    await assert.rejects(() => toggleUserActiveInTransaction(ids.userSole!), LastActiveOwnerError);
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ids.userSole! } });
     assert.equal(user.isActive, true);
@@ -167,21 +209,8 @@ describe("last active owner lockout (DB-backed)", () => {
   });
 
   it("2/12: dual OWNER deactivation succeeds with audit", async () => {
-    await runWithTransactionRetry(() =>
-      prisma.$transaction(async (tx) => {
-        await assertUserDeactivationPreservesActiveOwners(tx, ids.userA!);
-        await tx.user.update({ where: { id: ids.userA! }, data: { isActive: false } });
-        await tx.auditLog.create({
-          data: {
-            action: "admin.user.deactivated",
-            entityType: "User",
-            entityId: ids.userA!,
-            status: "SUCCESS",
-            metadataJson: { email: "owner-a@example.test", before: { isActive: true }, after: { isActive: false } },
-          },
-        });
-      }),
-    );
+    const result = await toggleUserActiveInTransaction(ids.userA!);
+    assert.deepEqual(result, { before: true, after: false });
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ids.userA! } });
     assert.equal(user.isActive, false);
@@ -190,32 +219,26 @@ describe("last active owner lockout (DB-backed)", () => {
       where: { entityType: "User", entityId: ids.userA!, action: "admin.user.deactivated", status: "SUCCESS" },
     });
     assert.equal(audits.length, 1);
+    const meta = audits[0].metadataJson as { before: { isActive: boolean }; after: { isActive: boolean } };
+    assert.deepEqual(meta, { before: { isActive: true }, after: { isActive: false } });
 
     await prisma.user.update({ where: { id: ids.userA! }, data: { isActive: true } });
     await prisma.auditLog.deleteMany({ where: { entityType: "User", entityId: ids.userA!, action: "admin.user.deactivated" } });
   });
 
   it("7: STAFF deactivation is allowed", async () => {
-    await runWithTransactionRetry(() =>
-      prisma.$transaction(async (tx) => {
-        await assertUserDeactivationPreservesActiveOwners(tx, ids.userStaff!);
-        await tx.user.update({ where: { id: ids.userStaff! }, data: { isActive: false } });
-      }),
-    );
+    await toggleUserActiveInTransaction(ids.userStaff!);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ids.userStaff! } });
     assert.equal(user.isActive, false);
     await prisma.user.update({ where: { id: ids.userStaff! }, data: { isActive: true } });
+    await prisma.auditLog.deleteMany({
+      where: { entityType: "User", entityId: ids.userStaff!, action: "admin.user.deactivated" },
+    });
   });
 
   it("8: multi-org sole-owner org blocks entire deactivation", async () => {
     await assert.rejects(
-      () =>
-        runWithTransactionRetry(() =>
-          prisma.$transaction(async (tx) => {
-            await assertUserDeactivationPreservesActiveOwners(tx, ids.userMulti!);
-            await tx.user.update({ where: { id: ids.userMulti! }, data: { isActive: false } });
-          }),
-        ),
+      () => toggleUserActiveInTransaction(ids.userMulti!),
       (error: unknown) => {
         assert.ok(error instanceof LastActiveOwnerError);
         assert.ok(error.organizations.some((org) => org.id === ids.orgMultiB));
@@ -229,20 +252,8 @@ describe("last active owner lockout (DB-backed)", () => {
 
   it("10: reactivation false→true is not blocked by the owner guard", async () => {
     await prisma.user.update({ where: { id: ids.userSole! }, data: { isActive: false } });
-    await runWithTransactionRetry(() =>
-      prisma.$transaction(async (tx) => {
-        await tx.user.update({ where: { id: ids.userSole! }, data: { isActive: true } });
-        await tx.auditLog.create({
-          data: {
-            action: "admin.user.reactivated",
-            entityType: "User",
-            entityId: ids.userSole!,
-            status: "SUCCESS",
-            metadataJson: { before: { isActive: false }, after: { isActive: true } },
-          },
-        });
-      }),
-    );
+    const result = await toggleUserActiveInTransaction(ids.userSole!);
+    assert.deepEqual(result, { before: false, after: true });
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ids.userSole! } });
     assert.equal(user.isActive, true);
     await prisma.auditLog.deleteMany({ where: { entityType: "User", entityId: ids.userSole!, action: "admin.user.reactivated" } });
@@ -258,15 +269,10 @@ describe("last active owner lockout (DB-backed)", () => {
       orderBy: { id: "asc" },
     });
 
-    const deactivate = (userId: string) =>
-      runWithTransactionRetry(() =>
-        prisma.$transaction(async (tx) => {
-          await assertUserDeactivationPreservesActiveOwners(tx, userId);
-          await tx.user.update({ where: { id: userId }, data: { isActive: false } });
-        }),
-      );
-
-    const results = await Promise.allSettled([deactivate(ids.userA!), deactivate(ids.userB!)]);
+    const results = await Promise.allSettled([
+      toggleUserActiveInTransaction(ids.userA!),
+      toggleUserActiveInTransaction(ids.userB!),
+    ]);
     const fulfilled = results.filter((result) => result.status === "fulfilled").length;
     const rejected = results.filter((result) => result.status === "rejected");
 
@@ -291,6 +297,13 @@ describe("last active owner lockout (DB-backed)", () => {
 
     await prisma.user.update({ where: { id: ids.userA! }, data: { isActive: true } });
     await prisma.user.update({ where: { id: ids.userB! }, data: { isActive: true } });
+    await prisma.auditLog.deleteMany({
+      where: {
+        entityType: "User",
+        entityId: { in: [ids.userA!, ids.userB!] },
+        action: "admin.user.deactivated",
+      },
+    });
   });
 
   it("3: other OWNER with isActive=false cannot authorize deactivation", async () => {
@@ -299,6 +312,7 @@ describe("last active owner lockout (DB-backed)", () => {
       () =>
         runWithTransactionRetry(() =>
           prisma.$transaction(async (tx) => {
+            await lockUserForUpdate(tx, ids.userA!);
             await assertUserDeactivationPreservesActiveOwners(tx, ids.userA!);
             await tx.user.update({ where: { id: ids.userA! }, data: { isActive: false } });
           }),
@@ -308,5 +322,138 @@ describe("last active owner lockout (DB-backed)", () => {
     const userA = await prisma.user.findUniqueOrThrow({ where: { id: ids.userA! } });
     assert.equal(userA.isActive, true);
     await prisma.user.update({ where: { id: ids.userB! }, data: { isActive: true } });
+  });
+
+  it("stale-safe: concurrent toggles on the same user serialize without audit/state corruption", async () => {
+    await prisma.user.update({ where: { id: ids.userStaff! }, data: { isActive: true } });
+    await prisma.auditLog.deleteMany({
+      where: {
+        entityType: "User",
+        entityId: ids.userStaff!,
+        action: { in: ["admin.user.deactivated", "admin.user.reactivated"] },
+      },
+    });
+
+    const results = await Promise.allSettled([
+      toggleUserActiveInTransaction(ids.userStaff!),
+      toggleUserActiveInTransaction(ids.userStaff!),
+    ]);
+
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 2);
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: ids.userStaff! } });
+    // Two sequential toggles from true → false → true (or equivalent under lock).
+    assert.equal(user.isActive, true);
+
+    const audits = await prisma.auditLog.findMany({
+      where: {
+        entityType: "User",
+        entityId: ids.userStaff!,
+        action: { in: ["admin.user.deactivated", "admin.user.reactivated"] },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    assert.equal(audits.length, 2);
+    for (const audit of audits) {
+      const meta = audit.metadataJson as { before: { isActive: boolean }; after: { isActive: boolean } };
+      assert.equal(meta.after.isActive, !meta.before.isActive);
+      assert.equal(audit.action, meta.after.isActive ? "admin.user.reactivated" : "admin.user.deactivated");
+    }
+
+    await prisma.auditLog.deleteMany({
+      where: {
+        entityType: "User",
+        entityId: ids.userStaff!,
+        action: { in: ["admin.user.deactivated", "admin.user.reactivated"] },
+      },
+    });
+  });
+
+  it("stale-safe: deactivation vs password-reset race keeps final isActive and audit consistent", async () => {
+    await prisma.user.update({ where: { id: ids.userA! }, data: { isActive: true } });
+    await prisma.user.update({ where: { id: ids.userB! }, data: { isActive: true } });
+    await prisma.auditLog.deleteMany({
+      where: {
+        entityType: "User",
+        entityId: ids.userA!,
+        action: { in: ["admin.user.deactivated", "admin.user.reactivated", "admin.user.password_reset"] },
+      },
+    });
+
+    const results = await Promise.allSettled([
+      toggleUserActiveInTransaction(ids.userA!),
+      passwordResetReactivateInTransaction(ids.userA!),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    assert.equal(fulfilled.length, 2);
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: ids.userA! } });
+    // Password reset always ends with isActive=true; if it ran last, user is active.
+    // If toggle ran last after reset, user may be inactive. Either way final state must
+    // match the last audit's `after.isActive`.
+    const audits = await prisma.auditLog.findMany({
+      where: {
+        entityType: "User",
+        entityId: ids.userA!,
+        action: { in: ["admin.user.deactivated", "admin.user.reactivated", "admin.user.password_reset"] },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    assert.ok(audits.length >= 2);
+    const last = audits[audits.length - 1];
+    const lastMeta = last.metadataJson as { before: { isActive: boolean }; after: { isActive: boolean } };
+    assert.equal(user.isActive, lastMeta.after.isActive);
+    for (const audit of audits) {
+      const meta = audit.metadataJson as { before: { isActive: boolean }; after: { isActive: boolean } };
+      assert.ok(typeof meta.before.isActive === "boolean");
+      assert.ok(typeof meta.after.isActive === "boolean");
+    }
+
+    await prisma.user.update({ where: { id: ids.userA! }, data: { isActive: true } });
+    await prisma.auditLog.deleteMany({
+      where: {
+        entityType: "User",
+        entityId: ids.userA!,
+        action: { in: ["admin.user.deactivated", "admin.user.reactivated", "admin.user.password_reset"] },
+      },
+    });
+  });
+
+  it("membership: concurrent demote of two OWNERs leaves at least one OWNER", async () => {
+    const memberships = await prisma.membership.findMany({
+      where: { organizationId: ids.orgDual!, role: "OWNER", status: "ACTIVE" },
+      orderBy: { id: "asc" },
+    });
+    assert.equal(memberships.length, 2);
+
+    const demote = (membershipId: string) =>
+      runWithTransactionRetry(() =>
+        prisma.$transaction(async (tx) => {
+          await assertMembershipChangePreservesActiveOwners(tx, {
+            organizationId: ids.orgDual!,
+            excludingMembershipId: membershipId,
+          });
+          await tx.membership.update({ where: { id: membershipId }, data: { role: "ADMIN" } });
+        }),
+      );
+
+    const results = await Promise.allSettled([demote(memberships[0].id), demote(memberships[1].id)]);
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+    assert.equal(results.filter((r) => r.status === "rejected").length, 1);
+    assert.ok(
+      results.some((r) => r.status === "rejected" && r.reason instanceof LastActiveOwnerError),
+    );
+
+    const remainingOwners = await prisma.membership.count({
+      where: { organizationId: ids.orgDual!, role: "OWNER", status: "ACTIVE" },
+    });
+    assert.equal(remainingOwners, 1);
+
+    // Restore dual OWNER fixture.
+    await prisma.membership.updateMany({
+      where: { organizationId: ids.orgDual!, userId: { in: [ids.userA!, ids.userB!] } },
+      data: { role: "OWNER", status: "ACTIVE" },
+    });
   });
 });

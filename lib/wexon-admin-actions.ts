@@ -20,6 +20,8 @@ import {
   assertMembershipChangePreservesActiveOwners,
   assertUserDeactivationPreservesActiveOwners,
   LastActiveOwnerError,
+  lockUserForUpdate,
+  resolveNextActiveFromLockedUser,
   runWithTransactionRetry,
 } from "@/lib/wexon-active-owner";
 import {
@@ -1359,25 +1361,35 @@ export async function resetAdminUserPasswordAction(userId: string, formData: For
   try {
     const actor = await assertAdminAccess();
     const payload = parseUserPasswordResetPayload(formData);
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new AdminValidationError("Kullanıcı bulunamadı.");
     const passwordHash = await hashPassword(payload.temporaryPassword);
-    await prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: userId },
-        data: { passwordHash, passwordSetAt: new Date(), mustChangePassword: payload.mustChangePassword, isActive: true },
-      });
-      await writeAdminAuditLog(
-        {
-          action: "admin.user.password_reset",
-          actor,
-          entityType: "User",
-          entityId: userId,
-          metadata: { email: user.email, mustChangePassword: payload.mustChangePassword },
-        },
-        tx,
-      );
-    });
+    await runWithTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        // Lock User first (before any org locks elsewhere) so races with
+        // toggleAdminUserActiveAction serialize consistently.
+        const locked = await lockUserForUpdate(tx, userId);
+        if (!locked) throw new AdminValidationError("Kullanıcı bulunamadı.");
+
+        await tx.user.update({
+          where: { id: userId },
+          data: { passwordHash, passwordSetAt: new Date(), mustChangePassword: payload.mustChangePassword, isActive: true },
+        });
+        await writeAdminAuditLog(
+          {
+            action: "admin.user.password_reset",
+            actor,
+            entityType: "User",
+            entityId: userId,
+            metadata: {
+              email: locked.email,
+              mustChangePassword: payload.mustChangePassword,
+              before: { isActive: locked.isActive },
+              after: { isActive: true },
+            },
+          },
+          tx,
+        );
+      }),
+    );
     revalidateUserRoutes();
     redirect(returnTo);
   } catch (error) {
@@ -1390,11 +1402,16 @@ export async function toggleAdminUserActiveAction(userId: string, formData: Form
   const returnTo = readReturnTo(formData, "/admin/users");
   try {
     const actor = await assertAdminAccess();
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new AdminValidationError("Kullanıcı bulunamadı.");
-    const nextActive = !user.isActive;
     await runWithTransactionRetry(() =>
       prisma.$transaction(async (tx) => {
+        // 1) Lock User FOR UPDATE  2) read fresh state  3) compute nextActive
+        // 4) owner guard (locks orgs)  5) update + audit — all in one transaction.
+        // Never use a pre-transaction User snapshot for nextActive / audit.
+        const locked = await lockUserForUpdate(tx, userId);
+        if (!locked) throw new AdminValidationError("Kullanıcı bulunamadı.");
+
+        const nextActive = resolveNextActiveFromLockedUser(locked);
+
         // Reactivation (false → true) must never be blocked by the owner guard.
         if (!nextActive) {
           await assertUserDeactivationPreservesActiveOwners(tx, userId);
@@ -1407,7 +1424,11 @@ export async function toggleAdminUserActiveAction(userId: string, formData: Form
             actor,
             entityType: "User",
             entityId: userId,
-            metadata: { email: user.email, before: { isActive: user.isActive }, after: { isActive: nextActive } },
+            metadata: {
+              email: locked.email,
+              before: { isActive: locked.isActive },
+              after: { isActive: nextActive },
+            },
           },
           tx,
         );
