@@ -219,8 +219,11 @@ describe("last active owner lockout (DB-backed)", () => {
       where: { entityType: "User", entityId: ids.userA!, action: "admin.user.deactivated", status: "SUCCESS" },
     });
     assert.equal(audits.length, 1);
-    const meta = audits[0].metadataJson as { before: { isActive: boolean }; after: { isActive: boolean } };
-    assert.deepEqual(meta, { before: { isActive: true }, after: { isActive: false } });
+    const meta = audits[0].metadataJson as { email?: string; before: { isActive: boolean }; after: { isActive: boolean } };
+    assert.equal(meta.before.isActive, true);
+    assert.equal(meta.after.isActive, false);
+    assert.equal(typeof meta.email, "string");
+    assert.ok(meta.email!.includes("@example.test"));
 
     await prisma.user.update({ where: { id: ids.userA! }, data: { isActive: true } });
     await prisma.auditLog.deleteMany({ where: { entityType: "User", entityId: ids.userA!, action: "admin.user.deactivated" } });
