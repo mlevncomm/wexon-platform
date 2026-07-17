@@ -17,6 +17,12 @@ import { hashPassword } from "@/lib/wexon-passwords";
 import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
 import { syncSubscriptionAccessState } from "@/lib/wexon-subscription-lifecycle";
 import {
+  assertMembershipChangePreservesActiveOwners,
+  assertUserDeactivationPreservesActiveOwners,
+  LastActiveOwnerError,
+  runWithTransactionRetry,
+} from "@/lib/wexon-active-owner";
+import {
   AdminValidationError,
   parseApiKeyCreatePayload,
   parseAppInstallationSettingsPayload,
@@ -1265,26 +1271,37 @@ export async function updateAdminMembershipRoleAction(organizationId: string, me
   try {
     const actor = await assertAdminAccess();
     const payload = parseMembershipRolePayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const membership = await tx.membership.findFirst({ where: { id: membershipId, organizationId }, include: { user: true } });
-      if (!membership) throw new AdminValidationError("Üyelik bulunamadı.");
-      if (membership.role === "OWNER" && payload.role !== "OWNER") {
-        const ownerCount = await tx.membership.count({ where: { organizationId, role: "OWNER", status: "ACTIVE" } });
-        if (ownerCount <= 1) throw new AdminValidationError("Son sahip rolü düşürülemez.");
-      }
-      const updated = await tx.membership.update({ where: { id: membershipId }, data: { role: payload.role } });
-      await writeAdminAuditLog(
-        {
-          action: "admin.membership.role_updated",
-          actor,
-          organizationId,
-          entityType: "Membership",
-          entityId: membershipId,
-          metadata: { email: membership.user.email, before: { role: membership.role }, after: { role: updated.role } },
-        },
-        tx,
-      );
-    });
+    await runWithTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const membership = await tx.membership.findFirst({ where: { id: membershipId, organizationId }, include: { user: true } });
+        if (!membership) throw new AdminValidationError("Üyelik bulunamadı.");
+        if (membership.role === "OWNER" && payload.role !== "OWNER") {
+          try {
+            await assertMembershipChangePreservesActiveOwners(tx, {
+              organizationId,
+              excludingMembershipId: membership.id,
+            });
+          } catch (error) {
+            if (error instanceof LastActiveOwnerError) {
+              throw new AdminValidationError("Son sahip rolü düşürülemez.");
+            }
+            throw error;
+          }
+        }
+        const updated = await tx.membership.update({ where: { id: membershipId }, data: { role: payload.role } });
+        await writeAdminAuditLog(
+          {
+            action: "admin.membership.role_updated",
+            actor,
+            organizationId,
+            entityType: "Membership",
+            entityId: membershipId,
+            metadata: { email: membership.user.email, before: { role: membership.role }, after: { role: updated.role } },
+          },
+          tx,
+        );
+      }),
+    );
     revalidateUserRoutes(organizationId);
     redirect(returnTo);
   } catch (error) {
@@ -1298,26 +1315,37 @@ export async function updateAdminMembershipStatusAction(organizationId: string, 
   try {
     const actor = await assertAdminAccess();
     const payload = parseMembershipStatusPayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const membership = await tx.membership.findFirst({ where: { id: membershipId, organizationId }, include: { user: true } });
-      if (!membership) throw new AdminValidationError("Üyelik bulunamadı.");
-      if (membership.role === "OWNER" && payload.status !== "ACTIVE") {
-        const ownerCount = await tx.membership.count({ where: { organizationId, role: "OWNER", status: "ACTIVE" } });
-        if (ownerCount <= 1) throw new AdminValidationError("Son sahip askıya alınamaz veya kaldırılamaz.");
-      }
-      const updated = await tx.membership.update({ where: { id: membershipId }, data: { status: payload.status } });
-      await writeAdminAuditLog(
-        {
-          action: "admin.membership.status_updated",
-          actor,
-          organizationId,
-          entityType: "Membership",
-          entityId: membershipId,
-          metadata: { email: membership.user.email, before: { status: membership.status }, after: { status: updated.status } },
-        },
-        tx,
-      );
-    });
+    await runWithTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const membership = await tx.membership.findFirst({ where: { id: membershipId, organizationId }, include: { user: true } });
+        if (!membership) throw new AdminValidationError("Üyelik bulunamadı.");
+        if (membership.role === "OWNER" && payload.status !== "ACTIVE") {
+          try {
+            await assertMembershipChangePreservesActiveOwners(tx, {
+              organizationId,
+              excludingMembershipId: membership.id,
+            });
+          } catch (error) {
+            if (error instanceof LastActiveOwnerError) {
+              throw new AdminValidationError("Son sahip askıya alınamaz veya kaldırılamaz.");
+            }
+            throw error;
+          }
+        }
+        const updated = await tx.membership.update({ where: { id: membershipId }, data: { status: payload.status } });
+        await writeAdminAuditLog(
+          {
+            action: "admin.membership.status_updated",
+            actor,
+            organizationId,
+            entityType: "Membership",
+            entityId: membershipId,
+            metadata: { email: membership.user.email, before: { status: membership.status }, after: { status: updated.status } },
+          },
+          tx,
+        );
+      }),
+    );
     revalidateUserRoutes(organizationId);
     redirect(returnTo);
   } catch (error) {
@@ -1365,19 +1393,26 @@ export async function toggleAdminUserActiveAction(userId: string, formData: Form
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AdminValidationError("Kullanıcı bulunamadı.");
     const nextActive = !user.isActive;
-    await prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: userId }, data: { isActive: nextActive } });
-      await writeAdminAuditLog(
-        {
-          action: nextActive ? "admin.user.reactivated" : "admin.user.deactivated",
-          actor,
-          entityType: "User",
-          entityId: userId,
-          metadata: { email: user.email, before: { isActive: user.isActive }, after: { isActive: nextActive } },
-        },
-        tx,
-      );
-    });
+    await runWithTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        // Reactivation (false → true) must never be blocked by the owner guard.
+        if (!nextActive) {
+          await assertUserDeactivationPreservesActiveOwners(tx, userId);
+        }
+
+        await tx.user.update({ where: { id: userId }, data: { isActive: nextActive } });
+        await writeAdminAuditLog(
+          {
+            action: nextActive ? "admin.user.reactivated" : "admin.user.deactivated",
+            actor,
+            entityType: "User",
+            entityId: userId,
+            metadata: { email: user.email, before: { isActive: user.isActive }, after: { isActive: nextActive } },
+          },
+          tx,
+        );
+      }),
+    );
     revalidateUserRoutes();
     redirect(returnTo);
   } catch (error) {
