@@ -1,0 +1,48 @@
+#!/usr/bin/env node
+/**
+ * Fail-closed runner for DB-backed unit tests.
+ *
+ * 1) Load local env
+ * 2) Validate DATABASE_URL / DIRECT_URL via shared guard (no Prisma)
+ * 3) Only then spawn the test process
+ *
+ * Remote / production / preview targets exit before any test module (and thus
+ * before `lib/prisma.ts`) is loaded.
+ */
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+await import(pathToFileURL(join(root, "scripts/load-local-env.mjs")).href);
+
+const { assertLocalDbTestGuard } = await import(
+  pathToFileURL(join(root, "lib/wexon-local-db-test-guard.ts")).href
+);
+const allowed = assertLocalDbTestGuard(process.env);
+console.error(
+  `[db-test-guard] OK: host=${allowed.host} database=${allowed.database} (opt-in local test/e2e only)`,
+);
+
+const files = [
+  "lib/wexon-subscription-lifecycle.db.test.ts",
+  "lib/wexon-active-owner.db.test.ts",
+  "lib/paytr/paytr-callback.db.test.ts",
+  "lib/wexon-entitlement-lifecycle.db.test.ts",
+  "lib/wexpay-paytr-webhook.db.test.ts",
+];
+
+const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...files], {
+  cwd: root,
+  stdio: "inherit",
+  env: { ...process.env },
+});
+
+if (result.error) {
+  console.error(result.error);
+  process.exit(1);
+}
+
+process.exit(result.status === null ? 1 : result.status);

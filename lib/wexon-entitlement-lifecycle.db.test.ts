@@ -7,7 +7,14 @@ import {
   assertEntitlementPhysicalDeleteForbidden,
   setEntitlementActiveState,
 } from "@/lib/wexon-entitlement-lifecycle";
+import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
+
+/**
+ * DB-backed entitlement lifecycle. Guard MUST run before any Prisma query.
+ * Run via: WEXON_ALLOW_LOCAL_DB_TESTS=1 npm run test:unit:db
+ */
+assertLocalDbTestGuard(process.env);
 
 describe("wexon entitlement lifecycle", () => {
   let planId = "";
