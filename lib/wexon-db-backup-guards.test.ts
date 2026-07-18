@@ -10,7 +10,7 @@ import {
   RECOVERY_STATUS,
   sanitizeBackupLog,
   sha256HexEqual,
-} from "./wexon-db-backup-guards.ts";
+} from "./wexon-db-backup-guards";
 
 describe("parsePostgresMajorVersion", () => {
   it("parses pg_dump version strings", () => {
