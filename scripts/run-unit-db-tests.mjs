@@ -32,6 +32,7 @@ const files = [
   "lib/paytr/paytr-callback.db.test.ts",
   "lib/wexon-entitlement-lifecycle.db.test.ts",
   "lib/wexpay-paytr-webhook.db.test.ts",
+  "lib/wexpay-concurrency.db.test.ts",
 ];
 
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...files], {

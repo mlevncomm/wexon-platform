@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { calculateTableAccount, filterTableSessionRecords } from "@/lib/wexpay-account";
 import { generatePaytrMerchantOid, loadPaytrCredentialBundle } from "@/lib/wexpay-paytr-adapter";
+import { lockWexPayTableAccount } from "@/lib/wexpay-locks";
 import { resolveWexPayPaymentProvider } from "@/lib/wexpay-payment-provider";
 import type { TenantDb } from "@/lib/wexpay-tenant";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
@@ -73,6 +74,8 @@ export type PublicCheckoutValidatedContext = {
   orderId: string | null;
   amount: number;
   remainingAmount: number;
+  /** total − settled (ignores PENDING reserve) — used for pending reuse matching. */
+  openBalance: number;
 };
 
 /** Validates tenant table, order ownership, and server-side amount before PSP calls. */
@@ -93,8 +96,14 @@ export async function validatePublicCheckoutContext(input: {
   if (!table) throw new WexPayValidationError("Masa bulunamadı.");
 
   const account = await getTableAccountSnapshot(prisma, table.id);
+  const openBalance = Math.max(0, Math.round((account.totalAmount - account.paidAmount) * 100) / 100);
   const orderId: string | null = input.orderId ?? null;
-  let amount = account.remainingAmount;
+
+  // Match reuse against open balance (what the guest still owes ignoring in-flight PENDING).
+  let amount = resolvePublicCheckoutAmount({
+    orderSubtotal: null,
+    remainingAmount: openBalance,
+  });
 
   if (orderId) {
     const order = await prisma.customerOrder.findFirst({
@@ -103,15 +112,20 @@ export async function validatePublicCheckoutContext(input: {
     if (!order) throw new WexPayValidationError("Sipariş bulunamadı.");
     amount = resolvePublicCheckoutAmount({
       orderSubtotal: Number(order.subtotal),
-      remainingAmount: account.remainingAmount,
+      remainingAmount: openBalance,
     });
   }
 
-  if (account.remainingAmount <= 0) {
+  // Allow through when remaining is reserved by PENDING so reuse can regenerate the token.
+  if (openBalance <= 0) {
     throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
   }
 
   if (amount <= 0) {
+    throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
+  }
+
+  if (account.remainingAmount <= 0 && !account.hasPendingPayments) {
     throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
   }
 
@@ -120,6 +134,7 @@ export async function validatePublicCheckoutContext(input: {
     orderId,
     amount,
     remainingAmount: account.remainingAmount,
+    openBalance,
   };
 }
 
@@ -202,10 +217,11 @@ export function resolvePendingCheckoutReuseDecision(input: {
   hasPending: boolean;
   pendingAmount: number;
   validatedAmount: number;
-  remainingAmount: number;
+  /** total − settled; ignores PENDING so an in-flight intent can still reuse. */
+  openBalance: number;
 }): PendingCheckoutReuseDecision {
   if (!input.hasPending) return "create_new";
-  if (input.remainingAmount <= 0 || input.validatedAmount <= 0) return "invalidate_stale";
+  if (input.openBalance <= 0 || input.validatedAmount <= 0) return "invalidate_stale";
   if (!amountsMatch(input.pendingAmount, input.validatedAmount)) return "invalidate_stale";
   return "reuse";
 }
@@ -266,7 +282,34 @@ export async function createPublicCheckoutPayment(input: {
   }
 
   const locked = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.tableId}))`;
+    // Lock order: table account only (see lib/wexpay-locks.ts).
+    await lockWexPayTableAccount(tx, input.tableId);
+
+    const table = await tx.restaurantTable.findFirst({
+      where: {
+        id: input.tableId,
+        branchId: input.branchId,
+        isActive: true,
+        branch: { restaurant: { organizationId: input.organizationId } },
+      },
+    });
+    if (!table) throw new WexPayValidationError("Masa bulunamadı.");
+
+    const account = await getTableAccountSnapshot(tx, table.id);
+    const openBalance = Math.max(0, Math.round((account.totalAmount - account.paidAmount) * 100) / 100);
+    let lockedAmount = account.remainingAmount;
+    const orderId = validated.orderId;
+
+    if (orderId) {
+      const order = await tx.customerOrder.findFirst({
+        where: { id: orderId, branchId: input.branchId, tableId: table.id },
+      });
+      if (!order) throw new WexPayValidationError("Sipariş bulunamadı.");
+      lockedAmount = resolvePublicCheckoutAmount({
+        orderSubtotal: Number(order.subtotal),
+        remainingAmount: account.remainingAmount,
+      });
+    }
 
     const existingPending = await tx.payment.findFirst({
       where: {
@@ -283,8 +326,8 @@ export async function createPublicCheckoutPayment(input: {
       const reuseDecision = resolvePendingCheckoutReuseDecision({
         hasPending: true,
         pendingAmount: Number(existingPending.amount),
-        validatedAmount: validated.amount,
-        remainingAmount: validated.remainingAmount,
+        validatedAmount: lockedAmount > 0 ? lockedAmount : Number(existingPending.amount),
+        openBalance,
       });
 
       if (reuseDecision === "invalidate_stale") {
@@ -292,55 +335,24 @@ export async function createPublicCheckoutPayment(input: {
           paymentId: existingPending.id,
           organizationId: input.organizationId,
           ipAddress: input.ipAddress,
-          reason:
-            validated.remainingAmount <= 0 || validated.amount <= 0
-              ? "table_fully_paid"
-              : "amount_mismatch",
+          reason: openBalance <= 0 || lockedAmount <= 0 ? "table_fully_paid" : "amount_mismatch",
         });
       } else if (reuseDecision === "reuse") {
         return {
           kind: "reuse" as const,
           paymentId: existingPending.id,
-          amount: validated.amount,
+          amount: Number(existingPending.amount),
           providerRef: existingPending.providerRef,
           orderId: existingPending.orderId,
         };
       }
     }
 
-    const table = await tx.restaurantTable.findFirst({
-      where: {
-        id: input.tableId,
-        branchId: input.branchId,
-        isActive: true,
-        branch: { restaurant: { organizationId: input.organizationId } },
-      },
-    });
-    if (!table) throw new WexPayValidationError("Masa bulunamadı.");
-
-    const account = await getTableAccountSnapshot(tx, table.id);
-    if (account.remainingAmount <= 0) {
+    if (account.remainingAmount <= 0 || lockedAmount <= 0) {
       throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
     }
 
-    let amount = account.remainingAmount;
-    const orderId = validated.orderId;
-
-    if (orderId) {
-      const order = await tx.customerOrder.findFirst({
-        where: { id: orderId, branchId: input.branchId, tableId: table.id },
-      });
-      if (!order) throw new WexPayValidationError("Sipariş bulunamadı.");
-      amount = resolvePublicCheckoutAmount({
-        orderSubtotal: Number(order.subtotal),
-        remainingAmount: account.remainingAmount,
-      });
-    }
-
-    if (amount <= 0) {
-      throw new WexPayValidationError("Ödenecek tutar bulunmuyor.");
-    }
-
+    const amount = lockedAmount;
     const providerRef = generatePaytrMerchantOid();
     const payment = await tx.payment.create({
       data: {
@@ -387,23 +399,53 @@ export async function createPublicCheckoutPayment(input: {
     };
   });
 
-  const intent = await resolvePaytrCheckoutIntent({
-    organizationId: input.organizationId,
-    branchId: input.branchId,
-    tableId: input.tableId,
-    orderId: locked.orderId,
-    amount: locked.amount,
-    qrCode: input.qrCode,
-    paymentId: locked.paymentId,
-    providerRef: locked.providerRef,
-    ipAddress: input.ipAddress,
-  });
+  try {
+    const intent = await resolvePaytrCheckoutIntent({
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      tableId: input.tableId,
+      orderId: locked.orderId,
+      amount: locked.amount,
+      qrCode: input.qrCode,
+      paymentId: locked.paymentId,
+      providerRef: locked.providerRef,
+      ipAddress: input.ipAddress,
+    });
 
-  return {
-    paymentId: locked.paymentId,
-    amount: locked.amount,
-    providerRef: locked.providerRef,
-    externalCheckoutUrl: intent.externalCheckoutUrl,
-    reusedPending: locked.kind === "reuse",
-  };
+    return {
+      paymentId: locked.paymentId,
+      amount: locked.amount,
+      providerRef: locked.providerRef,
+      externalCheckoutUrl: intent.externalCheckoutUrl,
+      reusedPending: locked.kind === "reuse",
+    };
+  } catch (error) {
+    if (locked.kind === "create") {
+      await prisma.$transaction(async (tx) => {
+        await lockWexPayTableAccount(tx, input.tableId);
+        await tx.payment.updateMany({
+          where: {
+            id: locked.paymentId,
+            status: PaymentStatus.PENDING,
+            provider: "paytr",
+          },
+          data: { status: PaymentStatus.FAILED },
+        });
+        await syncTableStatus(tx, input.tableId);
+        await writeAuditLog(
+          {
+            action: "wexpay.public.checkout.token_failed",
+            organizationId: input.organizationId,
+            entityType: "Payment",
+            entityId: locked.paymentId,
+            ipAddress: input.ipAddress,
+            source: "wexpay_public",
+            metadata: { providerRef: locked.providerRef },
+          },
+          tx,
+        );
+      });
+    }
+    throw error;
+  }
 }

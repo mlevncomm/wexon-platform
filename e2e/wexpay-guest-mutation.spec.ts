@@ -60,18 +60,24 @@ test.describe.serial("wexpay guest mutation (isolated)", () => {
       await categoryBtn.click();
     }
 
-    const productCard = page.locator("[data-testid^='qr-quick-add-']").first().locator("xpath=ancestor::article");
+    const productCard = page.locator("article").filter({ hasText: /Izgara/i }).first();
+    await expect(productCard).toBeVisible({ timeout: 10_000 });
     await productCard.getByRole("button").first().click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByTestId("qr-product-note")).toBeVisible();
-    await expect(page.locator("[data-testid^='qr-option-']")).toHaveCount(0);
+
+    // Optional modifier chips may render; pick none unless add-to-cart stays disabled.
+    const addBtn = page.getByTestId("qr-add-to-cart");
+    if (!(await addBtn.isEnabled())) {
+      await page.locator("[data-testid^='qr-option-']").first().click();
+    }
 
     const qtyPlus = page.getByRole("button", { name: /Adet arttır/i });
     if (await qtyPlus.count()) {
       await qtyPlus.click();
     }
     await page.getByTestId("qr-product-note").fill(artifact.note || artifact.token);
-    await page.getByTestId("qr-add-to-cart").click();
+    await addBtn.click();
 
     await page.getByTestId("qr-cart-continue").click({ force: true });
     await expect(page.getByTestId("qr-cart-subtotal")).toBeVisible();

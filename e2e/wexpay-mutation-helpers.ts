@@ -22,14 +22,33 @@ export type WexPayRunArtifact = {
   tableIds: string[];
 };
 
+/**
+ * Fail-closed when WEXON_E2E_TARGET=isolated: missing fixtures / blocked DB must FAIL,
+ * not skip. Soft skip remains only for non-isolated local exploratory runs.
+ */
 export function skipUnlessIsolatedMutation() {
   const fixtures = loadFixtures();
+  const isolated = (process.env.WEXON_E2E_TARGET ?? "").trim().toLowerCase() === "isolated";
+  const reason = wexPayMutationBlockedReason();
+
+  if (isolated) {
+    if (!fixtures.dbAvailable) {
+      throw new Error(fixtures.setupError ?? "Isolated E2E requires a reachable database.");
+    }
+    if (!fixtures.fixturesReady || !fixtures.qrCode || !fixtures.licensedOrgId) {
+      throw new Error(fixtures.setupError ?? "Isolated E2E requires licensed WexPay fixtures.");
+    }
+    if (reason) {
+      throw new Error(reason);
+    }
+    return;
+  }
+
   test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database unavailable");
   test.skip(
     !fixtures.fixturesReady || !fixtures.qrCode || !fixtures.licensedOrgId,
     fixtures.setupError ?? "licensed WexPay fixture required",
   );
-  const reason = wexPayMutationBlockedReason();
   test.skip(Boolean(reason), reason ?? "mutation blocked");
 }
 

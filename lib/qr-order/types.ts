@@ -44,11 +44,13 @@ export type QrTableContext = {
 };
 
 export type QrCartLine = {
-  /** Stable key so same product with different notes stays separate. */
+  /** Stable key so same product with different notes/options stays separate. */
   key: string;
   product: QrProduct;
   quantity: number;
   note: string;
+  /** Selected modifier option IDs sent to the public order API. */
+  modifierOptionIds: string[];
 };
 
 export type QrOrderStatus = "NEW" | "PREPARING" | "SERVED" | "CANCELLED";
@@ -83,6 +85,15 @@ export type QrBillSnapshot = {
   status: string;
   lines: QrBillLine[];
   empty: boolean;
+  paymentAvailability?: {
+    staffPaymentRequest: boolean;
+    onlineCheckout: boolean;
+  };
+};
+
+export type QrPaytrReturn = {
+  result: "success" | "failed";
+  paymentId: string | null;
 };
 
 export type WaiterReason = "order_help" | "payment_help" | "table_clean" | "other";

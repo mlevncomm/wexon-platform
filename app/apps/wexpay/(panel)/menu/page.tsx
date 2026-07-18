@@ -16,11 +16,22 @@ import {
 } from "@/components/wexpay/WexPayBusinessUI";
 import {
   createCategoryAction,
+  createModifierGroupAction,
+  createModifierOptionAction,
   createProductAction,
+  setProductModifierGroupsAction,
   updateCategoryAction,
+  updateModifierGroupAction,
+  updateModifierOptionAction,
   updateProductAction,
 } from "@/lib/wexpay-actions";
-import { listBranchCategories, listBranchProducts, listOrgBranches, resolveActiveBranch } from "@/lib/wexpay-read";
+import {
+  listBranchCategories,
+  listBranchModifierGroups,
+  listBranchProducts,
+  listOrgBranches,
+  resolveActiveBranch,
+} from "@/lib/wexpay-read";
 import { resolveWexPaySessionContext } from "@/lib/wexpay-tenant";
 
 type SearchParams = Promise<{ wexpayError?: string; branchId?: string }>;
@@ -48,9 +59,10 @@ export default async function WexPayMenuPage({ searchParams }: { searchParams: S
   const activeBranch = await resolveActiveBranch(context.organizationId, branchId);
   if (!activeBranch) return null;
 
-  const [categories, products] = await Promise.all([
+  const [categories, products, modifierGroups] = await Promise.all([
     listBranchCategories(context.organizationId, activeBranch.id),
     listBranchProducts(context.organizationId, activeBranch.id),
+    listBranchModifierGroups(context.organizationId, activeBranch.id),
   ]);
   const redirectTo = `/apps/wexpay/menu?branchId=${activeBranch.id}`;
 
@@ -185,6 +197,40 @@ export default async function WexPayMenuPage({ searchParams }: { searchParams: S
                       </div>
                     </form>
                   )}
+                  {context.canManage && modifierGroups.length > 0 ? (
+                    <form action={setProductModifierGroupsAction} className="mt-4 grid gap-2 border-t border-slate-100 pt-4">
+                      <input type="hidden" name="productId" value={product.id} />
+                      <input type="hidden" name="redirectTo" value={redirectTo} />
+                      <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                        Modifier grupları
+                      </p>
+                      <div className="grid gap-2">
+                        {modifierGroups.map((group) => {
+                          const linked = product.productModifierGroups.some((link) => link.groupId === group.id);
+                          return (
+                            <label
+                              key={group.id}
+                              className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700"
+                            >
+                              <input
+                                type="checkbox"
+                                name="groupIds"
+                                value={group.id}
+                                defaultChecked={linked}
+                                className="h-4 w-4 rounded border-slate-300"
+                              />
+                              {group.name}
+                              <span className="text-xs font-semibold text-slate-400">
+                                ({group.selectionType === "MULTI" ? "çoklu" : "tekli"}
+                                {group.minSelect > 0 ? ", zorunlu" : ""})
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <DemoPrimaryButton>Bağlantıları kaydet</DemoPrimaryButton>
+                    </form>
+                  ) : null}
                 </WexPaySurface>
               ))}
             </div>
@@ -215,6 +261,124 @@ export default async function WexPayMenuPage({ searchParams }: { searchParams: S
             ))}
         </WexPayPanel>
       </WexPayPanelGrid>
+
+      <WexPayPanel
+        title="Modifier grupları"
+        description="Boyut, ekstra gibi ürün seçenekleri. Ürün kartından gruba bağlayın."
+      >
+        {modifierGroups.length === 0 ? (
+          <WexPayEmptyNotice>Bu şubede henüz modifier grubu yok.</WexPayEmptyNotice>
+        ) : (
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+            {modifierGroups.map((group) => (
+              <WexPaySurface key={group.id}>
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-slate-950">{group.name}</p>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {group.options.length} seçenek · {group._count.productLinks} ürün bağlantısı
+                    </p>
+                  </div>
+                  <ActiveBadge active={group.isActive} />
+                </div>
+                {context.canManage ? (
+                  <>
+                    <form action={updateModifierGroupAction} className="grid gap-3 md:grid-cols-2">
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="redirectTo" value={redirectTo} />
+                      <DemoInput label="Grup adı" name="name" defaultValue={group.name} required />
+                      <DemoSelect
+                        label="Seçim tipi"
+                        name="selectionType"
+                        defaultValue={group.selectionType}
+                        options={[
+                          { value: "SINGLE", label: "Tekli" },
+                          { value: "MULTI", label: "Çoklu" },
+                        ]}
+                      />
+                      <DemoInput label="Min seçim" name="minSelect" type="number" defaultValue={group.minSelect} />
+                      <DemoInput label="Max seçim" name="maxSelect" type="number" defaultValue={group.maxSelect} />
+                      <DemoInput label="Sıra" name="sortOrder" type="number" defaultValue={group.sortOrder} />
+                      <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm shadow-slate-900/5">
+                        <input
+                          name="isActive"
+                          value="true"
+                          type="checkbox"
+                          defaultChecked={group.isActive}
+                          className="h-4 w-4 rounded border-slate-300"
+                        />
+                        Aktif
+                      </label>
+                      <div className="md:col-span-2">
+                        <DemoPrimaryButton>Grubu kaydet</DemoPrimaryButton>
+                      </div>
+                    </form>
+
+                    <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                      {group.options.map((option) => (
+                        <form
+                          key={option.id}
+                          action={updateModifierOptionAction}
+                          className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3 md:grid-cols-[minmax(0,1fr)_110px_90px_auto]"
+                        >
+                          <input type="hidden" name="optionId" value={option.id} />
+                          <input type="hidden" name="redirectTo" value={redirectTo} />
+                          <DemoInput label="Seçenek" name="name" defaultValue={option.name} required />
+                          <DemoInput
+                            label="Fiyat +"
+                            name="priceDelta"
+                            defaultValue={Number(option.priceDelta)}
+                          />
+                          <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                            <input
+                              name="isActive"
+                              value="true"
+                              type="checkbox"
+                              defaultChecked={option.isActive}
+                              className="h-4 w-4 rounded border-slate-300"
+                            />
+                            Aktif
+                          </label>
+                          <DemoPrimaryButton>Kaydet</DemoPrimaryButton>
+                        </form>
+                      ))}
+                      <form action={createModifierOptionAction} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_110px_auto]">
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="redirectTo" value={redirectTo} />
+                        <DemoInput label="Yeni seçenek" name="name" required placeholder="Örn. Büyük" />
+                        <DemoInput label="Fiyat +" name="priceDelta" defaultValue={0} />
+                        <DemoPrimaryButton>Seçenek ekle</DemoPrimaryButton>
+                      </form>
+                    </div>
+                  </>
+                ) : null}
+              </WexPaySurface>
+            ))}
+          </div>
+        )}
+
+        {context.canManage ? (
+          <form action={createModifierGroupAction} className="mt-5 grid gap-3 border-t border-slate-100 pt-5 md:grid-cols-2 xl:grid-cols-4">
+            <input type="hidden" name="branchId" value={activeBranch.id} />
+            <input type="hidden" name="redirectTo" value={redirectTo} />
+            <DemoInput label="Yeni grup adı" name="name" required placeholder="Örn. Boyut" />
+            <DemoSelect
+              label="Seçim tipi"
+              name="selectionType"
+              defaultValue="SINGLE"
+              options={[
+                { value: "SINGLE", label: "Tekli" },
+                { value: "MULTI", label: "Çoklu" },
+              ]}
+            />
+            <DemoInput label="Min seçim" name="minSelect" type="number" defaultValue={0} />
+            <DemoInput label="Max seçim" name="maxSelect" type="number" defaultValue={1} />
+            <div className="md:col-span-2 xl:col-span-4">
+              <DemoPrimaryButton>Modifier grubu ekle</DemoPrimaryButton>
+            </div>
+          </form>
+        ) : null}
+      </WexPayPanel>
     </WexPayPage>
   );
 }

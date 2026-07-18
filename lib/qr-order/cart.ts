@@ -5,7 +5,7 @@ export { cartStorageKey };
 
 function isCartLine(value: unknown): value is QrCartLine {
   if (!value || typeof value !== "object") return false;
-  const line = value as QrCartLine & { selectedOptions?: unknown };
+  const line = value as QrCartLine;
   return (
     typeof line.key === "string" &&
     typeof line.quantity === "number" &&
@@ -13,7 +13,8 @@ function isCartLine(value: unknown): value is QrCartLine {
     line.product != null &&
     typeof line.product.id === "string" &&
     typeof line.product.price === "number" &&
-    typeof line.note === "string"
+    typeof line.note === "string" &&
+    Array.isArray(line.modifierOptionIds)
   );
 }
 
@@ -25,8 +26,14 @@ function normalizeStoredLine(value: unknown): QrCartLine | null {
   const quantity = Number(raw.quantity);
   if (!Number.isFinite(quantity) || quantity <= 0) return null;
   const note = typeof raw.note === "string" ? raw.note : "";
-  const key = typeof raw.key === "string" ? raw.key : `${product.id}::${note.trim().toLowerCase()}`;
-  const line: QrCartLine = { key, product, quantity, note };
+  const modifierOptionIds = Array.isArray(raw.modifierOptionIds)
+    ? raw.modifierOptionIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))
+    : [];
+  const key =
+    typeof raw.key === "string"
+      ? raw.key
+      : `${product.id}::${modifierOptionIds.slice().sort().join(",")}::${note.trim().toLowerCase()}`;
+  const line: QrCartLine = { key, product, quantity, note, modifierOptionIds };
   return isCartLine(line) ? line : null;
 }
 

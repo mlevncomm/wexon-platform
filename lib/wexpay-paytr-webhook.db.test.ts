@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { describe, it } from "node:test";
-import { PaymentStatus, WexPayProviderCredentialMode } from ".prisma/client";
+import { OrderStatus, PaymentStatus, WexPayProviderCredentialMode } from ".prisma/client";
 import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
 import { buildPaytrCallbackHash } from "@/lib/wexpay-paytr-adapter";
@@ -85,6 +85,39 @@ async function findSeedTable() {
       branch: { restaurant: { organization: { slug: "wexpay-real-test" } } },
     },
     include: { branch: { include: { restaurant: true } } },
+  });
+}
+
+/** Chargeable order so settle-to-PAID passes table balance integrity checks. */
+async function ensureChargeableOrder(table: {
+  id: string;
+  branchId: string;
+}, amount: number) {
+  const product = await prisma.menuProduct.findFirst({
+    where: { branchId: table.branchId, isActive: true },
+  });
+  if (!product) {
+    throw new Error("seed menu product missing for webhook balance fixture");
+  }
+  return prisma.customerOrder.create({
+    data: {
+      orderNo: `WXP-WH-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      branchId: table.branchId,
+      tableId: table.id,
+      status: OrderStatus.SERVED,
+      subtotal: amount,
+      items: {
+        create: [
+          {
+            productId: product.id,
+            productName: product.name,
+            quantity: 1,
+            unitPrice: amount,
+            totalPrice: amount,
+          },
+        ],
+      },
+    },
   });
 }
 
@@ -257,10 +290,12 @@ describe("processPaytrWebhookRequest", () => {
       }
 
       const providerRef = `WXP-TEST-SUCCESS-${Date.now()}`;
+      const order = await ensureChargeableOrder(table, 120);
       const payment = await prisma.payment.create({
         data: {
           branchId: table.branchId,
           tableId: table.id,
+          orderId: order.id,
           amount: "120.00",
           currency: "TRY",
           status: PaymentStatus.PENDING,
@@ -282,7 +317,8 @@ describe("processPaytrWebhookRequest", () => {
         assert.equal(updated?.status, PaymentStatus.PAID);
         assert.ok(updated?.paidAt);
       } finally {
-        await prisma.payment.delete({ where: { id: payment.id } });
+        await prisma.payment.delete({ where: { id: payment.id } }).catch(() => undefined);
+        await prisma.customerOrder.delete({ where: { id: order.id } }).catch(() => undefined);
         await prisma.wexPayWebhookEvent.deleteMany({ where: { providerEventId: { contains: providerRef } } });
       }
     } catch (error) {
@@ -360,10 +396,12 @@ describe("processPaytrWebhookRequest", () => {
       }
 
       const providerRef = `WXP-TEST-DUP-${Date.now()}`;
+      const order = await ensureChargeableOrder(table, 120);
       const payment = await prisma.payment.create({
         data: {
           branchId: table.branchId,
           tableId: table.id,
+          orderId: order.id,
           amount: "120.00",
           currency: "TRY",
           status: PaymentStatus.PENDING,
@@ -387,7 +425,8 @@ describe("processPaytrWebhookRequest", () => {
         const updated = await prisma.payment.findUnique({ where: { id: payment.id } });
         assert.equal(updated?.status, PaymentStatus.PAID);
       } finally {
-        await prisma.payment.delete({ where: { id: payment.id } });
+        await prisma.payment.delete({ where: { id: payment.id } }).catch(() => undefined);
+        await prisma.customerOrder.delete({ where: { id: order.id } }).catch(() => undefined);
         await prisma.wexPayWebhookEvent.deleteMany({ where: { providerEventId: { contains: providerRef } } });
       }
     } catch (error) {

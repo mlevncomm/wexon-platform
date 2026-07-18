@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  parseModifierGroupCreate,
+  parseModifierOptionCreate,
+  parseTableBulkCreate,
   PUBLIC_NOTE_MAX_LENGTH,
   validateOrderItems,
   validatePublicNote,
   WexPayValidationError,
 } from "./wexpay-validation";
+
+function form(entries: Record<string, string>) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries(entries)) {
+    data.set(key, value);
+  }
+  return data;
+}
 
 describe("validateOrderItems", () => {
   it("accepts productId + quantity only", () => {
@@ -69,5 +80,91 @@ describe("validatePublicNote", () => {
       () => validatePublicNote("x".repeat(PUBLIC_NOTE_MAX_LENGTH + 1)),
       WexPayValidationError,
     );
+  });
+});
+
+describe("parseTableBulkCreate", () => {
+  it("accepts bounded bulk create input", () => {
+    const parsed = parseTableBulkCreate(
+      form({
+        branchId: "br_1",
+        prefix: "Masa",
+        count: "12",
+        seats: "4",
+        startNumber: "3",
+      }),
+    );
+    assert.deepEqual(parsed, {
+      branchId: "br_1",
+      prefix: "Masa",
+      count: 12,
+      seats: 4,
+      startNumber: 3,
+    });
+  });
+
+  it("rejects count outside 1-50", () => {
+    assert.throws(
+      () => parseTableBulkCreate(form({ branchId: "br_1", prefix: "Masa", count: "0" })),
+      WexPayValidationError,
+    );
+    assert.throws(
+      () => parseTableBulkCreate(form({ branchId: "br_1", prefix: "Masa", count: "51" })),
+      WexPayValidationError,
+    );
+  });
+
+  it("rejects invalid seats and startNumber", () => {
+    assert.throws(
+      () => parseTableBulkCreate(form({ branchId: "br_1", prefix: "Masa", count: "2", seats: "0" })),
+      WexPayValidationError,
+    );
+    assert.throws(
+      () =>
+        parseTableBulkCreate(
+          form({ branchId: "br_1", prefix: "Masa", count: "2", startNumber: "10000" }),
+        ),
+      WexPayValidationError,
+    );
+  });
+});
+
+describe("parseModifierGroupCreate / option create", () => {
+  it("forces SINGLE maxSelect to 1", () => {
+    const parsed = parseModifierGroupCreate(
+      form({
+        branchId: "br_1",
+        name: "Boyut",
+        selectionType: "SINGLE",
+        minSelect: "1",
+        maxSelect: "5",
+      }),
+    );
+    assert.equal(parsed.selectionType, "SINGLE");
+    assert.equal(parsed.minSelect, 1);
+    assert.equal(parsed.maxSelect, 1);
+  });
+
+  it("rejects MULTI when minSelect exceeds maxSelect", () => {
+    assert.throws(
+      () =>
+        parseModifierGroupCreate(
+          form({
+            branchId: "br_1",
+            name: "Ekstralar",
+            selectionType: "MULTI",
+            minSelect: "3",
+            maxSelect: "2",
+          }),
+        ),
+      WexPayValidationError,
+    );
+  });
+
+  it("parses non-negative option priceDelta", () => {
+    const parsed = parseModifierOptionCreate(
+      form({ groupId: "g1", name: "Extra cheese", priceDelta: "12,5" }),
+    );
+    assert.deepEqual(parsed, { groupId: "g1", name: "Extra cheese", priceDelta: 12.5 });
   });
 });

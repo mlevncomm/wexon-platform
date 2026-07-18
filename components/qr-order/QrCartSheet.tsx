@@ -3,6 +3,7 @@
 import { useId } from "react";
 import { qrCard, qrFrameNarrow, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
+import { describeSelectedModifiers } from "@/lib/qr-order/modifiers";
 import { cartSubtotal, lineTotal, lineUnitPrice } from "@/lib/qr-order/pricing";
 import type { QrCartLine, QrTableContext } from "@/lib/qr-order/types";
 
@@ -66,6 +67,18 @@ export default function QrCartSheet({
                     <p className="mt-1 text-xs font-semibold text-slate-500">
                       {formatTry(lineUnitPrice(line))} × {line.quantity}
                     </p>
+                    {describeSelectedModifiers(line.product, line.modifierOptionIds ?? []).map((row) => (
+                      <p
+                        key={`${line.key}-${row.groupName}-${row.optionName}`}
+                        className="mt-1 text-xs font-medium text-slate-500"
+                        data-testid="qr-cart-modifier"
+                      >
+                        {row.groupName}: {row.optionName}
+                        {row.priceDelta !== 0
+                          ? ` (${row.priceDelta > 0 ? "+" : ""}${formatTry(row.priceDelta)})`
+                          : ""}
+                      </p>
+                    ))}
                     {line.note ? (
                       <p className="mt-1 text-xs font-medium text-slate-400">Sipariş notu: {line.note}</p>
                     ) : null}

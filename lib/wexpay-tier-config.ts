@@ -24,7 +24,7 @@ export const WEXPAY_COMMITMENT_LABEL = "Aylık minimum işlem taahhüdü";
 export const WEXPAY_COMMITMENT_NOTE =
   "Bu tutar paket bedelinden ayrıdır; işlem komisyonu gelirinin aylık tabanıdır. Plan ücreti + max(gerçekleşen işlem ücretleri, bu taahhüt) şeklinde faturalanır.";
 
-export type WexPayCtaKind = "eligibility_check" | "book_meeting";
+export type WexPayCtaKind = "eligibility_check" | "book_meeting" | "start_checkout";
 
 /** null = contract / special / unlimited (never treat as 0). */
 export type NullableLimit = number | null;
@@ -85,7 +85,7 @@ export const WEXPAY_TIER_SEED_DEFAULTS: WexPayTierSeedDefault[] = [
     isActive: true,
     requiresManualReview: false,
     settlementDisplay: "Standart settlement · uygunluk ve sağlayıcı onayına bağlı",
-    ctaKind: "eligibility_check",
+    ctaKind: "start_checkout",
     highlighted: false,
     limits: {
       maxLocations: 1,
@@ -141,7 +141,7 @@ export const WEXPAY_TIER_SEED_DEFAULTS: WexPayTierSeedDefault[] = [
     isActive: true,
     requiresManualReview: false,
     settlementDisplay: "Standart / hızlı settlement · teklif bazlı",
-    ctaKind: "eligibility_check",
+    ctaKind: "start_checkout",
     highlighted: true,
     limits: {
       maxLocations: 5,
@@ -323,12 +323,17 @@ export function validateTierSeedDefault(tier: WexPayTierSeedDefault): string[] {
 }
 
 export function ctaLabelForKind(kind: WexPayCtaKind): string {
-  return kind === "book_meeting" ? "Görüşme Planla" : "Uygunluğunu Kontrol Et";
+  if (kind === "book_meeting") return "Görüşme Planla";
+  if (kind === "start_checkout") return "Paketi satın al";
+  return "Uygunluğunu Kontrol Et";
 }
 
 export function ctaHrefForTier(tierKey: WexPayTierKey, kind: WexPayCtaKind): string {
   if (kind === "book_meeting") {
     return `/randevu-ai?product=wexpay&plan=${tierKey}`;
+  }
+  if (kind === "start_checkout") {
+    return `/checkout?product=wexpay&plan=${tierKey}&interval=monthly`;
   }
   return `/demo-request?product=wexpay&plan=${tierKey}&intent=eligibility`;
 }

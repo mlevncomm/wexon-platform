@@ -7,15 +7,21 @@ import {
   closeTable,
   createBranch,
   createCategory,
+  createModifierGroup,
+  createModifierOption,
   createOrder,
   createPayment,
   createProduct,
   createRestaurant,
   createTable,
+  createTablesBulk,
   markReceiptPrinted,
   regeneratePaytrCheckout,
+  setProductModifierGroups,
   updateBranch,
   updateCategory,
+  updateModifierGroup,
+  updateModifierOption,
   updateOrderStatus,
   updatePayment,
   updateProduct,
@@ -30,14 +36,20 @@ import {
   parseBranchUpdate,
   parseCategoryCreate,
   parseCategoryUpdate,
+  parseModifierGroupCreate,
+  parseModifierGroupUpdate,
+  parseModifierOptionCreate,
+  parseModifierOptionUpdate,
   parseOrderCreate,
   parseOrderStatusUpdate,
   parsePaymentCreate,
   parsePaymentUpdate,
   parseProductCreate,
+  parseProductModifierLinks,
   parseProductUpdate,
   parseRestaurantCreate,
   parseRestaurantUpdate,
+  parseTableBulkCreate,
   parseTableClose,
   parseTableCreate,
   parseTableReceiptPrinted,
@@ -233,6 +245,21 @@ export async function createTableAction(formData: FormData) {
   redirect(redirectTo);
 }
 
+export async function createTablesBulkAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, TABLES_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseTableBulkCreate(formData);
+    context = await getManageContext();
+    await createTablesBulk(context, input);
+    revalidatePath(TABLES_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
 export async function updateTableAction(formData: FormData) {
   const redirectTo = readRedirect(formData, TABLES_PATH);
   let context: WexPayMutationContext | undefined;
@@ -334,6 +361,81 @@ export async function updateProductAction(formData: FormData) {
     const input = parseProductUpdate(formData);
     context = await getManageContext();
     await updateProduct(context, input);
+    revalidatePath(MENU_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function createModifierGroupAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, MENU_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseModifierGroupCreate(formData);
+    context = await getManageContext();
+    await createModifierGroup(context, input);
+    revalidatePath(MENU_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function updateModifierGroupAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, MENU_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseModifierGroupUpdate(formData);
+    context = await getManageContext();
+    await updateModifierGroup(context, input);
+    revalidatePath(MENU_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function createModifierOptionAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, MENU_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseModifierOptionCreate(formData);
+    context = await getManageContext();
+    await createModifierOption(context, input);
+    revalidatePath(MENU_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function updateModifierOptionAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, MENU_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseModifierOptionUpdate(formData);
+    context = await getManageContext();
+    await updateModifierOption(context, input);
+    revalidatePath(MENU_PATH);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(redirectTo, error, context);
+  }
+  redirect(redirectTo);
+}
+
+export async function setProductModifierGroupsAction(formData: FormData) {
+  const redirectTo = readRedirect(formData, MENU_PATH);
+  let context: WexPayMutationContext | undefined;
+  try {
+    const input = parseProductModifierLinks(formData);
+    context = await getManageContext();
+    await setProductModifierGroups(context, input);
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);

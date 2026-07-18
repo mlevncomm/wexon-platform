@@ -51,8 +51,26 @@ export async function listBranchCategories(organizationId: string, branchId: str
 export async function listBranchProducts(organizationId: string, branchId: string) {
   return prisma.menuProduct.findMany({
     where: { branchId, branch: { restaurant: { organizationId } } },
-    include: { category: { select: { id: true, name: true } } },
+    include: {
+      category: { select: { id: true, name: true } },
+      productModifierGroups: {
+        where: { isActive: true },
+        select: { groupId: true, sortOrder: true },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
     orderBy: [{ createdAt: "asc" }, { name: "asc" }],
+  });
+}
+
+export async function listBranchModifierGroups(organizationId: string, branchId: string) {
+  return prisma.menuModifierGroup.findMany({
+    where: { branchId, branch: { restaurant: { organizationId } } },
+    include: {
+      options: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+      _count: { select: { productLinks: true } },
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 }
 
@@ -697,6 +715,7 @@ export type OperationsSnapshot = {
     paid: number;
   };
   openTablesCount: number;
+  notifications: OperationsNotification[];
 };
 
 export async function getOperationsSnapshot(organizationId: string, branchId: string): Promise<OperationsSnapshot> {
@@ -724,6 +743,7 @@ export async function getOperationsSnapshot(organizationId: string, branchId: st
       paid: tables.filter((table) => table.status === "PAID").length,
     },
     openTablesCount: tables.filter((table) => table.remainingAmount > 0).length,
+    notifications: overview.notifications,
   };
 }
 

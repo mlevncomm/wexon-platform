@@ -145,16 +145,19 @@ export default async function DashboardProductsPage({ searchParams }: { searchPa
                   ) : (
                     <>
                       <Link
-                        href="/demo-request?product=wexpay&intent=eligibility"
+                        href="/checkout?product=wexpay&plan=essential&interval=monthly"
                         className={dashboardCtaClass("primary")}
                       >
-                        Uygunluğunu Kontrol Et
-                      </Link>
-                      <Link href="/on-basvuru?product=wexpay" className={dashboardCtaClass("secondary")}>
-                        WexPay&apos;e Başvur
+                        Paketi satın al
                       </Link>
                       <Link href="/packages" className={dashboardCtaClass("secondary")}>
                         Paketleri İncele
+                      </Link>
+                      <Link
+                        href="/demo-request?product=wexpay&intent=eligibility"
+                        className={dashboardCtaClass("secondary")}
+                      >
+                        Uygunluğunu Kontrol Et
                       </Link>
                     </>
                   )}

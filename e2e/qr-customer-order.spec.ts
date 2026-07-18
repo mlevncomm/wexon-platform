@@ -51,8 +51,16 @@ test.describe("QR customer order experience", () => {
 
     if (await page.getByTestId("qr-product-note").isVisible().catch(() => false)) {
       await page.getByTestId("qr-product-note").fill("Az acılı");
-      await expect(page.locator("[data-testid^='qr-option-']")).toHaveCount(0);
+      const option = page.locator("[data-testid^='qr-option-']").first();
+      if (await option.isVisible().catch(() => false)) {
+        await option.click();
+      }
       await page.getByTestId("qr-add-to-cart").click();
+      const modError = page.getByTestId("qr-modifier-error");
+      if (await modError.isVisible().catch(() => false)) {
+        await page.locator("[data-testid^='qr-option-']").first().click();
+        await page.getByTestId("qr-add-to-cart").click();
+      }
     } else {
       await firstQuickAdd.click();
     }

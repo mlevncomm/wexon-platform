@@ -5,6 +5,7 @@ import QrErrorState from "@/components/qr-order/QrErrorState";
 
 type PageProps = {
   params: Promise<{ qrCode: string }>;
+  searchParams: Promise<{ paytr?: string; paymentId?: string }>;
 };
 
 /**
@@ -12,10 +13,16 @@ type PageProps = {
  *
  * Unauthenticated diner view. Tenant + access are resolved from the table
  * qrCode through Wexon Core. Orders post to /api/wexpay/public/[qrCode]/order.
- * This page does not start PayTR checkout.
+ * PayTR return lands on ?paytr=success|failed&paymentId=… and is handled client-side.
  */
-export default async function PublicTablePage({ params }: PageProps) {
+export default async function PublicTablePage({ params, searchParams }: PageProps) {
   const { qrCode } = await params;
+  const query = await searchParams;
+  const paytr = query.paytr?.trim().toLowerCase();
+  const initialPaytrReturn =
+    paytr === "success" || paytr === "failed"
+      ? { result: paytr as "success" | "failed", paymentId: query.paymentId?.trim() || null }
+      : null;
 
   let resolution: Awaited<ReturnType<typeof resolvePublicTableByQr>> = null;
   try {
@@ -71,6 +78,7 @@ export default async function PublicTablePage({ params }: PageProps) {
         tableLabel: resolution.table.label,
         tableStatus: resolution.table.status,
       }}
+      initialPaytrReturn={initialPaytrReturn}
       categories={categories.map((category) => ({
         id: category.id,
         name: category.name,

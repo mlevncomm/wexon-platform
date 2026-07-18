@@ -132,6 +132,35 @@ export function parseTableCreate(formData: FormData) {
   };
 }
 
+export function parseTableBulkCreate(formData: FormData) {
+  const prefix = requiredString(formData, "prefix", "Masa öneki");
+  if (prefix.length > 40) {
+    throw new WexPayValidationError("Masa öneki en fazla 40 karakter olabilir.");
+  }
+  const countRaw = readString(formData, "count");
+  const count = Number(countRaw);
+  if (!countRaw || Number.isNaN(count) || !Number.isInteger(count) || count < 1 || count > 50) {
+    throw new WexPayValidationError("Toplu masa adedi 1-50 arasında olmalıdır.");
+  }
+  const seatsRaw = readString(formData, "seats");
+  const seats = seatsRaw ? Number(seatsRaw) : 4;
+  if (Number.isNaN(seats) || !Number.isInteger(seats) || seats <= 0 || seats > 100) {
+    throw new WexPayValidationError("Koltuk sayısı 1-100 arasında bir tam sayı olmalıdır.");
+  }
+  const startRaw = readString(formData, "startNumber");
+  const startNumber = startRaw ? Number(startRaw) : 1;
+  if (Number.isNaN(startNumber) || !Number.isInteger(startNumber) || startNumber < 1 || startNumber > 9999) {
+    throw new WexPayValidationError("Başlangıç numarası 1-9999 arasında olmalıdır.");
+  }
+  return {
+    branchId: requiredString(formData, "branchId", "Şube"),
+    prefix,
+    count,
+    seats,
+    startNumber,
+  };
+}
+
 export function parseTableUpdate(formData: FormData) {
   const label = requiredString(formData, "label", "Masa adı");
   const seatsRaw = readString(formData, "seats");
@@ -210,6 +239,101 @@ export function parseProductUpdate(formData: FormData) {
     inStock: optionalBoolean(formData, "inStock"),
     isPopular: optionalBoolean(formData, "isPopular"),
   };
+}
+
+function parseNonNegativeMoney(formData: FormData, key: string, label: string) {
+  const raw = readString(formData, key).replace(",", ".");
+  const value = Number(raw || "0");
+  if (Number.isNaN(value) || value < 0) {
+    throw new WexPayValidationError(`${label} sıfır veya pozitif olmalıdır.`);
+  }
+  return Math.round(value * 100) / 100;
+}
+
+function parseSelectionBounds(formData: FormData, selectionType: "SINGLE" | "MULTI") {
+  const minRaw = readString(formData, "minSelect");
+  const maxRaw = readString(formData, "maxSelect");
+  const minSelect = minRaw ? Number(minRaw) : 0;
+  let maxSelect = maxRaw ? Number(maxRaw) : selectionType === "SINGLE" ? 1 : 1;
+  if (Number.isNaN(minSelect) || !Number.isInteger(minSelect) || minSelect < 0 || minSelect > 20) {
+    throw new WexPayValidationError("Minimum seçim 0-20 arasında olmalıdır.");
+  }
+  if (Number.isNaN(maxSelect) || !Number.isInteger(maxSelect) || maxSelect < 1 || maxSelect > 20) {
+    throw new WexPayValidationError("Maksimum seçim 1-20 arasında olmalıdır.");
+  }
+  if (selectionType === "SINGLE") {
+    maxSelect = 1;
+  }
+  if (minSelect > maxSelect) {
+    throw new WexPayValidationError("Minimum seçim maksimumdan büyük olamaz.");
+  }
+  return { minSelect, maxSelect };
+}
+
+export function parseModifierGroupCreate(formData: FormData) {
+  const name = requiredString(formData, "name", "Grup adı");
+  const selectionRaw = readString(formData, "selectionType").toUpperCase();
+  const selectionType = selectionRaw === "MULTI" ? ("MULTI" as const) : ("SINGLE" as const);
+  const bounds = parseSelectionBounds(formData, selectionType);
+  return {
+    branchId: requiredString(formData, "branchId", "Şube"),
+    name,
+    selectionType,
+    ...bounds,
+  };
+}
+
+export function parseModifierGroupUpdate(formData: FormData) {
+  const name = requiredString(formData, "name", "Grup adı");
+  const selectionRaw = readString(formData, "selectionType").toUpperCase();
+  const selectionType = selectionRaw === "MULTI" ? ("MULTI" as const) : ("SINGLE" as const);
+  const bounds = parseSelectionBounds(formData, selectionType);
+  const sortRaw = readString(formData, "sortOrder");
+  const sortOrder = sortRaw ? Number(sortRaw) : undefined;
+  if (sortOrder !== undefined && (Number.isNaN(sortOrder) || !Number.isInteger(sortOrder))) {
+    throw new WexPayValidationError("Sıralama değeri tam sayı olmalıdır.");
+  }
+  return {
+    groupId: requiredString(formData, "groupId", "Modifier grubu"),
+    name,
+    selectionType,
+    ...bounds,
+    sortOrder,
+    isActive: optionalBoolean(formData, "isActive"),
+  };
+}
+
+export function parseModifierOptionCreate(formData: FormData) {
+  return {
+    groupId: requiredString(formData, "groupId", "Modifier grubu"),
+    name: requiredString(formData, "name", "Seçenek adı"),
+    priceDelta: parseNonNegativeMoney(formData, "priceDelta", "Fiyat farkı"),
+  };
+}
+
+export function parseModifierOptionUpdate(formData: FormData) {
+  const sortRaw = readString(formData, "sortOrder");
+  const sortOrder = sortRaw ? Number(sortRaw) : undefined;
+  if (sortOrder !== undefined && (Number.isNaN(sortOrder) || !Number.isInteger(sortOrder))) {
+    throw new WexPayValidationError("Sıralama değeri tam sayı olmalıdır.");
+  }
+  return {
+    optionId: requiredString(formData, "optionId", "Seçenek"),
+    name: requiredString(formData, "name", "Seçenek adı"),
+    priceDelta: parseNonNegativeMoney(formData, "priceDelta", "Fiyat farkı"),
+    sortOrder,
+    isActive: optionalBoolean(formData, "isActive"),
+  };
+}
+
+export function parseProductModifierLinks(formData: FormData) {
+  const productId = requiredString(formData, "productId", "Ürün");
+  const groupIds = formData
+    .getAll("groupIds")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return { productId, groupIds: [...new Set(groupIds)] };
 }
 
 // ---------------------------------------------------------------------------
