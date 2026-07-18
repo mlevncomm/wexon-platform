@@ -140,6 +140,27 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 2. `DATABASE_URL` (pooler) ve `DIRECT_URL` (direct) Vercel + staging env'de guncelle — secret commit etme
 3. `npm run production:preflight` ile baglanti ve migration dogrula
 
+**Supabase PostgREST / RLS (Prisma-only mimari):**
+
+- RLS + `anon`/`authenticated` REVOKE production'da uygulanmistir (`20260718180000_supabase_rls_and_revoke_anon`).
+- Uygulama `@supabase/supabase-js` kullanmaz; DB erisimi Next.js + Prisma (`postgres` / `postgres.[ref]`, `rolbypassrls`).
+- `wexon_app` su anda **NOLOGIN ve inert** (LOGIN yok; Vercel `DATABASE_URL` hala `postgres`). `wexon_app_all` policy'leri tenant izolasyonu **saglamaz** — yalniz server-side runtime role icin permissive grant scaffold'idir.
+- Vercel role switch (`DATABASE_URL` → `wexon_app`) **ayri, ileride** yapilacak bir gorevdir; migrate icin `DIRECT_URL` `postgres` kalsin.
+- Tenant JWT policy (Supabase Auth `auth.uid()`) **ertelenmistir** — session auth uygulama katmaninda; DB tenant RLS P2.
+- PostgREST risk mitigasyonu dogrulama: Security Advisor `rls_disabled_in_public` = 0; `has_table_privilege('anon', ...)` SELECT/INSERT = false.
+- Not: Data API UI toggle / anon key rotate Dashboard karari (uygulama anon key kullanmiyor).
+
+**Backup / PITR (musteri onboarding oncesi zorunlu):**
+
+- Free plan: otomatik daily backup ve PITR **yok**. Pro+ daily backup ayri operasyon karari; PITR add-on ayri.
+- Disaster-recovery backup **yalniz** su uc kosul tamamlaninca "tamamlandi" sayilir:
+  1. PostgreSQL **17+** `pg_dump -Fc` custom archive (`npm run db:backup`)
+  2. Izole/ephemeral PostgreSQL 17 restore testi PASS (`WEXON_ALLOW_LOCAL_DB_TESTS=1 npm run db:backup:test-restore -- <archive>`) → `RESTORE VERIFIED`
+  3. Kullanici offsite kopya → aksi halde `PENDING USER COPY` (offsite olmadan "Backup tamamlandi" denmez)
+- `npm run db:export:jsonl` = **NOT A DISASTER-RECOVERY BACKUP** (debug export).
+- Eski Node/JSONL `.backups/*.jsonl.gz` ciktilari: **RECOVERY BACKUP OLARAK DOĞRULANMADI**.
+- Dump/archive dosyasini git/Slack/chat'e koyma.
+
 **Local development:** `npm run prisma:migrate:dev` (`prisma migrate dev`). `prisma:migrate` geriye uyumluluk alias'idir.
 
 #### Vercel production deploy runbook
