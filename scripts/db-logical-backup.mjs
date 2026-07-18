@@ -1,247 +1,281 @@
 /**
- * Logical Postgres backup for Free-plan Supabase (no automated backups).
+ * Disaster-recovery logical backup via PostgreSQL 17+ pg_dump custom archive (-Fc).
  *
- * Usage:
- *   node scripts/db-logical-backup.mjs
- *   node scripts/db-logical-backup.mjs --schema-only
+ * Usage: npm run db:backup
  *
- * Requires DIRECT_URL (or DATABASE_URL) in env / .env.local.
- * Prefers local `pg_dump`, then Docker, then Node+pg JSONL fallback.
- * Writes under .backups/ (gitignored). Never prints connection secrets.
+ * Requires DIRECT_URL (preferred) or DATABASE_URL.
+ * Credentials are passed only via PG* env vars — never on argv.
+ * Fails closed if pg_dump major < 17 or older than the source server.
+ * Does NOT fall back to Node/JSONL.
  */
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync, statSync, createWriteStream } from "node:fs";
-import { resolve } from "node:path";
-import { pipeline } from "node:stream/promises";
-import { createGzip } from "node:zlib";
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  unlinkSync,
+  statSync,
+} from "node:fs";
+import { resolve, basename, join } from "node:path";
 import dotenv from "dotenv";
 import pg from "pg";
+import {
+  connectionUrlToLibpqEnv,
+  evaluatePgDumpVersionGate,
+  parsePostgresMajorVersion,
+  sanitizeBackupLog,
+  RECOVERY_STATUS,
+  EXPECTED_PUBLIC_TABLE_COUNT,
+  MIN_PG_DUMP_MAJOR,
+} from "./db-backup-lib.mjs";
 
 for (const file of [".env", ".env.local"]) {
   const path = resolve(process.cwd(), file);
   if (existsSync(path)) dotenv.config({ path, quiet: true });
 }
 
-const schemaOnly = process.argv.includes("--schema-only");
 const connection =
   process.env.DIRECT_URL?.trim() || process.env.DATABASE_URL?.trim() || "";
-
 if (!connection) {
-  console.error("[db-logical-backup] DIRECT_URL or DATABASE_URL is required.");
+  console.error("[db-backup] DIRECT_URL or DATABASE_URL is required.");
   process.exit(1);
 }
 
-let host = "(unknown)";
-let role = "(unknown)";
-try {
-  const u = new URL(connection);
-  host = u.hostname;
-  role = decodeURIComponent(u.username || "");
-} catch {
-  console.error("[db-logical-backup] Invalid connection URL.");
+const parsed = connectionUrlToLibpqEnv(connection);
+if (!parsed.ok) {
+  console.error(`[db-backup] ${parsed.reason}`);
   process.exit(1);
 }
 
 const outDir = resolve(process.cwd(), ".backups");
 mkdirSync(outDir, { recursive: true });
-
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const archiveName = `wexon-full-${stamp}.dump`;
+const archivePath = join(outDir, archiveName);
+const metaPath = join(outDir, `wexon-backup-meta-${stamp}.json`);
+const manifestPath = join(outDir, `wexon-rowcount-manifest-${stamp}.json`);
 
-function sanitize(text) {
-  return String(text || "").replace(/postgresql:\/\/[^\s]+/gi, "postgresql://***");
+function fail(message, partialPaths = []) {
+  console.error(`[db-backup] FAILED: ${sanitizeBackupLog(message)}`);
+  for (const p of partialPaths) {
+    try {
+      if (p && existsSync(p)) unlinkSync(p);
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+  process.exit(1);
 }
 
-function run(command, args, env) {
+function run(command, args, envExtra = {}) {
   return spawnSync(command, args, {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...parsed.env, ...envExtra },
+    windowsHide: true,
   });
 }
 
-async function nodeLogicalBackup() {
-  const client = new pg.Client({
-    connectionString: connection,
-    ssl: connection.includes("supabase.com") || connection.includes("supabase.co")
-      ? { rejectUnauthorized: false }
-      : undefined,
-  });
-  await client.connect();
+function resolvePgDumpCandidates() {
+  const fromEnv = process.env.WEXON_PG_DUMP?.trim();
+  const candidates = [
+    fromEnv,
+    "pg_dump",
+    "C:\\Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe",
+    "C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe",
+    "/usr/lib/postgresql/17/bin/pg_dump",
+    "/usr/pgsql-17/bin/pg_dump",
+  ].filter(Boolean);
+  return candidates;
+}
 
-  try {
-    const tablesRes = await client.query(`
-      SELECT c.relname AS table_name
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relkind = 'r'
-      ORDER BY c.relname
-    `);
-
-    const rlsRes = await client.query(`
-      SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled, c.relforcerowsecurity AS force_rls
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relkind = 'r'
-      ORDER BY c.relname
-    `);
-
-    const grantsRes = await client.query(`
-      SELECT grantee, COUNT(*)::int AS grant_rows, COUNT(DISTINCT table_name)::int AS tables
-      FROM information_schema.role_table_grants
-      WHERE table_schema = 'public' AND grantee IN ('anon','authenticated','service_role','postgres')
-      GROUP BY grantee
-      ORDER BY grantee
-    `);
-
-    const migrationsRes = await client.query(`
-      SELECT migration_name, finished_at IS NOT NULL AS finished
-      FROM public."_prisma_migrations"
-      ORDER BY finished_at NULLS LAST
-    `);
-
-    const meta = {
-      createdAt: new Date().toISOString(),
-      host,
-      role,
-      schemaOnly,
-      method: "node-pg-logical",
-      tables: tablesRes.rows.map((r) => r.table_name),
-      rls: rlsRes.rows,
-      grantsSummary: grantsRes.rows,
-      prismaMigrations: migrationsRes.rows,
-      note: "Node fallback dump. Prefer pg_dump when available. Store off-site; do not commit.",
-    };
-
-    const metaPath = resolve(outDir, `wexon-backup-meta-${stamp}.json`);
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2));
-
-    if (schemaOnly) {
-      const schemaPath = resolve(outDir, `wexon-schema-catalog-${stamp}.json`);
-      writeFileSync(
-        schemaPath,
-        JSON.stringify(
-          {
-            ...meta,
-            columns: (
-              await client.query(`
-                SELECT table_name, column_name, data_type, is_nullable
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                ORDER BY table_name, ordinal_position
-              `)
-            ).rows,
-          },
-          null,
-          2,
-        ),
-      );
-      console.log("[db-logical-backup] OK (schema catalog via node-pg)");
-      console.log(`[db-logical-backup] output=${schemaPath}`);
-      console.log(`[db-logical-backup] meta=${metaPath}`);
-      return { metaPath, outputFile: schemaPath, bytes: statSync(schemaPath).size, method: meta.method };
+function probePgDump() {
+  for (const bin of resolvePgDumpCandidates()) {
+    const ver = run(bin, ["--version"]);
+    if (ver.status === 0) {
+      return { bin, versionText: (ver.stdout || "").trim() };
     }
-
-    const dataPath = resolve(outDir, `wexon-full-${stamp}.jsonl.gz`);
-    const gzip = createGzip();
-    const out = createWriteStream(dataPath);
-    const done = pipeline(gzip, out);
-
-    for (const { table_name } of tablesRes.rows) {
-      const countRes = await client.query(
-        `SELECT COUNT(*)::int AS n FROM public."${table_name.replace(/"/g, '""')}"`,
-      );
-      const n = countRes.rows[0]?.n ?? 0;
-      gzip.write(
-        `${JSON.stringify({ type: "table", table: table_name, rowCount: n })}\n`,
-      );
-
-      // Stream in batches to avoid huge memory spikes.
-      const batchSize = 500;
-      let offset = 0;
-      while (offset < n) {
-        const rowsRes = await client.query(
-          `SELECT * FROM public."${table_name.replace(/"/g, '""')}" ORDER BY ctid LIMIT $1 OFFSET $2`,
-          [batchSize, offset],
-        );
-        for (const row of rowsRes.rows) {
-          gzip.write(`${JSON.stringify({ type: "row", table: table_name, row })}\n`);
-        }
-        offset += batchSize;
-      }
-    }
-
-    gzip.end();
-    await done;
-
-    console.log("[db-logical-backup] OK (full logical via node-pg)");
-    console.log(`[db-logical-backup] output=${dataPath} bytes=${statSync(dataPath).size}`);
-    console.log(`[db-logical-backup] meta=${metaPath}`);
-    return { metaPath, outputFile: dataPath, bytes: statSync(dataPath).size, method: meta.method };
-  } finally {
-    await client.end();
   }
-}
-
-const outFile = resolve(
-  outDir,
-  `wexon-${schemaOnly ? "schema" : "full"}-${stamp}.sql`,
-);
-
-console.log("[db-logical-backup] Starting backup");
-console.log(`[db-logical-backup] host=${host} role=${role} schemaOnly=${schemaOnly}`);
-
-const dumpArgsBase = ["--no-owner", "--no-acl", "--clean", "--if-exists"];
-if (schemaOnly) dumpArgsBase.push("--schema-only");
-
-let result = run("pg_dump", [`--dbname=${connection}`, ...dumpArgsBase, `--file=${outFile}`]);
-let method = "pg_dump";
-
-if (result.error || result.status !== 0) {
-  console.log("[db-logical-backup] Local pg_dump unavailable; trying Docker");
-  method = "docker:postgres:16-alpine";
-  result = run("docker", [
+  // Docker postgres:17-alpine fallback (no URL on argv — use env)
+  const dockerVer = run("docker", [
     "run",
     "--rm",
+    "-e",
+    "PGHOST",
+    "-e",
+    "PGPORT",
+    "-e",
+    "PGUSER",
+    "-e",
+    "PGPASSWORD",
+    "-e",
+    "PGDATABASE",
+    "-e",
+    "PGSSLMODE",
+    "postgres:17-alpine",
+    "pg_dump",
+    "--version",
+  ]);
+  if (dockerVer.status === 0) {
+    return {
+      bin: "docker",
+      dockerImage: "postgres:17-alpine",
+      versionText: (dockerVer.stdout || "").trim(),
+    };
+  }
+  return null;
+}
+
+const client = new pg.Client({
+  connectionString: connection,
+  ssl: parsed.ssl ? { rejectUnauthorized: false } : undefined,
+});
+
+let serverMajor = null;
+let serverVersionText = "";
+/** @type {Record<string, number>} */
+let rowCounts = {};
+
+try {
+  await client.connect();
+  const ver = await client.query("SHOW server_version");
+  serverVersionText = String(ver.rows[0]?.server_version || "");
+  serverMajor = parsePostgresMajorVersion(serverVersionText);
+
+  const tables = await client.query(`
+    SELECT c.relname AS table_name
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+    ORDER BY c.relname
+  `);
+  for (const { table_name } of tables.rows) {
+    const q = await client.query(
+      `SELECT COUNT(*)::int AS n FROM public."${String(table_name).replace(/"/g, '""')}"`,
+    );
+    rowCounts[table_name] = q.rows[0]?.n ?? 0;
+  }
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+} finally {
+  await client.end().catch(() => undefined);
+}
+
+const dumpProbe = probePgDump();
+if (!dumpProbe) {
+  fail(
+    `PostgreSQL ${MIN_PG_DUMP_MAJOR}+ pg_dump not found (local PATH / Program Files / docker postgres:17-alpine). No JSONL fallback.`,
+  );
+}
+
+const clientMajor = parsePostgresMajorVersion(dumpProbe.versionText);
+const gate = evaluatePgDumpVersionGate({ clientMajor, serverMajor });
+if (!gate.ok) {
+  fail(gate.reason);
+}
+
+console.log("[db-backup] Starting custom-format dump (-Fc)");
+console.log(
+  `[db-backup] host=${parsed.host} db=${parsed.database} role=${parsed.user.includes(".") ? parsed.user.split(".")[0] + ".[ref]" : parsed.user}`,
+);
+console.log(
+  `[db-backup] serverMajor=${serverMajor} pgDumpMajor=${clientMajor} archive=${archiveName}`,
+);
+
+let dumpResult;
+let method = "pg_dump";
+if (dumpProbe.bin === "docker") {
+  method = "docker:postgres:17-alpine";
+  // Mount .backups and write archive inside container
+  dumpResult = run("docker", [
+    "run",
+    "--rm",
+    "-e",
+    "PGHOST",
+    "-e",
+    "PGPORT",
+    "-e",
+    "PGUSER",
+    "-e",
+    "PGPASSWORD",
+    "-e",
+    "PGDATABASE",
+    "-e",
+    "PGSSLMODE",
     "-v",
     `${outDir}:/backups`,
-    "postgres:16-alpine",
+    "postgres:17-alpine",
     "pg_dump",
-    connection,
-    ...dumpArgsBase,
-    `--file=/backups/${outFile.split(/[/\\]/).pop()}`,
+    "-Fc",
+    "--no-owner",
+    "--no-acl",
+    "--schema=public",
+    `-f=/backups/${archiveName}`,
+  ]);
+} else {
+  dumpResult = run(dumpProbe.bin, [
+    "-Fc",
+    "--no-owner",
+    "--no-acl",
+    "--schema=public",
+    `--file=${archivePath}`,
   ]);
 }
 
-if (!result.error && result.status === 0 && existsSync(outFile) && statSync(outFile).size >= 32) {
-  const metaPath = resolve(outDir, `wexon-backup-meta-${stamp}.json`);
-  writeFileSync(
-    metaPath,
-    JSON.stringify(
-      {
-        createdAt: new Date().toISOString(),
-        host,
-        role,
-        schemaOnly,
-        method,
-        bytes: statSync(outFile).size,
-        outputFile: outFile,
-        note: "Store off-site. Do not commit. Free plan has no automated Supabase backups.",
-      },
-      null,
-      2,
-    ),
-  );
-  console.log("[db-logical-backup] OK");
-  console.log(`[db-logical-backup] method=${method} bytes=${statSync(outFile).size}`);
-  console.log(`[db-logical-backup] meta=${metaPath}`);
-  process.exit(0);
+if (dumpResult.status !== 0) {
+  fail(dumpResult.stderr || dumpResult.stdout || "pg_dump failed", [archivePath]);
 }
 
-console.log("[db-logical-backup] Falling back to Node+pg logical dump");
-try {
-  await nodeLogicalBackup();
-  process.exit(0);
-} catch (error) {
-  console.error("[db-logical-backup] FAILED:", sanitize(error instanceof Error ? error.message : error));
-  process.exit(1);
+if (!existsSync(archivePath) || statSync(archivePath).size < 32) {
+  fail("archive missing or empty after pg_dump", [archivePath]);
 }
+
+const archiveBytes = statSync(archivePath).size;
+const sha256 = createHash("sha256").update(readFileSync(archivePath)).digest("hex");
+
+writeFileSync(
+  manifestPath,
+  JSON.stringify(
+    {
+      createdAt: new Date().toISOString(),
+      tableCount: Object.keys(rowCounts).length,
+      expectedPublicTableCount: EXPECTED_PUBLIC_TABLE_COUNT,
+      rowCounts,
+    },
+    null,
+    2,
+  ),
+);
+
+const meta = {
+  createdAt: new Date().toISOString(),
+  method,
+  format: "custom",
+  schema: "public",
+  basename: archiveName,
+  bytes: archiveBytes,
+  sha256,
+  pgDumpMajor: clientMajor,
+  pgDumpVersion: dumpProbe.versionText,
+  serverMajor,
+  serverVersion: serverVersionText,
+  tableCount: Object.keys(rowCounts).length,
+  rowCountManifest: basename(manifestPath),
+  restoreVerified: false,
+  recoveryStatus: RECOVERY_STATUS.NOT_VERIFIED,
+  offsiteCopyStatus: RECOVERY_STATUS.PENDING_USER_COPY,
+  note: "Disaster-recovery candidate (public schema custom archive). Run npm run db:backup:test-restore -- <archive> before treating as RESTORE VERIFIED. Offsite copy is PENDING USER COPY.",
+};
+
+writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+
+console.log("[db-backup] OK");
+console.log(`[db-backup] basename=${archiveName}`);
+console.log(`[db-backup] bytes=${archiveBytes}`);
+console.log(`[db-backup] sha256=${sha256}`);
+console.log(`[db-backup] schema=public format=custom`);
+console.log(`[db-backup] recoveryStatus=${RECOVERY_STATUS.NOT_VERIFIED}`);
+console.log(`[db-backup] offsiteCopyStatus=${RECOVERY_STATUS.PENDING_USER_COPY}`);
+console.log(`[db-backup] Next: npm run db:backup:test-restore -- .backups/${archiveName}`);
