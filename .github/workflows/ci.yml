@@ -120,6 +120,9 @@ jobs:
     timeout-minutes: 45
     # Isolated Docker Postgres only — never repository secrets / Supabase / production.
     env:
+      # Placeholders for prisma generate only; isolated runner replaces with local e2e DB.
+      DIRECT_URL: postgresql://wexon_e2e:wexon_e2e_dev_only@127.0.0.1:5433/wexon_e2e
+      DATABASE_URL: postgresql://wexon_e2e:wexon_e2e_dev_only@127.0.0.1:5433/wexon_e2e
       WEXON_ALLOW_LOCAL_DB_TESTS: "1"
       NODE_ENV: test
       VERCEL_ENV: ""
