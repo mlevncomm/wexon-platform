@@ -21,21 +21,21 @@ describe("wexon public pricing commercial content", () => {
     });
   });
 
-  it("CTAs follow eligibility vs meeting split without checkout", () => {
+  it("CTAs use self-serve checkout for Essential/Growth and meeting for Scale/Suite", () => {
     const essential = WEXPAY_PRICING_FALLBACK.find((p) => p.id === "essential");
     const growth = WEXPAY_PRICING_FALLBACK.find((p) => p.id === "growth");
     const scale = WEXPAY_PRICING_FALLBACK.find((p) => p.id === "scale");
     const suite = WEXPAY_PRICING_FALLBACK.find((p) => p.id === "business_suite");
 
-    assert.equal(essential?.cta, "Uygunluğunu Kontrol Et");
-    assert.equal(growth?.cta, "Uygunluğunu Kontrol Et");
+    assert.equal(essential?.cta, "Paketi satın al");
+    assert.equal(growth?.cta, "Paketi satın al");
     assert.equal(scale?.cta, "Görüşme Planla");
     assert.equal(suite?.cta, "Görüşme Planla");
 
-    for (const plan of WEXPAY_PRICING_FALLBACK) {
-      assert.notEqual(plan.cta, "Abonelik başlat");
-      assert.ok(!plan.ctaHref?.includes("/checkout"), plan.ctaHref);
-    }
+    assert.ok(essential?.ctaHref?.includes("/checkout"), essential?.ctaHref);
+    assert.ok(growth?.ctaHref?.includes("/checkout"), growth?.ctaHref);
+    assert.ok(!scale?.ctaHref?.includes("/checkout"), scale?.ctaHref);
+    assert.ok(!suite?.ctaHref?.includes("/checkout"), suite?.ctaHref);
   });
 
   it("includes shared processing disclaimer on every plan model", () => {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { updateOrderStatusAction } from "@/lib/wexpay-actions";
 import type { KitchenOrderRow } from "@/lib/wexpay-read";
+import { useWexPayLiveRefresh } from "@/components/wexpay/useWexPayLiveRefresh";
 import {
   formatLira,
   OrderStatusBadge,
@@ -117,6 +118,14 @@ export default function WexPayKitchenBoard({
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(orders[0]?.id ?? null);
   const [mobileTab, setMobileTab] = useState<"NEW" | "PREPARING" | "SERVED">("NEW");
+  const lastUpdated = useWexPayLiveRefresh(true);
+
+  const effectiveSelectedId =
+    orders.length === 0
+      ? null
+      : selectedId && orders.some((order) => order.id === selectedId)
+        ? selectedId
+        : (orders[0]?.id ?? null);
 
   const grouped = useMemo(
     () =>
@@ -127,7 +136,7 @@ export default function WexPayKitchenBoard({
     [orders],
   );
 
-  const selected = orders.find((order) => order.id === selectedId) ?? null;
+  const selected = orders.find((order) => order.id === effectiveSelectedId) ?? null;
 
   useEffect(() => {
     function isTyping(target: EventTarget | null) {
@@ -138,8 +147,10 @@ export default function WexPayKitchenBoard({
 
     function onKeyDown(event: KeyboardEvent) {
       if (isTyping(event.target)) return;
-      if (!selectedId || (event.key !== "1" && event.key !== "2")) return;
-      const button = document.querySelector<HTMLButtonElement>(`[data-kitchen-advance="${selectedId}"]`);
+      if (!effectiveSelectedId || (event.key !== "1" && event.key !== "2")) return;
+      const button = document.querySelector<HTMLButtonElement>(
+        `[data-kitchen-advance="${effectiveSelectedId}"]`,
+      );
       if (!button || button.disabled) return;
       const next = button.getAttribute("data-kitchen-next");
       if (event.key === "1" && next !== "PREPARING") return;
@@ -150,7 +161,7 @@ export default function WexPayKitchenBoard({
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedId]);
+  }, [effectiveSelectedId]);
 
   return (
     <WexPayPage>
@@ -164,6 +175,11 @@ export default function WexPayKitchenBoard({
               Ticket seçin, ardından ekrandaki aksiyonu kullanın. Kısayol: seçili ticket için{" "}
               <kbd className="rounded bg-white/10 px-1.5 py-0.5">1</kbd> hazırlamaya,{" "}
               <kbd className="rounded bg-white/10 px-1.5 py-0.5">2</kbd> servise. İptal/kapatma kısayolda yok.
+            </p>
+            <p className="mt-2 text-[11px] font-semibold text-slate-500" data-testid="kitchen-live-refresh">
+              {lastUpdated
+                ? `Canlı yenileme · ${new Date(lastUpdated).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                : "Canlı yenileme aktif (8 sn)"}
             </p>
             {selected ? (
               <p className="mt-3 text-xs font-bold text-emerald-200">
@@ -215,7 +231,7 @@ export default function WexPayKitchenBoard({
                     order={order}
                     canManage={canManage}
                     redirectTo={redirectTo}
-                    selected={selectedId === order.id}
+                    selected={effectiveSelectedId === order.id}
                     onSelect={() => setSelectedId(order.id)}
                   />
                 ))
@@ -233,7 +249,7 @@ export default function WexPayKitchenBoard({
                 order={order}
                 canManage={canManage}
                 redirectTo={redirectTo}
-                selected={selectedId === order.id}
+                selected={effectiveSelectedId === order.id}
                 onSelect={() => setSelectedId(order.id)}
               />
             ))}

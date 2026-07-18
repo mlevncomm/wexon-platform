@@ -10,7 +10,7 @@ import {
 } from "@/components/wexpay/WexPayBusinessUI";
 import { WexPayCashierWorkspace } from "@/components/wexpay/WexPayCashierWorkspace";
 import { WexPayPaytrCheckoutNotice } from "@/components/wexpay/WexPayPaytrCheckoutNotice";
-import { createTableAction, updateTableAction } from "@/lib/wexpay-actions";
+import { createTableAction, createTablesBulkAction, updateTableAction } from "@/lib/wexpay-actions";
 import { buildPublicTableQrUrl } from "@/lib/wexpay-public-table-url";
 import {
   listBranchNotifications,
@@ -112,6 +112,24 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
               <DemoInput label="Masa adı" name="label" required placeholder="Örn. Masa 01" />
               <DemoInput label="Koltuk sayısı" name="seats" type="number" min={1} max={100} defaultValue={4} />
               <DemoPrimaryButton>Masa ekle</DemoPrimaryButton>
+            </form>
+          </WexPayPanel>
+
+          <WexPayPanel
+            title="Toplu masa oluştur"
+            description="Önek + numara ile birden fazla masa. Örn. Masa 01…Masa 12"
+          >
+            <form
+              action={createTablesBulkAction}
+              className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_100px_100px_120px_auto] xl:items-end"
+            >
+              <input type="hidden" name="branchId" value={activeBranch.id} />
+              <input type="hidden" name="redirectTo" value={redirectTo} />
+              <DemoInput label="Önek" name="prefix" required placeholder="Örn. Masa" defaultValue="Masa" />
+              <DemoInput label="Adet" name="count" type="number" min={1} max={50} defaultValue={10} required />
+              <DemoInput label="Başlangıç" name="startNumber" type="number" min={1} max={9999} defaultValue={1} />
+              <DemoInput label="Koltuk" name="seats" type="number" min={1} max={100} defaultValue={4} />
+              <DemoPrimaryButton>Toplu oluştur</DemoPrimaryButton>
             </form>
           </WexPayPanel>
 

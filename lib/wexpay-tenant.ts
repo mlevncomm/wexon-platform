@@ -244,6 +244,28 @@ export async function assertProductInOrg(db: TenantDb, organizationId: string, p
   return product;
 }
 
+export async function assertModifierGroupInOrg(db: TenantDb, organizationId: string, groupId: string) {
+  const group = await db.menuModifierGroup.findFirst({
+    where: { id: groupId, branch: { restaurant: { organizationId } } },
+    include: { branch: true },
+  });
+  if (!group) {
+    throw new WexPayAccessError("Modifier grubu bulunamadı.", "forbidden_ownership");
+  }
+  return group;
+}
+
+export async function assertModifierOptionInOrg(db: TenantDb, organizationId: string, optionId: string) {
+  const option = await db.menuModifierOption.findFirst({
+    where: { id: optionId, group: { branch: { restaurant: { organizationId } } } },
+    include: { group: true },
+  });
+  if (!option) {
+    throw new WexPayAccessError("Modifier seçeneği bulunamadı.", "forbidden_ownership");
+  }
+  return option;
+}
+
 export async function assertOrderInOrg(db: TenantDb, organizationId: string, orderId: string) {
   const order = await db.customerOrder.findFirst({
     where: { id: orderId, branch: { restaurant: { organizationId } } },

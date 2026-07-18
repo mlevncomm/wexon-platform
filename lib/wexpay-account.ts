@@ -53,7 +53,10 @@ export type TableBillWave = {
 
 const OPEN_ORDER_STATUSES = new Set<string>([OrderStatus.NEW, OrderStatus.PREPARING]);
 const CHARGEABLE_ORDER_STATUSES = new Set<string>([OrderStatus.NEW, OrderStatus.PREPARING, OrderStatus.SERVED]);
-const PAID_LIKE_PAYMENT_STATUSES = new Set<string>([PaymentStatus.PAID, PaymentStatus.PARTIAL]);
+/** Settled money only — shown as "paid" in cashier/guest UI. */
+const SETTLED_PAYMENT_STATUSES = new Set<string>([PaymentStatus.PAID, PaymentStatus.PARTIAL]);
+/** In-flight PayTR intents reserve available balance (not shown as settled). */
+const RESERVED_PAYMENT_STATUSES = new Set<string>([PaymentStatus.PENDING]);
 
 export function isOpenOrderStatus(status: string) {
   return OPEN_ORDER_STATUSES.has(String(status));
@@ -218,16 +221,22 @@ export function filterTableSessionRecords<T extends { createdAt: Date }>(
 /**
  * Honest table-close gate from account snapshot.
  * Payment-request notifications never affect remainingAmount / hasOpenOrders.
+ * PENDING PayTR intents block close even when remaining is fully reserved.
  */
-export function canCloseTableFromAccount(account: Pick<TableAccountSnapshot, "hasOpenOrders" | "remainingAmount">) {
-  return !account.hasOpenOrders && account.remainingAmount <= 0;
+export function canCloseTableFromAccount(
+  account: Pick<TableAccountSnapshot, "hasOpenOrders" | "remainingAmount" | "hasPendingPayments">,
+) {
+  return !account.hasOpenOrders && account.remainingAmount <= 0 && !account.hasPendingPayments;
 }
 
 export function closeTableBlockReason(
-  account: Pick<TableAccountSnapshot, "hasOpenOrders" | "remainingAmount">,
+  account: Pick<TableAccountSnapshot, "hasOpenOrders" | "remainingAmount" | "hasPendingPayments">,
 ): string | null {
   if (account.hasOpenOrders) {
     return "Aktif NEW/PREPARING sipariş varken masa kapatılamaz. Önce siparişleri servis edin veya iptal edin.";
+  }
+  if (account.hasPendingPayments) {
+    return "Bekleyen online ödeme varken masa kapatılamaz. Ödeme tamamlanana veya iptal edilene kadar bekleyin.";
   }
   if (account.remainingAmount > 0) {
     return "Kalan ödeme varken masa kapatılamaz. Önce adisyonu kapatın. Ödeme talebi tahsilat değildir.";
@@ -328,13 +337,19 @@ export function calculateTableAccount(input: {
   const totalAmount = roundMoney(chargeableOrders.reduce((sum, order) => sum + money(order.subtotal), 0));
   const paidAmount = roundMoney(
     input.payments
-      .filter((payment) => PAID_LIKE_PAYMENT_STATUSES.has(String(payment.status)))
+      .filter((payment) => SETTLED_PAYMENT_STATUSES.has(String(payment.status)))
       .reduce((sum, payment) => sum + money(payment.amount), 0),
   );
-  const remainingAmount = Math.max(0, roundMoney(totalAmount - paidAmount));
+  const reservedAmount = roundMoney(
+    input.payments
+      .filter((payment) => RESERVED_PAYMENT_STATUSES.has(String(payment.status)))
+      .reduce((sum, payment) => sum + money(payment.amount), 0),
+  );
+  /** Available for new cash/online settle — PENDING intents reserve balance. */
+  const remainingAmount = Math.max(0, roundMoney(totalAmount - paidAmount - reservedAmount));
   const hasOpenOrders = input.orders.some((order) => OPEN_ORDER_STATUSES.has(String(order.status)));
   const hasChargeableOrders = chargeableOrders.length > 0;
-  const hasPendingPayments = input.payments.some((payment) => payment.status === PaymentStatus.PENDING);
+  const hasPendingPayments = reservedAmount > 0;
   const receiptRequested =
     (input.receiptRequests?.some((request) => request.status === "REQUESTED") ?? false) ||
     input.payments.some((payment) => Boolean(payment.receiptRequested)) ||
@@ -343,7 +358,7 @@ export function calculateTableAccount(input: {
   let status: TableStatus = TableStatus.EMPTY;
   if (receiptRequested) {
     status = TableStatus.RECEIPT_REQUESTED;
-  } else if (hasPendingPayments && remainingAmount > 0) {
+  } else if (hasPendingPayments) {
     status = TableStatus.PAYMENT_PENDING;
   } else if (totalAmount > 0 && paidAmount > 0 && remainingAmount > 0) {
     status = TableStatus.PARTIALLY_PAID;

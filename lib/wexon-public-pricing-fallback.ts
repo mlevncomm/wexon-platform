@@ -60,7 +60,7 @@ export function formatTierPriceParts(input: {
   processingFeePct: number;
   commitment: number;
   settlementDisplay?: string | null;
-  ctaKind: "eligibility_check" | "book_meeting";
+  ctaKind: "eligibility_check" | "book_meeting" | "start_checkout";
   highlighted?: boolean;
   name: string;
   audience: string;

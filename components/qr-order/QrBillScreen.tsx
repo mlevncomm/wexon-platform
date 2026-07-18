@@ -4,17 +4,42 @@ import { useEffect, useId, useRef, useState } from "react";
 import QrModalShell from "@/components/qr-order/QrModalShell";
 import { qrCard, qrFrameNarrow, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
-import { orderStatusLabel, type QrBillSnapshot, type QrTableContext } from "@/lib/qr-order/types";
+import {
+  orderStatusLabel,
+  type QrBillSnapshot,
+  type QrPaytrReturn,
+  type QrTableContext,
+} from "@/lib/qr-order/types";
 
 const COOLDOWN_MS = 20_000;
 
+function newIdempotencyKey() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `qr-pay-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function initialPaytrBanner(paytrReturn: QrPaytrReturn | null | undefined): string | null {
+  if (!paytrReturn) return null;
+  if (paytrReturn.result === "failed") {
+    return "Online ödeme tamamlanamadı. İsterseniz tekrar deneyin veya restorandan ödeyin.";
+  }
+  if (!paytrReturn.paymentId) {
+    return "Ödeme dönüşü alındı. Onay için lütfen personelle teyit edin veya hesabı yenileyin.";
+  }
+  return "Ödeme sonucu kontrol ediliyor…";
+}
+
 export default function QrBillScreen({
   context,
+  paytrReturn = null,
   onBack,
   onCallWaiter,
   onTrackOrders,
 }: {
   context: QrTableContext;
+  paytrReturn?: QrPaytrReturn | null;
   onBack: () => void;
   onCallWaiter: () => void;
   onTrackOrders?: () => void;
@@ -25,11 +50,15 @@ export default function QrBillScreen({
   const [requestPending, setRequestPending] = useState(false);
   const [requestSuccess, setRequestSuccess] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [checkoutPending, setCheckoutPending] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [paytrBanner, setPaytrBanner] = useState<string | null>(() => initialPaytrBanner(paytrReturn));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [coolingDown, setCoolingDown] = useState(false);
   const titleId = useId();
   const inFlight = useRef(false);
   const cooldownTimer = useRef<number | null>(null);
+  const checkoutLock = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,13 +69,20 @@ export default function QrBillScreen({
         const payload = (await response.json().catch(() => ({}))) as {
           error?: string;
           bill?: QrBillSnapshot;
+          paymentAvailability?: QrBillSnapshot["paymentAvailability"];
         };
         if (cancelled) return;
         if (!response.ok) {
           setError(payload.error ?? "Hesap yüklenemedi.");
           return;
         }
-        setBill(payload.bill ?? null);
+        const nextBill = payload.bill
+          ? {
+              ...payload.bill,
+              paymentAvailability: payload.paymentAvailability ?? payload.bill.paymentAvailability,
+            }
+          : null;
+        setBill(nextBill);
         setError(null);
       } catch {
         if (!cancelled) setError("Bağlantı hatası. Lütfen tekrar deneyin.");
@@ -60,6 +96,63 @@ export default function QrBillScreen({
       if (cooldownTimer.current) window.clearTimeout(cooldownTimer.current);
     };
   }, [context.qrCode]);
+
+  useEffect(() => {
+    if (!paytrReturn || paytrReturn.result === "failed" || !paytrReturn.paymentId) return;
+    let cancelled = false;
+
+    (async () => {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        if (cancelled) return;
+        try {
+          const response = await fetch(
+            `/api/wexpay/public/${encodeURIComponent(context.qrCode)}/checkout?paymentId=${encodeURIComponent(paytrReturn.paymentId!)}`,
+          );
+          const payload = (await response.json().catch(() => ({}))) as {
+            status?: string;
+            error?: string;
+          };
+          if (!response.ok) {
+            setPaytrBanner(payload.error ?? "Ödeme durumu alınamadı.");
+            return;
+          }
+          const status = String(payload.status ?? "").toUpperCase();
+          if (status === "PAID" || status === "PARTIAL") {
+            setPaytrBanner("Ödemeniz onaylandı. Teşekkürler!");
+            const billResponse = await fetch(`/api/wexpay/public/${encodeURIComponent(context.qrCode)}/bill`);
+            const billPayload = (await billResponse.json().catch(() => ({}))) as {
+              bill?: QrBillSnapshot;
+              paymentAvailability?: QrBillSnapshot["paymentAvailability"];
+            };
+            if (billPayload.bill) {
+              setBill({
+                ...billPayload.bill,
+                paymentAvailability:
+                  billPayload.paymentAvailability ?? billPayload.bill.paymentAvailability,
+              });
+            }
+            return;
+          }
+          if (status === "FAILED") {
+            setPaytrBanner("Online ödeme başarısız. İsterseniz tekrar deneyin veya restorandan ödeyin.");
+            return;
+          }
+        } catch {
+          // keep polling briefly
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      }
+      if (!cancelled) {
+        setPaytrBanner(
+          "Ödeme henüz onaylanmadı. Kısa süre sonra hesabı yenileyin veya personelden teyit isteyin.",
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [context.qrCode, paytrReturn]);
 
   async function requestPayment() {
     if (requestPending || coolingDown) return;
@@ -94,6 +187,52 @@ export default function QrBillScreen({
     }
   }
 
+  async function startOnlineCheckout() {
+    if (checkoutLock.current || checkoutPending) return;
+    if (!bill || bill.empty || bill.remainingAmount <= 0) return;
+
+    checkoutLock.current = true;
+    setCheckoutPending(true);
+    setCheckoutError(null);
+    try {
+      const response = await fetch(
+        `/api/wexpay/public/${encodeURIComponent(context.qrCode)}/checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": newIdempotencyKey(),
+          },
+          body: JSON.stringify({}),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        reason?: string;
+        externalCheckoutUrl?: string;
+      };
+      if (!response.ok || !payload.externalCheckoutUrl) {
+        setCheckoutError(
+          payload.error ??
+            (payload.reason === "checkout_unavailable"
+              ? "Online ödeme şu anda aktif değil. Restorandan ödeyebilirsiniz."
+              : "Online ödeme başlatılamadı."),
+        );
+        return;
+      }
+      // Redirect (not iframe) — CSP frame-src blocks PayTR embeds.
+      window.location.assign(payload.externalCheckoutUrl);
+    } catch {
+      setCheckoutError("Bağlantı hatası. Lütfen tekrar deneyin.");
+    } finally {
+      setCheckoutPending(false);
+      checkoutLock.current = false;
+    }
+  }
+
+  const onlineCheckout = Boolean(bill?.paymentAvailability?.onlineCheckout);
+  const canPayOnline = onlineCheckout && Boolean(bill && !bill.empty && bill.remainingAmount > 0);
+
   return (
     <div className={`${qrFrameNarrow} min-h-[100dvh] pb-10 pt-4`}>
       <header className="flex items-center gap-3">
@@ -120,6 +259,16 @@ export default function QrBillScreen({
       {error ? (
         <p role="alert" className="mt-6 rounded-[24px] bg-rose-50 px-4 py-4 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
           {error}
+        </p>
+      ) : null}
+
+      {paytrBanner ? (
+        <p
+          role="status"
+          data-testid="qr-paytr-return-banner"
+          className="mt-5 rounded-[24px] bg-emerald-50 px-4 py-4 text-sm font-bold text-emerald-950 ring-1 ring-emerald-200"
+        >
+          {paytrBanner}
         </p>
       ) : null}
 
@@ -206,16 +355,45 @@ export default function QrBillScreen({
             </>
           )}
 
-          <div
-            className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5"
-            data-testid="qr-pay-in-restaurant"
-          >
-            <p className="text-sm font-black text-slate-950">Ödeme restoranda alınır</p>
-            <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-500">
-              Bu ekrandan kart veya online tahsilat başlatılmaz. Ödeme talebi yalnızca restorana
-              bildirim gönderir; tutar tahsil edilmiş sayılmaz.
-            </p>
-          </div>
+          {onlineCheckout ? (
+            <div
+              className="rounded-[28px] border border-emerald-200/80 bg-emerald-50/70 p-5"
+              data-testid="qr-pay-online"
+            >
+              <p className="text-sm font-black text-slate-950">Online ödeme</p>
+              <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-500">
+                Güvenli ödeme sayfasına yönlendirilirsiniz. Ödeme onayı PayTR bildirimiyle
+                tamamlanır; bu ekranda tutar tahsil edilmiş sayılmaz.
+              </p>
+              {canPayOnline ? (
+                <button
+                  type="button"
+                  data-testid="qr-online-checkout"
+                  onClick={() => void startOnlineCheckout()}
+                  disabled={checkoutPending}
+                  className={`${qrPrimaryCta} mt-4`}
+                >
+                  {checkoutPending ? "Yönlendiriliyor…" : "Kart ile online öde"}
+                </button>
+              ) : null}
+              {checkoutError ? (
+                <p role="alert" className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
+                  {checkoutError}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div
+              className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5"
+              data-testid="qr-pay-in-restaurant"
+            >
+              <p className="text-sm font-black text-slate-950">Ödeme restoranda alınır</p>
+              <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-500">
+                Bu ekrandan kart veya online tahsilat başlatılmaz. Ödeme talebi yalnızca restorana
+                bildirim gönderir; tutar tahsil edilmiş sayılmaz.
+              </p>
+            </div>
+          )}
 
           {requestSuccess ? (
             <div
@@ -235,7 +413,7 @@ export default function QrBillScreen({
               data-testid="qr-payment-request"
               onClick={() => setConfirmOpen(true)}
               disabled={requestPending || coolingDown}
-              className={qrPrimaryCta}
+              className={onlineCheckout ? qrGhostCta : qrPrimaryCta}
             >
               {coolingDown ? "Lütfen biraz bekleyin…" : "Ödeme talebi gönder"}
             </button>

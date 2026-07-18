@@ -40,7 +40,7 @@ describe("active table bill aggregation", () => {
     assert.equal(account.status, TableStatus.OCCUPIED);
   });
 
-  it("computes remaining from server-side paid payments only", () => {
+  it("reserves PENDING PayTR intents from remaining without treating them as settled", () => {
     const account = calculateTableAccount({
       orders: [
         order({ status: OrderStatus.SERVED, subtotal: 200 }),
@@ -54,10 +54,24 @@ describe("active table bill aggregation", () => {
 
     assert.equal(account.totalAmount, 240);
     assert.equal(account.paidAmount, 100);
-    assert.equal(account.remainingAmount, 140);
+    assert.equal(account.remainingAmount, 100);
+    assert.equal(account.hasPendingPayments, true);
+    assert.equal(account.status, TableStatus.PAYMENT_PENDING);
     assert.equal(account.hasOpenOrders, false);
     assert.equal(canCloseTableFromAccount(account), false);
-    assert.match(closeTableBlockReason(account) ?? "", /Kalan ödeme|adisyon/i);
+    assert.match(closeTableBlockReason(account) ?? "", /Bekleyen online|online ödeme/i);
+  });
+
+  it("blocks close when PENDING fully reserves the open balance", () => {
+    const account = calculateTableAccount({
+      orders: [order({ status: OrderStatus.SERVED, subtotal: 80 })],
+      payments: [{ status: PaymentStatus.PENDING, amount: 80 }],
+    });
+    assert.equal(account.paidAmount, 0);
+    assert.equal(account.remainingAmount, 0);
+    assert.equal(account.hasPendingPayments, true);
+    assert.equal(account.status, TableStatus.PAYMENT_PENDING);
+    assert.equal(canCloseTableFromAccount(account), false);
   });
 
   it("blocks close while NEW/PREPARING exist even if balance is zero", () => {

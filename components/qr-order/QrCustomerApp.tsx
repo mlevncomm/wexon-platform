@@ -20,6 +20,7 @@ import type {
   QrCartLine,
   QrCategory,
   QrOrderSuccess,
+  QrPaytrReturn,
   QrTableContext,
   QrView,
 } from "@/lib/qr-order/types";
@@ -34,11 +35,13 @@ function newIdempotencyKey() {
 export default function QrCustomerApp({
   context,
   categories,
+  initialPaytrReturn = null,
 }: {
   context: QrTableContext;
   categories: QrCategory[];
+  initialPaytrReturn?: QrPaytrReturn | null;
 }) {
-  const [view, setView] = useState<QrView>("landing");
+  const [view, setView] = useState<QrView>(initialPaytrReturn ? "bill" : "landing");
   const [lines, setLines] = useState<QrCartLine[]>([]);
   const [cartReady, setCartReady] = useState(false);
   const [generalNote, setGeneralNote] = useState("");
@@ -46,6 +49,7 @@ export default function QrCustomerApp({
   const [orderPending, setOrderPending] = useState(false);
   const [success, setSuccess] = useState<QrOrderSuccess | null>(null);
   const [waiterOpen, setWaiterOpen] = useState(false);
+  const [paytrReturn] = useState<QrPaytrReturn | null>(initialPaytrReturn);
   const submitLock = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
   const [, startCartTransition] = useTransition();
@@ -62,6 +66,15 @@ export default function QrCustomerApp({
     if (!cartReady) return;
     writeCartToStorage(context.qrCode, lines);
   }, [context.qrCode, lines, cartReady]);
+
+  useEffect(() => {
+    if (!paytrReturn) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("paytr") && !url.searchParams.has("paymentId")) return;
+    url.searchParams.delete("paytr");
+    url.searchParams.delete("paymentId");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [paytrReturn]);
 
   const menuEmpty = categories.every((category) => category.products.length === 0);
 
@@ -107,6 +120,9 @@ export default function QrCustomerApp({
             items: lines.map((line) => ({
               productId: line.product.id,
               quantity: line.quantity,
+              ...(line.modifierOptionIds?.length
+                ? { modifierOptionIds: line.modifierOptionIds }
+                : {}),
             })),
           }),
         },
@@ -237,6 +253,7 @@ export default function QrCustomerApp({
       {view === "bill" ? (
         <QrBillScreen
           context={context}
+          paytrReturn={paytrReturn}
           onBack={() => setView("landing")}
           onCallWaiter={() => setWaiterOpen(true)}
           onTrackOrders={() => setView("status")}

@@ -11,6 +11,7 @@ import { WexPayTablePaymentForm } from "@/components/wexpay/WexPayTablePaymentFo
 import WexPayOrderComposer from "@/components/wexpay/WexPayOrderComposer";
 import WexPayDetailDrawer from "@/components/wexpay/WexPayDetailDrawer";
 import WexPayTableQrDialog from "@/components/wexpay/WexPayTableQrDialog";
+import { useWexPayLiveRefresh } from "@/components/wexpay/useWexPayLiveRefresh";
 import {
   DemoPrimaryButton,
   formatLira,
@@ -78,6 +79,7 @@ export function WexPayCashierWorkspace({
   const [tableSearch, setTableSearch] = useState("");
   const [showComposer, setShowComposer] = useState(() => openComposerFromUrl);
   const [confirmClose, setConfirmClose] = useState(false);
+  const lastUpdated = useWexPayLiveRefresh(true);
   const [qrTableId, setQrTableId] = useState<string | null>(null);
 
   const filteredTables = useMemo(() => {
@@ -136,13 +138,20 @@ export function WexPayCashierWorkspace({
                 Masa seçin · adisyon · yeni sipariş · tahsilat · kapatma. Ödeme isteği tahsilat değildir.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="min-h-11 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20"
-            >
-              Yenile
-            </button>
+            <div className="flex flex-col items-stretch gap-2 sm:items-end">
+              <p className="text-[11px] font-semibold text-slate-400" data-testid="cashier-live-refresh">
+                {lastUpdated
+                  ? `Canlı · ${new Date(lastUpdated).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                  : "Canlı yenileme aktif (8 sn)"}
+              </p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="min-h-11 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20"
+              >
+                Yenile
+              </button>
+            </div>
           </div>
         </div>
 

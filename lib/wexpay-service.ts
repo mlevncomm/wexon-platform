@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { NotificationType, OrderStatus, PaymentStatus, type Prisma, ReceiptStatus, TableStatus } from ".prisma/client";
+import { NotificationType, OrderStatus, PaymentStatus, MenuModifierSelectionType, type Prisma, ReceiptStatus, TableStatus } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { assertEntitlementLimit, type CoreEntitlementMap } from "@/lib/wexon-core-access";
@@ -7,6 +7,8 @@ import { calculateTableAccount, closeTableBlockReason, filterTableSessionRecords
 import {
   assertBranchInOrg,
   assertCategoryInOrg,
+  assertModifierGroupInOrg,
+  assertModifierOptionInOrg,
   assertOrderInOrg,
   assertPaymentInOrg,
   assertProductInOrg,
@@ -387,6 +389,61 @@ export async function createTable(
   }
 }
 
+export async function createTablesBulk(
+  context: WexPayMutationContext,
+  input: { branchId: string; prefix: string; count: number; seats: number; startNumber: number },
+) {
+  assertManage(context);
+
+  try {
+    return await runInTransaction(async (tx) => {
+      await assertBranchInOrg(tx, context.organizationId, input.branchId);
+
+      const currentTables = await countOrgTables(tx, context.organizationId);
+      await enforceEntitlementLimit(tx, context, "table_limit", currentTables + input.count - 1);
+
+      const pad = Math.max(2, String(input.startNumber + input.count - 1).length);
+      const created = [];
+
+      for (let index = 0; index < input.count; index += 1) {
+        const number = input.startNumber + index;
+        const label = `${input.prefix} ${String(number).padStart(pad, "0")}`;
+        const table = await tx.restaurantTable.create({
+          data: {
+            branchId: input.branchId,
+            label,
+            seats: input.seats,
+            qrCode: generateTableQrCode(),
+            status: TableStatus.EMPTY,
+            isActive: true,
+          },
+        });
+        created.push(table);
+      }
+
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.table.bulk_created",
+        entityType: "RestaurantTable",
+        entityId: created[0]?.id ?? input.branchId,
+        metadata: {
+          branchId: input.branchId,
+          count: created.length,
+          prefix: input.prefix,
+          startNumber: input.startNumber,
+          seats: input.seats,
+        },
+      });
+
+      return created;
+    });
+  } catch (error) {
+    if (isUniqueConflict(error)) {
+      throw new WexPayValidationError("Bu şubede aynı isimde bir masa zaten var. Önek veya başlangıç numarasını değiştirin.");
+    }
+    throw error;
+  }
+}
+
 export async function updateTable(
   context: WexPayMutationContext,
   input: { tableId: string; label: string; seats?: number; isActive?: boolean },
@@ -729,6 +786,263 @@ export async function updateProduct(
     });
 
     return product;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Modifier groups / options / product links
+// ---------------------------------------------------------------------------
+
+export async function createModifierGroup(
+  context: WexPayMutationContext,
+  input: {
+    branchId: string;
+    name: string;
+    selectionType: "SINGLE" | "MULTI";
+    minSelect: number;
+    maxSelect: number;
+  },
+) {
+  assertManage(context);
+
+  try {
+    return await runInTransaction(async (tx) => {
+      await assertBranchInOrg(tx, context.organizationId, input.branchId);
+
+      const last = await tx.menuModifierGroup.findFirst({
+        where: { branchId: input.branchId },
+        orderBy: { sortOrder: "desc" },
+      });
+
+      const group = await tx.menuModifierGroup.create({
+        data: {
+          branchId: input.branchId,
+          name: input.name,
+          selectionType:
+            input.selectionType === "MULTI"
+              ? MenuModifierSelectionType.MULTI
+              : MenuModifierSelectionType.SINGLE,
+          minSelect: input.minSelect,
+          maxSelect: input.selectionType === "SINGLE" ? 1 : input.maxSelect,
+          sortOrder: (last?.sortOrder ?? -1) + 1,
+          isActive: true,
+        },
+      });
+
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.modifier_group.created",
+        entityType: "MenuModifierGroup",
+        entityId: group.id,
+        metadata: {
+          branchId: input.branchId,
+          name: group.name,
+          selectionType: group.selectionType,
+          minSelect: group.minSelect,
+          maxSelect: group.maxSelect,
+        },
+      });
+
+      return group;
+    });
+  } catch (error) {
+    if (isUniqueConflict(error)) {
+      throw new WexPayValidationError("Bu şubede aynı isimde bir modifier grubu zaten var.");
+    }
+    throw error;
+  }
+}
+
+export async function updateModifierGroup(
+  context: WexPayMutationContext,
+  input: {
+    groupId: string;
+    name: string;
+    selectionType: "SINGLE" | "MULTI";
+    minSelect: number;
+    maxSelect: number;
+    sortOrder?: number;
+    isActive?: boolean;
+  },
+) {
+  assertManage(context);
+
+  try {
+    return await runInTransaction(async (tx) => {
+      await assertModifierGroupInOrg(tx, context.organizationId, input.groupId);
+
+      const group = await tx.menuModifierGroup.update({
+        where: { id: input.groupId },
+        data: {
+          name: input.name,
+          selectionType:
+            input.selectionType === "MULTI"
+              ? MenuModifierSelectionType.MULTI
+              : MenuModifierSelectionType.SINGLE,
+          minSelect: input.minSelect,
+          maxSelect: input.selectionType === "SINGLE" ? 1 : input.maxSelect,
+          ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
+          ...(input.isActive === undefined ? {} : { isActive: input.isActive }),
+        },
+      });
+
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.modifier_group.updated",
+        entityType: "MenuModifierGroup",
+        entityId: group.id,
+        metadata: {
+          name: group.name,
+          selectionType: group.selectionType,
+          minSelect: group.minSelect,
+          maxSelect: group.maxSelect,
+          isActive: group.isActive,
+        },
+      });
+
+      return group;
+    });
+  } catch (error) {
+    if (isUniqueConflict(error)) {
+      throw new WexPayValidationError("Bu şubede aynı isimde bir modifier grubu zaten var.");
+    }
+    throw error;
+  }
+}
+
+export async function createModifierOption(
+  context: WexPayMutationContext,
+  input: { groupId: string; name: string; priceDelta: number },
+) {
+  assertManage(context);
+
+  try {
+    return await runInTransaction(async (tx) => {
+      await assertModifierGroupInOrg(tx, context.organizationId, input.groupId);
+
+      const last = await tx.menuModifierOption.findFirst({
+        where: { groupId: input.groupId },
+        orderBy: { sortOrder: "desc" },
+      });
+
+      const option = await tx.menuModifierOption.create({
+        data: {
+          groupId: input.groupId,
+          name: input.name,
+          priceDelta: input.priceDelta,
+          sortOrder: (last?.sortOrder ?? -1) + 1,
+          isActive: true,
+        },
+      });
+
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.modifier_option.created",
+        entityType: "MenuModifierOption",
+        entityId: option.id,
+        metadata: { groupId: input.groupId, name: option.name, priceDelta: Number(option.priceDelta) },
+      });
+
+      return option;
+    });
+  } catch (error) {
+    if (isUniqueConflict(error)) {
+      throw new WexPayValidationError("Bu grupta aynı isimde bir seçenek zaten var.");
+    }
+    throw error;
+  }
+}
+
+export async function updateModifierOption(
+  context: WexPayMutationContext,
+  input: {
+    optionId: string;
+    name: string;
+    priceDelta: number;
+    sortOrder?: number;
+    isActive?: boolean;
+  },
+) {
+  assertManage(context);
+
+  try {
+    return await runInTransaction(async (tx) => {
+      await assertModifierOptionInOrg(tx, context.organizationId, input.optionId);
+
+      const option = await tx.menuModifierOption.update({
+        where: { id: input.optionId },
+        data: {
+          name: input.name,
+          priceDelta: input.priceDelta,
+          ...(input.sortOrder === undefined ? {} : { sortOrder: input.sortOrder }),
+          ...(input.isActive === undefined ? {} : { isActive: input.isActive }),
+        },
+      });
+
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.modifier_option.updated",
+        entityType: "MenuModifierOption",
+        entityId: option.id,
+        metadata: {
+          name: option.name,
+          priceDelta: Number(option.priceDelta),
+          isActive: option.isActive,
+        },
+      });
+
+      return option;
+    });
+  } catch (error) {
+    if (isUniqueConflict(error)) {
+      throw new WexPayValidationError("Bu grupta aynı isimde bir seçenek zaten var.");
+    }
+    throw error;
+  }
+}
+
+export async function setProductModifierGroups(
+  context: WexPayMutationContext,
+  input: { productId: string; groupIds: string[] },
+) {
+  assertManage(context);
+
+  return runInTransaction(async (tx) => {
+    const product = await assertProductInOrg(tx, context.organizationId, input.productId);
+
+    if (input.groupIds.length > 0) {
+      const groups = await tx.menuModifierGroup.findMany({
+        where: {
+          id: { in: input.groupIds },
+          branchId: product.branchId,
+        },
+        select: { id: true },
+      });
+      if (groups.length !== input.groupIds.length) {
+        throw new WexPayValidationError("Seçilen modifier grupları bu şubeye ait değil.");
+      }
+    }
+
+    await tx.menuProductModifierGroup.deleteMany({
+      where: { productId: product.id, branchId: product.branchId },
+    });
+
+    if (input.groupIds.length > 0) {
+      await tx.menuProductModifierGroup.createMany({
+        data: input.groupIds.map((groupId, index) => ({
+          branchId: product.branchId,
+          productId: product.id,
+          groupId,
+          sortOrder: index,
+          isActive: true,
+        })),
+      });
+    }
+
+    await writeWexPayAudit(tx, context, {
+      action: "wexpay.product_modifier_links.updated",
+      entityType: "MenuProduct",
+      entityId: product.id,
+      metadata: { groupIds: input.groupIds },
+    });
+
+    return { productId: product.id, groupIds: input.groupIds };
   });
 }
 

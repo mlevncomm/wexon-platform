@@ -1,13 +1,14 @@
 import type { QrCartLine, QrProduct } from "@/lib/qr-order/types";
+import { catalogUnitPriceWithModifiers } from "@/lib/qr-order/modifiers";
 import { buildModifierCartIdentity } from "@/lib/wexpay-cart-identity";
 
 export function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-/** Catalog unit price only — no client-side modifier deltas. */
+/** Catalog unit price including selected modifier deltas (display only; server recalculates). */
 export function lineUnitPrice(line: QrCartLine) {
-  return roundMoney(line.product.price);
+  return catalogUnitPriceWithModifiers(line.product, line.modifierOptionIds ?? []);
 }
 
 export function lineTotal(line: QrCartLine) {

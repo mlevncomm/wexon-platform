@@ -31,7 +31,19 @@ describe("resolvePendingCheckoutReuseDecision", () => {
         hasPending: true,
         pendingAmount: 120,
         validatedAmount: 120,
-        remainingAmount: 250,
+        openBalance: 250,
+      }),
+      "reuse",
+    );
+  });
+
+  it("reuses when open balance is fully reserved by matching pending", () => {
+    assert.equal(
+      resolvePendingCheckoutReuseDecision({
+        hasPending: true,
+        pendingAmount: 120,
+        validatedAmount: 120,
+        openBalance: 120,
       }),
       "reuse",
     );
@@ -43,7 +55,7 @@ describe("resolvePendingCheckoutReuseDecision", () => {
         hasPending: true,
         pendingAmount: 120,
         validatedAmount: 0,
-        remainingAmount: 0,
+        openBalance: 0,
       }),
       "invalidate_stale",
     );
@@ -55,7 +67,7 @@ describe("resolvePendingCheckoutReuseDecision", () => {
         hasPending: true,
         pendingAmount: 120,
         validatedAmount: 90,
-        remainingAmount: 200,
+        openBalance: 200,
       }),
       "invalidate_stale",
     );
@@ -67,7 +79,7 @@ describe("resolvePendingCheckoutReuseDecision", () => {
         hasPending: false,
         pendingAmount: 0,
         validatedAmount: 120,
-        remainingAmount: 200,
+        openBalance: 200,
       }),
       "create_new",
     );

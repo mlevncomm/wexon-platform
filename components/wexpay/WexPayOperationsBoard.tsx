@@ -61,6 +61,7 @@ export default function WexPayOperationsBoard({
     ...overview.metrics,
     pendingPaytrCount: 0,
   });
+  const [notifications, setNotifications] = useState(overview.notifications);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -75,6 +76,7 @@ export default function WexPayOperationsBoard({
       if (!response.ok) return;
       const snapshot = (await response.json()) as OperationsSnapshot;
       setMetrics(snapshot.metrics);
+      setNotifications(snapshot.notifications ?? []);
       setLastUpdated(snapshot.generatedAt);
     } finally {
       setIsRefreshing(false);
@@ -84,7 +86,7 @@ export default function WexPayOperationsBoard({
   useEffect(() => {
     const interval = window.setInterval(() => {
       void refreshSnapshot();
-    }, 20_000);
+    }, 8_000);
     return () => window.clearInterval(interval);
   }, [refreshSnapshot]);
 
@@ -98,7 +100,7 @@ export default function WexPayOperationsBoard({
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [refreshSnapshot]);
 
-  const { notifications, topProducts, tables } = overview;
+  const { topProducts, tables } = overview;
   const receiptTables = tables.filter((table) => table.receiptRequested);
   const branchSearch = `organizationId=${encodeURIComponent(organizationId)}&branchId=${encodeURIComponent(branchId)}`;
   const kitchenHref = appNavigationUrl("/apps/wexpay/kitchen", branchSearch);

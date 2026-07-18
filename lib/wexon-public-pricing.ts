@@ -56,7 +56,7 @@ function buildFeatures(
 
 function ctaKindForTier(tierKey: WexPayTierKey, requiresManualReview: boolean): WexPayCtaKind {
   if (tierKey === "scale" || tierKey === "business_suite" || requiresManualReview) return "book_meeting";
-  return "eligibility_check";
+  return "start_checkout";
 }
 
 /** Public marketing pricing cards — DB is source of truth; fallback only if query fails / empty. */

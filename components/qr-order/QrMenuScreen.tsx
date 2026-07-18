@@ -7,7 +7,8 @@ import QrProductCard from "@/components/qr-order/QrProductCard";
 import QrProductDetailSheet from "@/components/qr-order/QrProductDetailSheet";
 import QrStatusBadge from "@/components/qr-order/QrStatusBadge";
 import { qrGhostCta, qrIconBtn, qrFrame } from "@/components/qr-order/qr-theme";
-import { cartItemCount, cartSubtotal } from "@/lib/qr-order/pricing";
+import { productHasModifiers, productRequiresModifierSelection } from "@/lib/qr-order/modifiers";
+import { buildCartLineKey, cartItemCount, cartSubtotal } from "@/lib/qr-order/pricing";
 import type { QrCartLine, QrCategory, QrProduct, QrTableContext } from "@/lib/qr-order/types";
 
 const POPULAR_ID = "__popular__";
@@ -66,12 +67,17 @@ export default function QrMenuScreen({
 
   function quickAdd(product: QrProduct) {
     if (quickAddLock.current) return;
+    if (productRequiresModifierSelection(product) || productHasModifiers(product)) {
+      setDetailProduct(product);
+      return;
+    }
     quickAddLock.current = true;
     onAddLine({
-      key: `${product.id}::`,
+      key: buildCartLineKey(product.id, "", []),
       product,
       quantity: 1,
       note: "",
+      modifierOptionIds: [],
     });
     window.setTimeout(() => {
       quickAddLock.current = false;

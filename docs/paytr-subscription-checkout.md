@@ -52,14 +52,17 @@ This is **not** WexPay restaurant/QR PayTR (`WEXPAY_PAYTR_ENABLE_API` + tenant `
 - Failed callback never activates subscription.
 - Secrets never in client bundle.
 
-## Go-live checklist
+## Go-live checklist (self-serve)
 
-1. Merchant id/key/salt in Vercel Production.
-2. PayTR panel Bildirim URL = callback above.
-3. Unit + callback tests PASS.
-4. `PAYTR_SUBSCRIPTION_ENABLE_API=true` + `PAYTR_IFRAME_ENABLE_API=true`.
-5. Start with `PAYTR_TEST_MODE=true`.
-6. Live charge only after exact approval: `PAYTR LIVE TEST CHARGE ONAY`.
+1. Merchant id/key/salt in Vercel Production (platform merchant; merchant id e.g. `725404`).
+2. PayTR panel Bildirim URL = `https://www.wexon.dev/api/billing/paytr/callback`.
+3. Unit + callback tests PASS (`npm run test:paytr`, `npm run test:unit:db`).
+4. Public/dashboard CTAs already point Essential/Growth to `/checkout`.
+5. Set `PAYTR_SUBSCRIPTION_ENABLE_API=true` + `PAYTR_IFRAME_ENABLE_API=true`.
+6. Start with `PAYTR_TEST_MODE=true` (and `PAYTR_DEBUG_ON=false` once live).
+7. Confirm one test-mode charge activates License + AppInstallation.
+8. Live charge only after explicit approval: `PAYTR LIVE TEST CHARGE ONAY`.
+9. Keep `PAYTR_RECURRING_ENABLE_API=false` (renewals are manual / admin until recurring module ships).
 
 ## Production status (safe-blocked record)
 
@@ -70,18 +73,17 @@ This is **not** WexPay restaurant/QR PayTR (`WEXPAY_PAYTR_ENABLE_API` + tenant `
 | Production status | READY |
 | Decision | **READY FOR PAYTR TEST MODE WITH BLOCKERS** |
 
-**PayTR subscription flags (Production):**
+**PayTR subscription flags (Production — verify in Vercel before flip):**
 
-- `PAYTR_SUBSCRIPTION_ENABLE_API=false`
-- `PAYTR_IFRAME_ENABLE_API=false`
-- `PAYTR_TEST_MODE=true`
-- `PAYTR_DEBUG_ON=true`
+- `PAYTR_SUBSCRIPTION_ENABLE_API` — must be enabled for self-serve
+- `PAYTR_IFRAME_ENABLE_API` — must be enabled with subscription flag
+- `PAYTR_TEST_MODE=true` until live sign-off
+- `PAYTR_DEBUG_ON=false` when live
 - `PAYTR_RECURRING_ENABLE_API=false`
 
 **Notes:**
 
-- Merchant credentials missing → production ödeme akışı safe fallback’te (no broken iframe; “yapılandırılıyor” + demo-request CTA).
-- `POST /api/billing/paytr/iframe-token`: unauth → `401`; auth + flags off → `403` disabled (no token).
-- Callback fail-closed when credentials missing / invalid hash (never plain `OK`, no subscription activate).
-- Canlı charge yok. `PAYTR LIVE TEST CHARGE ONAY` alınmadı.
-- Ready for PayTR **test mode** only after merchant credentials + PayTR panel Bildirim URL + flag enablement (still start with `PAYTR_TEST_MODE=true`).
+- Code path activates subscription only on verified callback (browser success/fail pages are informational).
+- Mock checkout remains blocked in production.
+- Scale / Business Suite CTAs stay meeting-based (`/randevu-ai`).
+- Canlı charge yok without explicit operator approval after test-mode success.

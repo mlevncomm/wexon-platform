@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { cartStorageKey } from "@/lib/qr-order/format";
 import {
+  catalogUnitPriceWithModifiers,
+  productRequiresModifierSelection,
+  toggleModifierOption,
+  validateModifierSelections,
+} from "@/lib/qr-order/modifiers";
+import {
   buildCartLineKey,
   buildOrderNote,
   cartItemCount,
@@ -18,15 +24,38 @@ const product: QrProduct = {
   currency: "TRY",
 };
 
+const mercimek: QrProduct = {
+  id: "soup",
+  name: "Mercimek",
+  description: null,
+  price: 80,
+  currency: "TRY",
+  modifierGroups: [
+    {
+      id: "g1",
+      name: "Boyut",
+      selectionType: "SINGLE",
+      minSelect: 1,
+      maxSelect: 1,
+      sortOrder: 0,
+      options: [
+        { id: "opt-s", name: "Küçük", priceDelta: 0, sortOrder: 0 },
+        { id: "opt-l", name: "Büyük", priceDelta: 25, sortOrder: 1 },
+      ],
+    },
+  ],
+};
+
 describe("qr-order pricing", () => {
-  it("computes catalog line totals without modifier deltas", () => {
+  it("computes catalog line totals with modifier deltas for display", () => {
     const line: QrCartLine = {
       key: "k1",
-      product,
+      product: mercimek,
       quantity: 2,
       note: "",
+      modifierOptionIds: ["opt-l"],
     };
-    assert.equal(lineTotal(line), 200);
+    assert.equal(lineTotal(line), 210);
   });
 
   it("sums cart subtotal and item count", () => {
@@ -36,12 +65,14 @@ describe("qr-order pricing", () => {
         product,
         quantity: 1,
         note: "",
+        modifierOptionIds: [],
       },
       {
         key: "b",
         product: { ...product, id: "p2", price: 50 },
         quantity: 3,
         note: "",
+        modifierOptionIds: [],
       },
     ];
     assert.equal(cartSubtotal(lines), 250);
@@ -55,13 +86,13 @@ describe("qr-order pricing", () => {
         product,
         quantity: 1,
         note: "Soğansız",
+        modifierOptionIds: [],
       },
     ];
     const note = buildOrderNote(lines, "Hızlı servis");
     assert.match(note ?? "", /Classic Burger/);
     assert.match(note ?? "", /Soğansız/);
     assert.match(note ?? "", /Hızlı servis/);
-    assert.doesNotMatch(note ?? "", /Büyük|Ekstra peynir|priceDelta/i);
   });
 
   it("builds distinct cart keys for note differences", () => {
@@ -74,6 +105,27 @@ describe("qr-order pricing", () => {
     const a = buildCartLineKey("p1", "", ["opt-b", "opt-a"]);
     const b = buildCartLineKey("p1", "", ["opt-a", "opt-b"]);
     assert.equal(a, b);
+  });
+});
+
+describe("qr-order modifiers", () => {
+  it("requires selection when minSelect > 0", () => {
+    assert.equal(productRequiresModifierSelection(mercimek), true);
+    assert.equal(productRequiresModifierSelection(product), false);
+  });
+
+  it("validates required single selection", () => {
+    assert.match(validateModifierSelections(mercimek, []) ?? "", /en az 1/);
+    assert.equal(validateModifierSelections(mercimek, ["opt-l"]), null);
+    assert.equal(catalogUnitPriceWithModifiers(mercimek, ["opt-l"]), 105);
+  });
+
+  it("toggles single-select options", () => {
+    const group = mercimek.modifierGroups![0];
+    const afterFirst = toggleModifierOption(group, [], "opt-s");
+    assert.deepEqual(afterFirst, ["opt-s"]);
+    const afterSecond = toggleModifierOption(group, afterFirst, "opt-l");
+    assert.deepEqual(afterSecond, ["opt-l"]);
   });
 });
 
