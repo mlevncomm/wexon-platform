@@ -113,3 +113,44 @@ jobs:
 
       - name: Run DB-backed unit tests
         run: npm run test:unit:db
+
+  wexpay-isolated-e2e:
+    name: WexPay isolated E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Isolated Docker Postgres only — never repository secrets / Supabase / production.
+    env:
+      WEXON_ALLOW_LOCAL_DB_TESTS: "1"
+      NODE_ENV: test
+      VERCEL_ENV: ""
+      ADMIN_EMAILS: admin@wexon.test
+      ADMIN_LOGIN_PASSWORD: ci-admin-password
+      ADMIN_SESSION_SECRET: ci-admin-session-secret
+      CUSTOMER_SESSION_SECRET: ci-customer-session-secret
+      API_KEY_HASH_SECRET: ci-api-key-hash-secret
+      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+      WEXPAY_PAYTR_ENABLE_API: "false"
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
+      SMOKE_PORT: "3100"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Run isolated WexPay E2E (twice)
+        run: npm run test:e2e:wexpay-isolated

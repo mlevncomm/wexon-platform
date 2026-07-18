@@ -22,7 +22,9 @@ import {
 } from "@/lib/wexpay-tenant";
 import { type OrderItemInput, WexPayValidationError } from "@/lib/wexpay-validation";
 import { priceOrderLine, sumPricedLinesSubtotal } from "@/lib/wexpay-order-pricing";
+import { lockWexPayOrgTableLimit, lockWexPayTableAccount } from "@/lib/wexpay-locks";
 import { resolveWexPayPaymentProvider, type WexPayPaymentProviderKey } from "@/lib/wexpay-payment-provider";
+import { generatePaytrMerchantOid } from "@/lib/wexpay-paytr-adapter";
 
 /**
  * Pure tenant-aware mutation service for the real WexPay operator app. Every
@@ -356,6 +358,8 @@ export async function createTable(
 
   try {
     return await runInTransaction(async (tx) => {
+      // Lock order: org table-limit only (see lib/wexpay-locks.ts).
+      await lockWexPayOrgTableLimit(tx, context.organizationId);
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
       const currentTables = await countOrgTables(tx, context.organizationId);
@@ -397,6 +401,8 @@ export async function createTablesBulk(
 
   try {
     return await runInTransaction(async (tx) => {
+      // Lock order: org table-limit only (shared with createTable — see lib/wexpay-locks.ts).
+      await lockWexPayOrgTableLimit(tx, context.organizationId);
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
       const currentTables = await countOrgTables(tx, context.organizationId);
@@ -485,6 +491,8 @@ export async function closeTable(context: WexPayMutationContext, input: { tableI
 
   return runInTransaction(async (tx) => {
     const existing = await assertTableInOrg(tx, context.organizationId, input.tableId);
+    // Lock order: table account only (see lib/wexpay-locks.ts).
+    await lockWexPayTableAccount(tx, existing.id);
     const account = await getTableAccountSnapshot(tx, existing.id);
     const blockReason = closeTableBlockReason(account);
     if (blockReason) {
@@ -1331,13 +1339,22 @@ export async function createPayment(
 ): Promise<CreatePaymentResult> {
   assertManage(context);
 
-  return runInTransaction(async (tx) => {
+  const { key: providerKey, adapter } = await resolveWexPayPaymentProvider(input.provider);
+  const receiptRequested = Boolean(input.receiptRequested);
+  const wantsExternalCheckout = providerKey === "paytr";
+
+  // Phase 1 — lock table, validate remaining, persist payment (PENDING for external PSP).
+  // External PayTR HTTP must NOT run inside this transaction.
+  const reserved = await runInTransaction(async (tx) => {
     await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
     const table = await tx.restaurantTable.findFirst({
       where: { id: input.tableId, branchId: input.branchId },
     });
     if (!table) throw new WexPayValidationError("Masa bu şubeye ait değil.");
+
+    // Lock order: table account only (see lib/wexpay-locks.ts).
+    await lockWexPayTableAccount(tx, table.id);
 
     if (input.orderId) {
       const order = await tx.customerOrder.findFirst({
@@ -1349,7 +1366,10 @@ export async function createPayment(
     const isPaidLike = input.status === PaymentStatus.PAID || input.status === PaymentStatus.PARTIAL;
     const currentAccount = await getTableAccountSnapshot(tx, table.id);
     const shouldValidateAgainstAccount =
-      input.status === PaymentStatus.PAID || input.status === PaymentStatus.PARTIAL || input.status === PaymentStatus.PENDING;
+      input.status === PaymentStatus.PAID ||
+      input.status === PaymentStatus.PARTIAL ||
+      input.status === PaymentStatus.PENDING ||
+      wantsExternalCheckout;
     if (shouldValidateAgainstAccount && currentAccount.totalAmount <= 0) {
       throw new WexPayValidationError("Ödeme kaydı için açık adisyon bulunmuyor.");
     }
@@ -1357,8 +1377,73 @@ export async function createPayment(
       throw new WexPayValidationError("Ödeme tutarı kalan adisyondan büyük olamaz.");
     }
 
-    const receiptRequested = Boolean(input.receiptRequested);
-    const { key: providerKey, adapter } = await resolveWexPayPaymentProvider(input.provider);
+    if (wantsExternalCheckout) {
+      const providerRef = generatePaytrMerchantOid();
+      const payment = await tx.payment.create({
+        data: {
+          branchId: input.branchId,
+          tableId: table.id,
+          orderId: input.orderId,
+          amount: input.amount,
+          currency: "TRY",
+          status: PaymentStatus.PENDING,
+          provider: providerKey,
+          providerRef,
+          paidAt: null,
+          receiptRequested,
+        },
+        include: { table: true, order: true },
+      });
+
+      if (receiptRequested) {
+        await recordReceiptRequest(tx, {
+          tableId: table.id,
+          branchId: input.branchId,
+          tableLabel: table.label,
+          orderId: input.orderId,
+          paymentId: payment.id,
+          note: "Operasyon panelinden ödeme sırasında fiş talep edildi.",
+        });
+      }
+
+      const account = await syncTableStatus(tx, table.id);
+
+      await tx.businessNotification.create({
+        data: {
+          branchId: input.branchId,
+          orderId: input.orderId,
+          paymentId: payment.id,
+          type: NotificationType.PAYMENT_RECEIVED,
+          title: "Sanal POS ödemesi bekleniyor",
+          message: `${table.label} için PayTR sanal POS ödemesi başlatıldı (${input.amount} TRY).`,
+        },
+      });
+
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.payment.created",
+        entityType: "Payment",
+        entityId: payment.id,
+        metadata: {
+          branchId: input.branchId,
+          tableId: table.id,
+          orderId: input.orderId,
+          amount: input.amount,
+          status: payment.status,
+          provider: providerKey,
+          providerRef,
+          requiresExternalCheckout: true,
+          remainingAmount: account.remainingAmount,
+          externalCheckoutStarted: false,
+        },
+      });
+
+      return {
+        kind: "external" as const,
+        payment,
+        providerRef,
+        tableLabel: table.label,
+      };
+    }
 
     const intent = await adapter.createPaymentIntent({
       organizationId: context.organizationId,
@@ -1370,8 +1455,8 @@ export async function createPayment(
       clientIp: context.ipAddress,
     });
 
-    if (intent.requiresExternalCheckout && !intent.externalCheckoutUrl) {
-      throw new WexPayValidationError("PayTR ödeme oturumu oluşturulamadı. Lütfen tekrar deneyin.");
+    if (intent.requiresExternalCheckout) {
+      throw new WexPayValidationError("Bu sağlayıcı için harici checkout desteklenmiyor.");
     }
 
     const payment = await tx.payment.create({
@@ -1381,10 +1466,10 @@ export async function createPayment(
         orderId: input.orderId,
         amount: input.amount,
         currency: "TRY",
-        status: intent.requiresExternalCheckout ? PaymentStatus.PENDING : input.status,
+        status: input.status,
         provider: providerKey,
         providerRef: intent.providerRef,
-        paidAt: isPaidLike && !intent.requiresExternalCheckout ? new Date() : null,
+        paidAt: isPaidLike ? new Date() : null,
         receiptRequested,
       },
       include: { table: true, order: true },
@@ -1423,10 +1508,8 @@ export async function createPayment(
         orderId: input.orderId,
         paymentId: payment.id,
         type: NotificationType.PAYMENT_RECEIVED,
-        title: intent.requiresExternalCheckout ? "Sanal POS ödemesi bekleniyor" : "Ödeme kaydedildi",
-        message: intent.requiresExternalCheckout
-          ? `${table.label} için PayTR sanal POS ödemesi başlatıldı (${input.amount} TRY).`
-          : `${table.label} için ${input.amount} tutarında ödeme kaydı oluşturuldu.`,
+        title: "Ödeme kaydedildi",
+        message: `${table.label} için ${input.amount} tutarında ödeme kaydı oluşturuldu.`,
       },
     });
 
@@ -1442,14 +1525,62 @@ export async function createPayment(
         status: payment.status,
         provider: providerKey,
         providerRef: intent.providerRef,
-        requiresExternalCheckout: intent.requiresExternalCheckout,
+        requiresExternalCheckout: false,
         remainingAmount: account.remainingAmount,
-        externalCheckoutStarted: Boolean(intent.externalCheckoutUrl),
+        externalCheckoutStarted: false,
       },
     });
 
-    return { payment, externalCheckoutUrl: intent.externalCheckoutUrl };
+    return { kind: "settled" as const, payment, externalCheckoutUrl: null as string | null };
   });
+
+  if (reserved.kind === "settled") {
+    return { payment: reserved.payment, externalCheckoutUrl: reserved.externalCheckoutUrl };
+  }
+
+  // Phase 2 — provider intent outside the lock/transaction.
+  try {
+    const intent = await adapter.createPaymentIntent({
+      organizationId: context.organizationId,
+      branchId: input.branchId,
+      tableId: input.tableId,
+      orderId: input.orderId,
+      amount: input.amount,
+      currency: "TRY",
+      clientIp: context.ipAddress,
+      existingProviderRef: reserved.providerRef,
+    });
+
+    if (!intent.externalCheckoutUrl) {
+      throw new WexPayValidationError("PayTR ödeme oturumu oluşturulamadı. Lütfen tekrar deneyin.");
+    }
+
+    return { payment: reserved.payment, externalCheckoutUrl: intent.externalCheckoutUrl };
+  } catch (error) {
+    await runInTransaction(async (tx) => {
+      await lockWexPayTableAccount(tx, input.tableId);
+      await tx.payment.updateMany({
+        where: {
+          id: reserved.payment.id,
+          status: PaymentStatus.PENDING,
+          provider: providerKey,
+        },
+        data: { status: PaymentStatus.FAILED },
+      });
+      await syncTableStatus(tx, input.tableId);
+      await writeWexPayAudit(tx, context, {
+        action: "wexpay.payment.external_intent_failed",
+        entityType: "Payment",
+        entityId: reserved.payment.id,
+        metadata: {
+          provider: providerKey,
+          providerRef: reserved.providerRef,
+          tableId: input.tableId,
+        },
+      });
+    });
+    throw error;
+  }
 }
 
 export async function settlePaymentFromProviderWebhook(
@@ -1469,28 +1600,46 @@ export async function settlePaymentFromProviderWebhook(
     throw new WexPayValidationError("Ödeme sağlayıcı referansı eşleşmiyor.");
   }
 
+  // Lock order: table account only (see lib/wexpay-locks.ts). Re-read after lock.
+  await lockWexPayTableAccount(tx, payment.tableId);
+  const lockedPayment = await assertPaymentInOrg(tx, input.organizationId, input.paymentId);
+
   const terminalStatuses: PaymentStatus[] = [PaymentStatus.PAID, PaymentStatus.FAILED, PaymentStatus.REFUNDED];
-  if (terminalStatuses.includes(payment.status)) {
-    return { payment, skipped: true as const };
+  if (terminalStatuses.includes(lockedPayment.status)) {
+    return { payment: lockedPayment, skipped: true as const };
+  }
+
+  if (input.status === PaymentStatus.PAID || input.status === PaymentStatus.PARTIAL) {
+    const account = await getTableAccountSnapshot(tx, lockedPayment.tableId);
+    const amount = Number(lockedPayment.amount);
+    const alreadySettled =
+      lockedPayment.status === PaymentStatus.PAID || lockedPayment.status === PaymentStatus.PARTIAL;
+    const nextPaid = account.paidAmount + (alreadySettled ? 0 : amount);
+    if (account.totalAmount <= 0) {
+      throw new WexPayValidationError("Ödeme kaydı için açık adisyon bulunmuyor.");
+    }
+    if (nextPaid > account.totalAmount + 0.001) {
+      throw new WexPayValidationError("Ödeme tutarı kalan adisyondan büyük olamaz.");
+    }
   }
 
   const isPaidLike = input.status === PaymentStatus.PAID || input.status === PaymentStatus.PARTIAL;
   const updated = await tx.payment.update({
-    where: { id: payment.id },
+    where: { id: lockedPayment.id },
     data: {
       status: input.status,
       paidAt: isPaidLike ? new Date() : null,
     },
   });
 
-  await syncTableStatus(tx, payment.tableId);
+  await syncTableStatus(tx, lockedPayment.tableId);
 
   await writeAuditLog(
     {
       action: "wexpay.payment.provider_settled",
       organizationId: input.organizationId,
       entityType: "Payment",
-      entityId: payment.id,
+      entityId: lockedPayment.id,
       ipAddress: input.ipAddress ?? null,
       source: "wexpay_webhook",
       metadata: {
@@ -1564,9 +1713,13 @@ export async function updatePayment(
   return runInTransaction(async (tx) => {
     const existing = await assertPaymentInOrg(tx, context.organizationId, input.paymentId);
 
+    // Lock order: table account only (see lib/wexpay-locks.ts).
+    await lockWexPayTableAccount(tx, existing.tableId);
+    const locked = await assertPaymentInOrg(tx, context.organizationId, input.paymentId);
+
     if (
-      existing.provider === "paytr" &&
-      existing.status === PaymentStatus.PENDING &&
+      locked.provider === "paytr" &&
+      locked.status === PaymentStatus.PENDING &&
       input.status !== PaymentStatus.FAILED
     ) {
       throw new WexPayValidationError(
@@ -1575,34 +1728,34 @@ export async function updatePayment(
     }
 
     const isPaidLike = input.status === PaymentStatus.PAID || input.status === PaymentStatus.PARTIAL;
-    const wasPaidLike = existing.status === PaymentStatus.PAID || existing.status === PaymentStatus.PARTIAL;
+    const wasPaidLike = locked.status === PaymentStatus.PAID || locked.status === PaymentStatus.PARTIAL;
 
     if (isPaidLike) {
-      const currentAccount = await getTableAccountSnapshot(tx, existing.tableId);
-      const availableAmount = currentAccount.remainingAmount + (wasPaidLike ? Number(existing.amount) : 0);
+      const currentAccount = await getTableAccountSnapshot(tx, locked.tableId);
+      const availableAmount = currentAccount.remainingAmount + (wasPaidLike ? Number(locked.amount) : 0);
       if (currentAccount.totalAmount <= 0) {
         throw new WexPayValidationError("Ödeme kaydı için açık adisyon bulunmuyor.");
       }
-      if (Number(existing.amount) > availableAmount) {
+      if (Number(locked.amount) > availableAmount) {
         throw new WexPayValidationError("Ödeme tutarı kalan adisyondan büyük olamaz.");
       }
     }
 
     const payment = await tx.payment.update({
-      where: { id: existing.id },
+      where: { id: locked.id },
       data: {
         status: input.status,
-        paidAt: isPaidLike ? existing.paidAt ?? new Date() : null,
+        paidAt: isPaidLike ? locked.paidAt ?? new Date() : null,
       },
       include: { table: true, order: true },
     });
 
-    const account = await syncTableStatus(tx, existing.tableId);
+    const account = await syncTableStatus(tx, locked.tableId);
 
     await tx.businessNotification.create({
       data: {
-        branchId: existing.branchId,
-        orderId: existing.orderId,
+        branchId: locked.branchId,
+        orderId: locked.orderId,
         paymentId: payment.id,
         type: NotificationType.PAYMENT_RECEIVED,
         title: "Ödeme durumu güncellendi",
@@ -1612,12 +1765,12 @@ export async function updatePayment(
 
     await writeWexPayAudit(tx, context, {
       action:
-        existing.provider === "paytr" && input.status === PaymentStatus.FAILED
+        locked.provider === "paytr" && input.status === PaymentStatus.FAILED
           ? "wexpay.payment.operator_failed"
           : "wexpay.payment.updated",
       entityType: "Payment",
       entityId: payment.id,
-      metadata: { before: existing.status, after: input.status, tableId: existing.tableId, remainingAmount: account.remainingAmount },
+      metadata: { before: locked.status, after: input.status, tableId: locked.tableId, remainingAmount: account.remainingAmount },
     });
 
     return payment;

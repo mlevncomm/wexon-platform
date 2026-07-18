@@ -4,9 +4,10 @@
  * DB up → prepare → build → ops+guest mutation → cleanup → (optional) DB down
  *
  * Runs the suite twice when --twice is passed (idempotency / cleanup check).
+ * Fail-closed: never treat 0-pass / all-skip as success.
  */
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   applyIsolatedE2eEnv,
@@ -50,12 +51,38 @@ function isolatedEnv() {
   };
 }
 
+function assertMeaningfulPassCount(reportPath, label) {
+  if (!existsSync(reportPath)) {
+    throw new Error(`[isolated-e2e] ${label}: missing Playwright JSON report at ${reportPath}`);
+  }
+  const report = JSON.parse(readFileSync(reportPath, "utf8"));
+  const stats = report.stats ?? {};
+  const expected = Number(stats.expected ?? 0);
+  const unexpected = Number(stats.unexpected ?? 0);
+  const flaky = Number(stats.flaky ?? 0);
+  const skipped = Number(stats.skipped ?? 0);
+  const passed = expected + flaky;
+  console.log(
+    `[isolated-e2e] ${label} results: passed=${passed} failed=${unexpected} skipped=${skipped}`,
+  );
+  if (unexpected > 0) {
+    throw new Error(`[isolated-e2e] ${label}: ${unexpected} failed test(s)`);
+  }
+  if (passed < 1) {
+    throw new Error(
+      `[isolated-e2e] ${label}: fail-closed — need ≥1 passing test (got passed=${passed}, skipped=${skipped})`,
+    );
+  }
+}
+
 async function runOnce(label) {
   const env = isolatedEnv();
   assertIsolatedWexPayDatabase(`isolated-e2e ${label}`);
   createRunArtifact(`${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
 
-  run(
+  const reportPath = resolve(root, "e2e", `.isolated-report-${label}.json`);
+  console.log(`[isolated-e2e] $ npx playwright test (isolated specs) → ${reportPath}`);
+  const result = spawnSync(
     "npx",
     [
       "playwright",
@@ -65,9 +92,28 @@ async function runOnce(label) {
       "e2e/wexpay-active-table.spec.ts",
       "e2e/wexpay-modifiers.spec.ts",
       "e2e/wexpay-table-qr.spec.ts",
+      "e2e/wexpay-paytr-return-ux.spec.ts",
+      "--reporter=json",
     ],
-    env,
+    {
+      cwd: root,
+      encoding: "utf8",
+      shell: process.platform === "win32",
+      env: { ...process.env, ...env },
+      maxBuffer: 32 * 1024 * 1024,
+    },
   );
+
+  if (result.stdout) {
+    writeFileSync(reportPath, result.stdout, "utf8");
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  if ((result.status ?? 1) !== 0) {
+    process.exit(result.status ?? 1);
+  }
+  assertMeaningfulPassCount(reportPath, label);
 
   const report = await cleanupWexPayE2ERun();
   writeFileSync(
