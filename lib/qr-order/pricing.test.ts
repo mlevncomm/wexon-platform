@@ -127,6 +127,27 @@ describe("qr-order modifiers", () => {
     const afterSecond = toggleModifierOption(group, afterFirst, "opt-l");
     assert.deepEqual(afterSecond, ["opt-l"]);
   });
+
+  it("clamps MULTI selection at maxSelect", () => {
+    const toppings = {
+      id: "g-multi",
+      name: "Ekstralar",
+      selectionType: "MULTI" as const,
+      minSelect: 0,
+      maxSelect: 2,
+      sortOrder: 0,
+      options: [
+        { id: "t1", name: "Peynir", priceDelta: 10, sortOrder: 0 },
+        { id: "t2", name: "Mantar", priceDelta: 8, sortOrder: 1 },
+        { id: "t3", name: "Zeytin", priceDelta: 5, sortOrder: 2 },
+      ],
+    };
+    const afterTwo = toggleModifierOption(toppings, ["t1"], "t2");
+    assert.deepEqual(afterTwo, ["t1", "t2"]);
+    const atCap = toggleModifierOption(toppings, afterTwo, "t3");
+    assert.deepEqual(atCap, ["t1", "t2"]);
+    assert.match(validateModifierSelections({ ...product, modifierGroups: [toppings] }, ["t1", "t2", "t3"]) ?? "", /en fazla 2/);
+  });
 });
 
 describe("qr-order cart key isolation", () => {

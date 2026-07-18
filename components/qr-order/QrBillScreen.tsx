@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import QrModalShell from "@/components/qr-order/QrModalShell";
 import { qrCard, qrFrameNarrow, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
+import { resolvePaytrReturnBanner } from "@/lib/qr-order/paytr-return";
 import {
   orderStatusLabel,
   type QrBillSnapshot,
@@ -18,17 +19,6 @@ function newIdempotencyKey() {
     return crypto.randomUUID();
   }
   return `qr-pay-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function initialPaytrBanner(paytrReturn: QrPaytrReturn | null | undefined): string | null {
-  if (!paytrReturn) return null;
-  if (paytrReturn.result === "failed") {
-    return "Online ödeme tamamlanamadı. İsterseniz tekrar deneyin veya restorandan ödeyin.";
-  }
-  if (!paytrReturn.paymentId) {
-    return "Ödeme dönüşü alındı. Onay için lütfen personelle teyit edin veya hesabı yenileyin.";
-  }
-  return "Ödeme sonucu kontrol ediliyor…";
 }
 
 export default function QrBillScreen({
@@ -52,7 +42,7 @@ export default function QrBillScreen({
   const [requestError, setRequestError] = useState<string | null>(null);
   const [checkoutPending, setCheckoutPending] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [paytrBanner, setPaytrBanner] = useState<string | null>(() => initialPaytrBanner(paytrReturn));
+  const [paytrBanner, setPaytrBanner] = useState<string | null>(() => resolvePaytrReturnBanner(paytrReturn));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [coolingDown, setCoolingDown] = useState(false);
   const titleId = useId();
