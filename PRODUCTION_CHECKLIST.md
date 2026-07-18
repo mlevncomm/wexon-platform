@@ -140,6 +140,22 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 2. `DATABASE_URL` (pooler) ve `DIRECT_URL` (direct) Vercel + staging env'de guncelle — secret commit etme
 3. `npm run production:preflight` ile baglanti ve migration dogrula
 
+**Supabase PostgREST / RLS (Prisma-only mimari):**
+
+- Uygulama `@supabase/supabase-js` kullanmaz; DB erisimi Next.js + Prisma (`postgres` / `postgres.[ref]`, `rolbypassrls`).
+- Public tablolarda RLS acik + `anon`/`authenticated` REVOKE zorunlu (Advisor `rls_disabled_in_public` temizligi).
+- Tenant JWT policy (Supabase Auth `auth.uid()`) **ertelenmistir** — session auth uygulama katmaninda; DB tenant RLS P2.
+- Opsiyonel runtime role: `wexon_app` (NOBYPASSRLS, migration ile NOLOGIN olusturulur). LOGIN + password yalniz Dashboard'da; sonra Vercel `DATABASE_URL` guncelle. Migrate icin `DIRECT_URL` `postgres` kalsin.
+- Data API: kullanilmiyorsa Dashboard'da kapatmayi degerlendir; anon key rotasyonu Dashboard'dan (degerleri repoya yazma).
+- PostgREST risk mitigasyonu dogrulama: Security Advisor `rls_disabled_in_public` = 0; `has_table_privilege('anon', ...)` SELECT/INSERT = false; uygulama `@supabase/supabase-js` kullanmiyor.
+- Not: Data API UI toggle MCP ile dogrulanamaz — Dashboard → Project Settings → API / Data API. Key disable/rotate yalniz Dashboard (uygulama anon key kullanmiyor).
+
+**Backup / PITR (musteri onboarding oncesi zorunlu):**
+
+- Free plan: otomatik daily backup ve PITR **yok**. Pro+ daily backup (7 gun); PITR add-on.
+- Free'de: `npm run db:backup` (`scripts/db-logical-backup.mjs`, `pg_dump` → `.backups/`, gitignored) + offsite kopya + local test restore.
+- Dump dosyasini git/Slack/chat'e koyma; secret'lari dump ile birlikte paylasma.
+
 **Local development:** `npm run prisma:migrate:dev` (`prisma migrate dev`). `prisma:migrate` geriye uyumluluk alias'idir.
 
 #### Vercel production deploy runbook
