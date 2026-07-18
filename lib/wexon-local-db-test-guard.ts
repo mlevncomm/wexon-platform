@@ -10,11 +10,13 @@
  * - `VERCEL_ENV` is not a production/preview deployment environment
  * - `DATABASE_URL` is present and parseable (the URL Prisma actually connects
  *   with; a `DIRECT_URL` fallback must never mask a wrong runtime target)
+ * - when `DIRECT_URL` is set, it must also be a safe local test/e2e target
  * - host is a loopback address only (localhost / 127.0.0.1 / ::1)
- * - database name contains `test` or `e2e`
+ * - database name contains `_test` or `_e2e` (not bare `wexon` / `wexon_dev`)
  *
  * Any remote host (Supabase `db.<ref>.supabase.co`, `*.pooler.supabase.com`,
- * Neon, Railway, …), empty or unparseable URL is rejected.
+ * Neon, Railway, RDS, …), empty or unparseable URL is rejected.
+ * Opt-in never authorizes a remote host.
  */
 
 export type LocalDbTestGuardEnv = {
@@ -36,7 +38,7 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
  * special" for the WHATWG URL parser, which makes host/port/path extraction
  * inconsistent, so we normalize the scheme to `http` purely for parsing.
  */
-function parseConnectionUrl(rawUrl: string): { host: string; database: string } | null {
+export function parseConnectionUrl(rawUrl: string): { host: string; database: string } | null {
   try {
     const normalized = rawUrl.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "http://");
     const parsed = new URL(normalized);
@@ -46,6 +48,33 @@ function parseConnectionUrl(rawUrl: string): { host: string; database: string } 
   } catch {
     return null;
   }
+}
+
+function isSafeLocalTestDatabaseName(database: string): boolean {
+  return database.includes("_test") || database.includes("_e2e");
+}
+
+function evaluateUrlTarget(label: "DATABASE_URL" | "DIRECT_URL", rawUrl: string): LocalDbTestGuardResult {
+  const parsed = parseConnectionUrl(rawUrl);
+  if (!parsed) {
+    return { ok: false, reason: `${label} parse edilemiyor.` };
+  }
+
+  if (!parsed.host || !LOOPBACK_HOSTS.has(parsed.host)) {
+    return { ok: false, reason: `${label} loopback olmayan host reddedildi: ${parsed.host || "(boş)"}` };
+  }
+
+  if (!parsed.database) {
+    return { ok: false, reason: `${label} veritabanı adı belirtilmemiş.` };
+  }
+  if (!isSafeLocalTestDatabaseName(parsed.database)) {
+    return {
+      ok: false,
+      reason: `${label} veritabanı adı '_test' veya '_e2e' içermeli: ${parsed.database}`,
+    };
+  }
+
+  return { ok: true, url: rawUrl, host: parsed.host, database: parsed.database };
 }
 
 export function evaluateLocalDbTestGuard(env: LocalDbTestGuardEnv): LocalDbTestGuardResult {
@@ -64,28 +93,21 @@ export function evaluateLocalDbTestGuard(env: LocalDbTestGuardEnv): LocalDbTestG
 
   // Prisma connects with DATABASE_URL when present (see lib/prisma.ts). Require
   // it explicitly so a DIRECT_URL fallback cannot silently point elsewhere.
-  const rawUrl = (env.DATABASE_URL ?? "").trim();
-  if (!rawUrl) {
+  const databaseUrl = (env.DATABASE_URL ?? "").trim();
+  if (!databaseUrl) {
     return { ok: false, reason: "DATABASE_URL tanımlı değil (boş)." };
   }
 
-  const parsed = parseConnectionUrl(rawUrl);
-  if (!parsed) {
-    return { ok: false, reason: "DATABASE_URL parse edilemiyor." };
+  const databaseResult = evaluateUrlTarget("DATABASE_URL", databaseUrl);
+  if (!databaseResult.ok) return databaseResult;
+
+  const directUrl = (env.DIRECT_URL ?? "").trim();
+  if (directUrl) {
+    const directResult = evaluateUrlTarget("DIRECT_URL", directUrl);
+    if (!directResult.ok) return directResult;
   }
 
-  if (!parsed.host || !LOOPBACK_HOSTS.has(parsed.host)) {
-    return { ok: false, reason: `Loopback olmayan host reddedildi: ${parsed.host || "(boş)"}` };
-  }
-
-  if (!parsed.database) {
-    return { ok: false, reason: "Veritabanı adı belirtilmemiş." };
-  }
-  if (!parsed.database.includes("test") && !parsed.database.includes("e2e")) {
-    return { ok: false, reason: `Veritabanı adı 'test' veya 'e2e' içermeli: ${parsed.database}` };
-  }
-
-  return { ok: true, url: rawUrl, host: parsed.host, database: parsed.database };
+  return databaseResult;
 }
 
 /** Throwing wrapper: refuse to proceed (and thus never query) when unsafe. */

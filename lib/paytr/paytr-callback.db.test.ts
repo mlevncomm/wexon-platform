@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { buildPaytrCallbackHash } from "@/lib/paytr/paytr-hash";
 import { handlePaytrSubscriptionCallback } from "@/lib/paytr/paytr-callback";
+import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
+
+/**
+ * DB-backed PayTR subscription callback. Guard MUST run before any Prisma query.
+ * Run via: WEXON_ALLOW_LOCAL_DB_TESTS=1 npm run test:unit:db
+ */
+assertLocalDbTestGuard(process.env);
 
 const MERCHANT = {
   id: process.env.PAYTR_MERCHANT_ID || "test-merchant-id",
