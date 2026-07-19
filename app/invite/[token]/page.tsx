@@ -1,4 +1,5 @@
 import { lookupStaffInviteByPlaintext } from "@/lib/wexpay-staff-invite";
+import { maskEmailHint } from "@/lib/wexon-email";
 import { InviteAcceptForm } from "@/components/wexpay/InviteAcceptForm";
 
 type Params = Promise<{ token: string }>;
@@ -33,7 +34,7 @@ export default async function InviteAcceptPage({ params }: { params: Params }) {
       <InviteAcceptForm
         token={decoded}
         organizationName={lookup.organizationName}
-        email={lookup.invite.email}
+        emailHint={maskEmailHint(lookup.invite.email)}
         role={lookup.invite.role}
       />
     </main>

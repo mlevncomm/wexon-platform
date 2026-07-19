@@ -53,31 +53,85 @@ export function escapeEmailHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** Strip CR/LF to prevent header injection in subject/from fields. */
+export function sanitizeEmailHeaderValue(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim().slice(0, 200);
+}
+
+function looksLikeEmailFrom(value: string): boolean {
+  // Accept "Name <email@domain>" or bare email
+  if (/^[^<>\r\n]+<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(value)) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isHostedOrNodeProduction(env: NodeJS.ProcessEnv): boolean {
+  return env.VERCEL_ENV === "production" || (env.NODE_ENV === "production" && env.VERCEL_ENV !== "preview");
+}
+
+/**
+ * Resolve email transport.
+ * Hosted production: only `resend` with explicit FROM + API key (no defaults, no fake).
+ * Local/test: `fake` allowed (or default when not explicitly resend).
+ *
+ * NOTE: invite create/resend/accept rate limits in lib/wexon-rate-limit.ts are
+ * process-local (not distributed across Vercel isolates).
+ */
 export function resolveEmailTransportConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): EmailTransportConfig {
   const providerRaw = (env.WEXON_EMAIL_PROVIDER ?? "").trim().toLowerCase();
-  const from = (env.WEXON_EMAIL_FROM ?? "").trim() || "Wexon <davet@mail.wexon.dev>";
+  const fromRaw = (env.WEXON_EMAIL_FROM ?? "").trim();
   const replyTo = (env.WEXON_EMAIL_REPLY_TO ?? "").trim() || null;
   const apiKey = (env.RESEND_API_KEY ?? "").trim();
-  const production = env.VERCEL_ENV === "production" || env.NODE_ENV === "production";
+  const production = isHostedOrNodeProduction(env);
 
-  if (providerRaw === "fake" || (!production && providerRaw !== "resend")) {
-    return { ready: true, provider: "fake", from, replyTo, apiKeyPresent: false };
+  if (production) {
+    if (providerRaw === "fake") {
+      return { ready: false, provider: "fake", reasonCode: "FAKE_FORBIDDEN_IN_PRODUCTION" };
+    }
+    if (providerRaw !== "resend") {
+      return { ready: false, provider: "resend", reasonCode: "MISSING_OR_INVALID_EMAIL_PROVIDER" };
+    }
+    if (!apiKey) {
+      return { ready: false, provider: "resend", reasonCode: "MISSING_RESEND_API_KEY" };
+    }
+    if (!fromRaw || !looksLikeEmailFrom(fromRaw)) {
+      return { ready: false, provider: "resend", reasonCode: "MISSING_OR_INVALID_EMAIL_FROM" };
+    }
+    return {
+      ready: true,
+      provider: "resend",
+      from: sanitizeEmailHeaderValue(fromRaw),
+      replyTo: replyTo ? sanitizeEmailHeaderValue(replyTo) : null,
+      apiKeyPresent: true,
+    };
   }
 
-  if (providerRaw && providerRaw !== "resend") {
-    return { ready: false, provider: "resend", reasonCode: "UNSUPPORTED_EMAIL_PROVIDER" };
+  // Non-production: fake by default unless explicitly resend with key+from.
+  if (providerRaw === "resend") {
+    if (!apiKey) {
+      return { ready: false, provider: "resend", reasonCode: "MISSING_RESEND_API_KEY" };
+    }
+    const from = fromRaw || "Wexon <davet@mail.wexon.dev>";
+    if (!looksLikeEmailFrom(from)) {
+      return { ready: false, provider: "resend", reasonCode: "MISSING_OR_INVALID_EMAIL_FROM" };
+    }
+    return {
+      ready: true,
+      provider: "resend",
+      from: sanitizeEmailHeaderValue(from),
+      replyTo: replyTo ? sanitizeEmailHeaderValue(replyTo) : null,
+      apiKeyPresent: true,
+    };
   }
 
-  if (!apiKey) {
-    return { ready: false, provider: "resend", reasonCode: "MISSING_RESEND_API_KEY" };
-  }
-  if (!from.includes("@")) {
-    return { ready: false, provider: "resend", reasonCode: "MISSING_EMAIL_FROM" };
-  }
-
-  return { ready: true, provider: "resend", from, replyTo, apiKeyPresent: true };
+  return {
+    ready: true,
+    provider: "fake",
+    from: fromRaw || "Wexon <davet@mail.wexon.dev>",
+    replyTo,
+    apiKeyPresent: false,
+  };
 }
 
 export async function sendTransactionalEmail(input: SendEmailInput): Promise<SendEmailResult> {
@@ -86,10 +140,15 @@ export async function sendTransactionalEmail(input: SendEmailInput): Promise<Sen
     return { ok: false, errorCode: config.reasonCode, provider: config.provider };
   }
 
+  const subject = sanitizeEmailHeaderValue(input.subject);
+  if (!subject) {
+    return { ok: false, errorCode: "INVALID_SUBJECT", provider: config.provider };
+  }
+
   if (config.provider === "fake") {
     FAKE_OUTBOX.push({
       to: input.to,
-      subject: input.subject,
+      subject,
       idempotencyKey: input.idempotencyKey,
       at: new Date().toISOString(),
     });
@@ -106,7 +165,7 @@ export async function sendTransactionalEmail(input: SendEmailInput): Promise<Sen
       {
         from: config.from,
         to: input.to,
-        subject: input.subject,
+        subject,
         html: input.html,
         text: input.text,
         ...(config.replyTo || input.replyTo
@@ -151,7 +210,7 @@ export function buildStaffInviteEmailContent(input: {
   const expires = escapeEmailHtml(input.expiresAt.toLocaleString("tr-TR"));
   const safeUrl = escapeEmailHtml(inviteUrl);
 
-  const subject = `${input.organizationName} — Wexon personel daveti`;
+  const subject = sanitizeEmailHeaderValue(`${input.organizationName} — Wexon personel daveti`);
   const text = [
     `${input.organizationName} organizasyonuna ${input.roleLabel} olarak davet edildiniz.`,
     "",
@@ -175,4 +234,14 @@ export function buildStaffInviteEmailContent(input: {
 
 export function buildStaffInvitePublicUrl(plaintextToken: string): string {
   return publicUrl(`/invite/${encodeURIComponent(plaintextToken.trim())}`);
+}
+
+export function maskEmailHint(email: string): string {
+  const normalized = email.trim().toLowerCase();
+  const at = normalized.indexOf("@");
+  if (at < 1) return "***";
+  const local = normalized.slice(0, at);
+  const domain = normalized.slice(at + 1);
+  const localHint = local.length <= 2 ? `${local[0] ?? "*"}*` : `${local[0]}***${local[local.length - 1]}`;
+  return `${localHint}@${domain}`;
 }

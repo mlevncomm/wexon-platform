@@ -10,7 +10,6 @@ import {
 } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
-import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
 import {
   buildStaffInviteEmailContent,
   resolveEmailTransportConfig,
@@ -20,6 +19,12 @@ import { hashPassword } from "@/lib/wexon-passwords";
 import { isHostedProduction } from "@/lib/wexon-production-guards";
 import { lockWexPayOrgStaffLimit } from "@/lib/wexpay-locks";
 import { completeActivationStepInTx } from "@/lib/wexpay-activation-journey";
+import {
+  ActivationTxAccessError,
+  assertActorManageMembershipInTx,
+  assertCanonicalStaffLimitInTx,
+  assertWexPayAccessInTx,
+} from "@/lib/wexpay-activation-tx-access";
 
 export const STAFF_INVITE_TOKEN_BYTES = 32;
 export const STAFF_INVITE_TOKEN_PREFIX_LENGTH = 10;
@@ -114,6 +119,13 @@ export function isInviteOpen(invite: Pick<StaffInvite, "acceptedAt" | "revokedAt
   return invite.expiresAt.getTime() > now.getTime();
 }
 
+function mapTxAccessError(error: unknown): never {
+  if (error instanceof ActivationTxAccessError) {
+    throw new StaffInviteError(error.code, error.message);
+  }
+  throw error;
+}
+
 async function countStaffSeatsForLimit(client: DbClient, organizationId: string) {
   const [activeNonOwner, openInvites] = await Promise.all([
     client.membership.count({
@@ -155,89 +167,99 @@ export async function createStaffInvite(input: {
     throw new StaffInviteError("OWNER_FORBIDDEN", "OWNER rolü wizard üzerinden davet edilemez.");
   }
 
-  const access = await evaluateProductAccess({
-    organizationId: input.organizationId,
-    productKey: "wexpay",
-  });
-  if (!access.allowed) {
-    throw new StaffInviteError("NO_ACCESS", "WexPay erişimi gerekli.");
-  }
-
   const material = generateSecureStaffInviteTokenMaterial();
   const expiresAt = new Date(Date.now() + STAFF_INVITE_TTL_MS);
 
-  const invite = await prisma.$transaction(async (tx) => {
-    await lockWexPayOrgStaffLimit(tx, input.organizationId);
+  let invite: StaffInvite;
+  try {
+    invite = await prisma.$transaction(
+      async (tx) => {
+        await lockWexPayOrgStaffLimit(tx, input.organizationId);
 
-    const actorMembership = await tx.membership.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        userId: input.actorUserId,
-        status: MembershipStatus.ACTIVE,
-        role: { in: [MembershipRole.OWNER, MembershipRole.ADMIN] },
+        const access = await assertWexPayAccessInTx(tx, {
+          organizationId: input.organizationId,
+          productKey: "wexpay",
+        });
+        await assertActorManageMembershipInTx(tx, {
+          organizationId: input.organizationId,
+          actorUserId: input.actorUserId,
+          roles: [MembershipRole.OWNER, MembershipRole.ADMIN],
+        });
+
+        const existingUser = await tx.user.findUnique({
+          where: { email },
+          select: { id: true },
+        });
+        if (existingUser) {
+          const existingMembership = await tx.membership.findUnique({
+            where: {
+              organizationId_userId: {
+                organizationId: input.organizationId,
+                userId: existingUser.id,
+              },
+            },
+            select: { id: true },
+          });
+          if (existingMembership) {
+            throw new StaffInviteError(
+              "MEMBERSHIP_EXISTS",
+              "Bu e-posta zaten organizasyon üyesi; yeni davet oluşturulamaz.",
+            );
+          }
+        }
+
+        // Revoke open invites first so seat count does not double-count re-invites.
+        await tx.staffInvite.updateMany({
+          where: {
+            organizationId: input.organizationId,
+            email,
+            acceptedAt: null,
+            revokedAt: null,
+          },
+          data: { revokedAt: new Date() },
+        });
+
+        const seatCount = await countStaffSeatsForLimit(tx, input.organizationId);
+        assertCanonicalStaffLimitInTx(access, seatCount);
+
+        const created = await tx.staffInvite.create({
+          data: {
+            organizationId: input.organizationId,
+            email,
+            role: input.role,
+            tokenHash: material.tokenHash,
+            tokenPrefix: material.tokenPrefix,
+            expiresAt,
+            createdByUserId: input.actorUserId,
+            deliveryStatus: StaffInviteDeliveryStatus.PENDING,
+          },
+        });
+
+        await writeAuditLog(
+          {
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            action: "wexpay.staff_invite.created",
+            entityType: "StaffInvite",
+            entityId: created.id,
+            source: "staff_invite",
+            metadata: sanitizeStaffInviteAuditMetadata({
+              emailDomain: email.includes("@") ? email.split("@")[1] : null,
+              role: created.role,
+              tokenPrefix: created.tokenPrefix,
+              expiresAt: created.expiresAt.toISOString(),
+            }),
+          },
+          tx,
+        );
+
+        return created;
       },
-      select: { id: true },
-    });
-    if (!actorMembership) {
-      throw new StaffInviteError("FORBIDDEN", "Davet göndermek için OWNER veya ADMIN yetkisi gerekir.");
-    }
-
-    const actor = await tx.user.findFirst({
-      where: { id: input.actorUserId, isActive: true },
-      select: { id: true },
-    });
-    if (!actor) throw new StaffInviteError("ACTOR_INACTIVE", "Oturum kullanıcısı aktif değil.");
-
-    const seatCount = await countStaffSeatsForLimit(tx, input.organizationId);
-    const limit = assertStaffEntitlementLimit(access, seatCount);
-    if (!limit.ok) {
-      throw new StaffInviteError("STAFF_LIMIT", limit.message);
-    }
-
-    // Revoke any open invite for same org+email (re-invite).
-    await tx.staffInvite.updateMany({
-      where: {
-        organizationId: input.organizationId,
-        email,
-        acceptedAt: null,
-        revokedAt: null,
-      },
-      data: { revokedAt: new Date() },
-    });
-
-    const created = await tx.staffInvite.create({
-      data: {
-        organizationId: input.organizationId,
-        email,
-        role: input.role,
-        tokenHash: material.tokenHash,
-        tokenPrefix: material.tokenPrefix,
-        expiresAt,
-        createdByUserId: input.actorUserId,
-        deliveryStatus: StaffInviteDeliveryStatus.PENDING,
-      },
-    });
-
-    await writeAuditLog(
-      {
-        organizationId: input.organizationId,
-        userId: input.actorUserId,
-        action: "wexpay.staff_invite.created",
-        entityType: "StaffInvite",
-        entityId: created.id,
-        source: "staff_invite",
-        metadata: sanitizeStaffInviteAuditMetadata({
-          emailDomain: email.includes("@") ? email.split("@")[1] : null,
-          role: created.role,
-          tokenPrefix: created.tokenPrefix,
-          expiresAt: created.expiresAt.toISOString(),
-        }),
-      },
-      tx,
+      { timeout: 15_000 },
     );
-
-    return created;
-  });
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 
   const org = await prisma.organization.findUniqueOrThrow({
     where: { id: input.organizationId },
@@ -294,11 +316,6 @@ export async function createStaffInvite(input: {
       ? content.inviteUrl
       : null;
 
-  if (production && !send.ok) {
-    // Fail-closed: never expose invite link when provider missing/failed in production.
-    return { invite: updated, oneTimeInviteUrl: null };
-  }
-
   return { invite: updated, oneTimeInviteUrl };
 }
 
@@ -307,44 +324,44 @@ export async function revokeStaffInvite(input: {
   actorUserId: string;
   inviteId: string;
 }) {
-  return prisma.$transaction(async (tx) => {
-    const invite = await tx.staffInvite.findFirst({
-      where: { id: input.inviteId, organizationId: input.organizationId },
-    });
-    if (!invite) throw new StaffInviteError("NOT_FOUND", "Davet bulunamadı.");
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const invite = await tx.staffInvite.findFirst({
+        where: { id: input.inviteId, organizationId: input.organizationId },
+      });
+      if (!invite) throw new StaffInviteError("NOT_FOUND", "Davet bulunamadı.");
 
-    const actorMembership = await tx.membership.findFirst({
-      where: {
+      await assertActorManageMembershipInTx(tx, {
         organizationId: input.organizationId,
-        userId: input.actorUserId,
-        status: MembershipStatus.ACTIVE,
-        role: { in: [MembershipRole.OWNER, MembershipRole.ADMIN] },
-      },
+        actorUserId: input.actorUserId,
+        roles: [MembershipRole.OWNER, MembershipRole.ADMIN],
+      });
+
+      if (invite.revokedAt || invite.acceptedAt) return invite;
+
+      const updated = await tx.staffInvite.update({
+        where: { id: invite.id },
+        data: { revokedAt: new Date() },
+      });
+
+      await writeAuditLog(
+        {
+          organizationId: input.organizationId,
+          userId: input.actorUserId,
+          action: "wexpay.staff_invite.revoked",
+          entityType: "StaffInvite",
+          entityId: invite.id,
+          source: "staff_invite",
+          metadata: sanitizeStaffInviteAuditMetadata({ tokenPrefix: invite.tokenPrefix }),
+        },
+        tx,
+      );
+
+      return updated;
     });
-    if (!actorMembership) throw new StaffInviteError("FORBIDDEN", "Yetkisiz.");
-
-    if (invite.revokedAt || invite.acceptedAt) return invite;
-
-    const updated = await tx.staffInvite.update({
-      where: { id: invite.id },
-      data: { revokedAt: new Date() },
-    });
-
-    await writeAuditLog(
-      {
-        organizationId: input.organizationId,
-        userId: input.actorUserId,
-        action: "wexpay.staff_invite.revoked",
-        entityType: "StaffInvite",
-        entityId: invite.id,
-        source: "staff_invite",
-        metadata: sanitizeStaffInviteAuditMetadata({ tokenPrefix: invite.tokenPrefix }),
-      },
-      tx,
-    );
-
-    return updated;
-  });
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 }
 
 export type StaffInviteLookupResult =
@@ -367,181 +384,266 @@ export async function lookupStaffInviteByPlaintext(plaintext: string): Promise<S
   return { ok: true, invite, organizationName: invite.organization.name };
 }
 
+export type AcceptStaffInviteResult = {
+  membershipId: string;
+  userId: string;
+  organizationId: string;
+  /** True only for new or previously passwordless users. */
+  shouldCreateSession: boolean;
+};
+
 export async function acceptStaffInvite(input: {
   plaintextToken: string;
   email: string;
   name?: string;
   password?: string;
-}): Promise<{ membershipId: string; userId: string; organizationId: string }> {
+  /**
+   * Active customer session from the request. Required for existing passworded users.
+   * Pass null/undefined when unauthenticated — do not call getCustomerSession inside TX.
+   */
+  customerSession?: { userId: string } | null;
+}): Promise<AcceptStaffInviteResult> {
   const email = normalizeInviteEmail(input.email);
   const tokenHash = hashStaffInviteToken(input.plaintextToken);
 
-  return prisma.$transaction(async (tx) => {
-    const invite = await tx.staffInvite.findUnique({ where: { tokenHash } });
-    if (!invite || invite.revokedAt || invite.acceptedAt || invite.expiresAt.getTime() <= Date.now()) {
-      throw new StaffInviteError("INVALID", "Davet geçersiz veya süresi dolmuş.");
-    }
-    if (normalizeInviteEmail(invite.email) !== email) {
-      throw new StaffInviteError("EMAIL_MISMATCH", "E-posta davet ile eşleşmiyor.");
-    }
+  // Pre-TX: resolve invite + user path so password hashing stays outside the interactive TX.
+  const invitePreview = await prisma.staffInvite.findUnique({ where: { tokenHash } });
+  if (
+    !invitePreview ||
+    invitePreview.revokedAt ||
+    invitePreview.acceptedAt ||
+    invitePreview.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new StaffInviteError("INVALID", "Davet geçersiz veya süresi dolmuş.");
+  }
+  if (normalizeInviteEmail(invitePreview.email) !== email) {
+    throw new StaffInviteError("EMAIL_MISMATCH", "E-posta davet ile eşleşmiyor.");
+  }
 
-    await lockWexPayOrgStaffLimit(tx, invite.organizationId);
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser && !existingUser.isActive) {
+    throw new StaffInviteError("USER_INACTIVE", "Hesap pasif.");
+  }
 
-    // Re-read under lock for single-use concurrency.
-    const locked = await tx.staffInvite.findUnique({ where: { id: invite.id } });
-    if (!locked || locked.acceptedAt || locked.revokedAt || locked.expiresAt.getTime() <= Date.now()) {
-      throw new StaffInviteError("INVALID", "Davet geçersiz veya süresi dolmuş.");
+  let passwordHash: string | null = null;
+  let displayName: string | null = null;
+  let shouldCreateSession = false;
+  let sessionUserId: string | null = null;
+
+  if (!existingUser) {
+    const password = input.password?.trim() ?? "";
+    if (password.length < 8) {
+      throw new StaffInviteError("PASSWORD", "Şifre en az 8 karakter olmalıdır.");
     }
-
-    const access = await evaluateProductAccess({
-      organizationId: invite.organizationId,
-      productKey: "wexpay",
+    const name = (input.name ?? "").trim();
+    if (name.length < 2) {
+      throw new StaffInviteError("NAME", "Ad soyad gerekli.");
+    }
+    passwordHash = await hashPassword(password);
+    displayName = name;
+    shouldCreateSession = true;
+  } else if (!existingUser.passwordHash) {
+    const password = input.password?.trim() ?? "";
+    if (password.length < 8) {
+      throw new StaffInviteError("PASSWORD", "Şifre en az 8 karakter olmalıdır.");
+    }
+    passwordHash = await hashPassword(password);
+    displayName = input.name?.trim() || null;
+    shouldCreateSession = true;
+  } else {
+    // Existing passworded user: require matching active customer session; never change password.
+    const session = input.customerSession ?? null;
+    if (!session) {
+      throw new StaffInviteError(
+        "LOGIN_REQUIRED",
+        "Mevcut hesabınız için önce giriş yapmalısınız.",
+      );
+    }
+    if (session.userId !== existingUser.id) {
+      throw new StaffInviteError(
+        "SESSION_MISMATCH",
+        "Oturum davet e-postası ile eşleşmiyor.",
+      );
+    }
+    const sessionUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, email: true, isActive: true },
     });
-    if (!access.allowed) {
-      throw new StaffInviteError("NO_ACCESS", "Organizasyon erişimi kapalı.");
+    if (
+      !sessionUser?.isActive ||
+      normalizeInviteEmail(sessionUser.email) !== email
+    ) {
+      throw new StaffInviteError(
+        "SESSION_MISMATCH",
+        "Oturum davet e-postası ile eşleşmiyor.",
+      );
     }
+    sessionUserId = session.userId;
+    shouldCreateSession = false;
+  }
 
-    let user = await tx.user.findUnique({ where: { email } });
-    if (user && !user.isActive) {
-      throw new StaffInviteError("USER_INACTIVE", "Hesap pasif.");
-    }
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await lockWexPayOrgStaffLimit(tx, invitePreview.organizationId);
 
-    if (!user) {
-      const password = input.password?.trim() ?? "";
-      if (password.length < 8) {
-        throw new StaffInviteError("PASSWORD", "Şifre en az 8 karakter olmalıdır.");
-      }
-      const name = (input.name ?? "").trim();
-      if (name.length < 2) {
-        throw new StaffInviteError("NAME", "Ad soyad gerekli.");
-      }
-      user = await tx.user.create({
-        data: {
-          email,
-          name,
-          passwordHash: await hashPassword(password),
-          passwordSetAt: new Date(),
-          mustChangePassword: false,
-          isActive: true,
-        },
-      });
-    } else if (!user.passwordHash) {
-      const password = input.password?.trim() ?? "";
-      if (password.length < 8) {
-        throw new StaffInviteError("PASSWORD", "Şifre en az 8 karakter olmalıdır.");
-      }
-      user = await tx.user.update({
-        where: { id: user.id },
-        data: {
-          passwordHash: await hashPassword(password),
-          passwordSetAt: new Date(),
-          mustChangePassword: false,
-          ...(input.name?.trim() ? { name: input.name.trim() } : {}),
-        },
-      });
-    }
-    // Existing passworded user: do not change password or takeover — membership only.
+        const locked = await tx.staffInvite.findUnique({ where: { id: invitePreview.id } });
+        if (
+          !locked ||
+          locked.acceptedAt ||
+          locked.revokedAt ||
+          locked.expiresAt.getTime() <= Date.now()
+        ) {
+          throw new StaffInviteError("INVALID", "Davet geçersiz veya süresi dolmuş.");
+        }
+        if (normalizeInviteEmail(locked.email) !== email) {
+          throw new StaffInviteError("EMAIL_MISMATCH", "E-posta davet ile eşleşmiyor.");
+        }
 
-    const existingMembership = await tx.membership.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: invite.organizationId,
-          userId: user.id,
-        },
-      },
-    });
+        const access = await assertWexPayAccessInTx(tx, {
+          organizationId: locked.organizationId,
+          productKey: "wexpay",
+        });
 
-    const seatCount = await countStaffSeatsForLimit(tx, invite.organizationId);
-    // Open invite being accepted is already in seatCount — exclude it for the accept check.
-    const seatsExcludingThisInvite = Math.max(0, seatCount - 1);
-    const needsNewSeat =
-      !existingMembership || existingMembership.status !== MembershipStatus.ACTIVE;
-    if (needsNewSeat) {
-      const limit = assertStaffEntitlementLimit(access, seatsExcludingThisInvite);
-      if (!limit.ok) {
-        throw new StaffInviteError("STAFF_LIMIT", limit.message);
-      }
-    }
+        let user = await tx.user.findUnique({ where: { email } });
+        if (user && !user.isActive) {
+          throw new StaffInviteError("USER_INACTIVE", "Hesap pasif.");
+        }
 
-    const membership = existingMembership
-      ? await tx.membership.update({
-          where: { id: existingMembership.id },
-          data: {
-            role: invite.role,
-            status: MembershipStatus.ACTIVE,
-            acceptedAt: existingMembership.acceptedAt ?? new Date(),
+        if (!user) {
+          if (!passwordHash || !displayName) {
+            throw new StaffInviteError("PASSWORD", "Şifre en az 8 karakter olmalıdır.");
+          }
+          user = await tx.user.create({
+            data: {
+              email,
+              name: displayName,
+              passwordHash,
+              passwordSetAt: new Date(),
+              mustChangePassword: false,
+              isActive: true,
+            },
+          });
+        } else if (!user.passwordHash) {
+          if (!passwordHash) {
+            throw new StaffInviteError("PASSWORD", "Şifre en az 8 karakter olmalıdır.");
+          }
+          user = await tx.user.update({
+            where: { id: user.id },
+            data: {
+              passwordHash,
+              passwordSetAt: new Date(),
+              mustChangePassword: false,
+              ...(displayName ? { name: displayName } : {}),
+            },
+          });
+        } else {
+          // Passworded path: session already validated outside TX; never mutate password.
+          if (!sessionUserId || sessionUserId !== user.id) {
+            throw new StaffInviteError(
+              "LOGIN_REQUIRED",
+              "Mevcut hesabınız için önce giriş yapmalısınız.",
+            );
+          }
+        }
+
+        const existingMembership = await tx.membership.findUnique({
+          where: {
+            organizationId_userId: {
+              organizationId: locked.organizationId,
+              userId: user.id,
+            },
           },
-        })
-      : await tx.membership.create({
+        });
+        if (existingMembership) {
+          // Fail-closed: never update role (OWNER must not become STAFF).
+          throw new StaffInviteError(
+            "MEMBERSHIP_EXISTS",
+            "Bu hesap zaten organizasyon üyesi; davet kabul edilemez.",
+          );
+        }
+
+        const seatCount = await countStaffSeatsForLimit(tx, locked.organizationId);
+        // This open invite is included in seatCount — exclude it for the accept check.
+        const seatsExcludingThisInvite = Math.max(0, seatCount - 1);
+        assertCanonicalStaffLimitInTx(access, seatsExcludingThisInvite);
+
+        const membership = await tx.membership.create({
           data: {
-            organizationId: invite.organizationId,
+            organizationId: locked.organizationId,
             userId: user.id,
-            role: invite.role,
+            role: locked.role,
             status: MembershipStatus.ACTIVE,
             acceptedAt: new Date(),
           },
         });
 
-    const accepted = await tx.staffInvite.updateMany({
-      where: { id: invite.id, acceptedAt: null, revokedAt: null },
-      data: { acceptedAt: new Date() },
-    });
-    if (accepted.count !== 1) {
-      throw new StaffInviteError("ALREADY_ACCEPTED", "Davet zaten kabul edilmiş.");
-    }
-
-    await writeAuditLog(
-      {
-        organizationId: invite.organizationId,
-        userId: user.id,
-        action: "wexpay.staff_invite.accepted",
-        entityType: "StaffInvite",
-        entityId: invite.id,
-        source: "staff_invite",
-        metadata: sanitizeStaffInviteAuditMetadata({
-          role: invite.role,
-          tokenPrefix: invite.tokenPrefix,
-          membershipId: membership.id,
-        }),
-      },
-      tx,
-    );
-
-    // Best-effort: mark STAFF_INVITE step completed when at least one acceptance lands.
-    try {
-      const product = await tx.product.findFirst({
-        where: { key: "wexpay" },
-        select: { id: true },
-      });
-      if (product) {
-        const journey = await tx.activationJourney.findUnique({
-          where: {
-            organizationId_productId: {
-              organizationId: invite.organizationId,
-              productId: product.id,
-            },
-          },
+        const accepted = await tx.staffInvite.updateMany({
+          where: { id: locked.id, acceptedAt: null, revokedAt: null },
+          data: { acceptedAt: new Date() },
         });
-        if (journey && journey.status === "IN_PROGRESS") {
-          await completeActivationStepInTx(tx, {
-            journeyId: journey.id,
-            expectedVersion: journey.version,
-            stepKey: ActivationStepKey.STAFF_INVITE,
-            safeMetadata: { via: "invite_accept" },
-            advanceTo: ActivationStepKey.MENU_IMPORT,
-          });
+        if (accepted.count !== 1) {
+          throw new StaffInviteError("ALREADY_ACCEPTED", "Davet zaten kabul edilmiş.");
         }
-      }
-    } catch {
-      // Step completion is secondary to membership accept.
-    }
 
-    return {
-      membershipId: membership.id,
-      userId: user.id,
-      organizationId: invite.organizationId,
-    };
-  });
+        await writeAuditLog(
+          {
+            organizationId: locked.organizationId,
+            userId: user.id,
+            action: "wexpay.staff_invite.accepted",
+            entityType: "StaffInvite",
+            entityId: locked.id,
+            source: "staff_invite",
+            metadata: sanitizeStaffInviteAuditMetadata({
+              role: locked.role,
+              tokenPrefix: locked.tokenPrefix,
+              membershipId: membership.id,
+            }),
+          },
+          tx,
+        );
+
+        // Atomic wizard step update only when STAFF_INVITE is the active step.
+        const product = await tx.product.findFirst({
+          where: { key: "wexpay" },
+          select: { id: true },
+        });
+        if (product) {
+          const journey = await tx.activationJourney.findUnique({
+            where: {
+              organizationId_productId: {
+                organizationId: locked.organizationId,
+                productId: product.id,
+              },
+            },
+          });
+          if (
+            journey &&
+            journey.status === "IN_PROGRESS" &&
+            journey.currentStep === ActivationStepKey.STAFF_INVITE
+          ) {
+            await completeActivationStepInTx(tx, {
+              journeyId: journey.id,
+              expectedVersion: journey.version,
+              stepKey: ActivationStepKey.STAFF_INVITE,
+              safeMetadata: { via: "invite_accept" },
+              advanceTo: ActivationStepKey.MENU_IMPORT,
+            });
+          }
+        }
+
+        return {
+          membershipId: membership.id,
+          userId: user.id,
+          organizationId: locked.organizationId,
+          shouldCreateSession,
+        };
+      },
+      { timeout: 15_000 },
+    );
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 }
 
 export async function listOrganizationStaffInvites(organizationId: string) {

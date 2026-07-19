@@ -7,7 +7,7 @@ import { EXPECTED_PUBLIC_TABLE_COUNT } from "@/lib/wexon-db-backup-guards";
 assertLocalDbTestGuard(process.env);
 
 describe("ActivationFeeLedger RLS security (db)", () => {
-  it("public schema has 37 tables and ActivationFeeLedger RLS is enabled", async () => {
+  it("public schema has 38 tables and ActivationFeeLedger RLS is enabled", async () => {
     const tables = await prisma.$queryRaw<
       Array<{ table_name: string; rls: boolean }>
     >`
@@ -19,65 +19,65 @@ describe("ActivationFeeLedger RLS security (db)", () => {
     `;
 
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 37);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 38);
 
-    const ledger = tables.find((t) => t.table_name === "ActivationFeeLedger");
-    assert.ok(ledger, "ActivationFeeLedger must exist after migration");
-    assert.equal(ledger.rls, true);
-
-    for (const name of ["ActivationJourney", "ActivationJourneyStep", "TableQrToken"]) {
+    for (const name of [
+      "ActivationFeeLedger",
+      "ActivationJourney",
+      "ActivationJourneyStep",
+      "TableQrToken",
+      "StaffInvite",
+    ]) {
       const row = tables.find((t) => t.table_name === name);
       assert.ok(row, `${name} must exist`);
-      assert.equal(row.rls, true);
+      assert.equal(row!.rls, true);
     }
   });
 
-  it("denies anon/authenticated and keeps wexon_app NOLOGIN/NOBYPASSRLS with policy", async () => {
-    await prisma.$executeRawUnsafe(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-          CREATE ROLE anon NOLOGIN;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-          CREATE ROLE authenticated NOLOGIN;
-        END IF;
-      END $$;
-    `);
-    await prisma.$executeRawUnsafe(
-      `REVOKE ALL ON TABLE public."ActivationFeeLedger" FROM anon, authenticated`,
-    );
-
-    const priv = await prisma.$queryRaw<
-      Array<{
-        anon_select: boolean;
-        anon_insert: boolean;
-        anon_update: boolean;
-        anon_delete: boolean;
-        auth_select: boolean;
-        auth_insert: boolean;
-        auth_update: boolean;
-        auth_delete: boolean;
-      }>
-    >`
-      SELECT
-        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'SELECT') AS anon_select,
-        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'INSERT') AS anon_insert,
-        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'UPDATE') AS anon_update,
-        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'DELETE') AS anon_delete,
-        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'SELECT') AS auth_select,
-        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'INSERT') AS auth_insert,
-        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'UPDATE') AS auth_update,
-        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'DELETE') AS auth_delete
+  it("denies anon/authenticated privileges and keeps wexon_app NOLOGIN/NOBYPASSRLS (read-only catalog)", async () => {
+    // Roles are created before migrate in CI — never CREATE ROLE / REVOKE / GRANT here.
+    const roles = await prisma.$queryRaw<Array<{ rolname: string }>>`
+      SELECT rolname FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'wexon_app')
+      ORDER BY rolname
     `;
-    const p = priv[0];
-    assert.equal(p.anon_select, false);
-    assert.equal(p.anon_insert, false);
-    assert.equal(p.anon_update, false);
-    assert.equal(p.anon_delete, false);
-    assert.equal(p.auth_select, false);
-    assert.equal(p.auth_insert, false);
-    assert.equal(p.auth_update, false);
-    assert.equal(p.auth_delete, false);
+    const roleNames = new Set(roles.map((r) => r.rolname));
+    assert.ok(roleNames.has("anon"), "anon role must exist (create before migrate in CI)");
+    assert.ok(roleNames.has("authenticated"), "authenticated role must exist (create before migrate in CI)");
+    assert.ok(roleNames.has("wexon_app"), "wexon_app role must exist");
+
+    for (const table of ["ActivationFeeLedger", "StaffInvite"]) {
+      const priv = await prisma.$queryRawUnsafe<
+        Array<{
+          anon_select: boolean;
+          anon_insert: boolean;
+          anon_update: boolean;
+          anon_delete: boolean;
+          auth_select: boolean;
+          auth_insert: boolean;
+          auth_update: boolean;
+          auth_delete: boolean;
+        }>
+      >(
+        `SELECT
+          has_table_privilege('anon', 'public."${table}"', 'SELECT') AS anon_select,
+          has_table_privilege('anon', 'public."${table}"', 'INSERT') AS anon_insert,
+          has_table_privilege('anon', 'public."${table}"', 'UPDATE') AS anon_update,
+          has_table_privilege('anon', 'public."${table}"', 'DELETE') AS anon_delete,
+          has_table_privilege('authenticated', 'public."${table}"', 'SELECT') AS auth_select,
+          has_table_privilege('authenticated', 'public."${table}"', 'INSERT') AS auth_insert,
+          has_table_privilege('authenticated', 'public."${table}"', 'UPDATE') AS auth_update,
+          has_table_privilege('authenticated', 'public."${table}"', 'DELETE') AS auth_delete`,
+      );
+      const p = priv[0]!;
+      assert.equal(p.anon_select, false, `${table} anon SELECT`);
+      assert.equal(p.anon_insert, false, `${table} anon INSERT`);
+      assert.equal(p.anon_update, false, `${table} anon UPDATE`);
+      assert.equal(p.anon_delete, false, `${table} anon DELETE`);
+      assert.equal(p.auth_select, false, `${table} auth SELECT`);
+      assert.equal(p.auth_insert, false, `${table} auth INSERT`);
+      assert.equal(p.auth_update, false, `${table} auth UPDATE`);
+      assert.equal(p.auth_delete, false, `${table} auth DELETE`);
+    }
 
     const role = await prisma.$queryRaw<
       Array<{ rolcanlogin: boolean; rolbypassrls: boolean }>
@@ -87,8 +87,8 @@ describe("ActivationFeeLedger RLS security (db)", () => {
       WHERE rolname = 'wexon_app'
     `;
     assert.equal(role.length, 1);
-    assert.equal(role[0].rolcanlogin, false);
-    assert.equal(role[0].rolbypassrls, false);
+    assert.equal(role[0]!.rolcanlogin, false);
+    assert.equal(role[0]!.rolbypassrls, false);
 
     const policy = await prisma.$queryRaw<Array<{ polname: string }>>`
       SELECT pol.polname
@@ -101,7 +101,6 @@ describe("ActivationFeeLedger RLS security (db)", () => {
     `;
     assert.equal(policy.length, 1);
 
-    // Prisma postgres runtime can still use the table (no FORCE RLS).
     const count = await prisma.activationFeeLedger.count();
     assert.ok(Number.isFinite(count));
   });
