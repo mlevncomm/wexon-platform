@@ -70,6 +70,7 @@ async function runOnce(label) {
       "e2e/wexpay-table-qr.spec.ts",
       "e2e/wexpay-paytr-return-ux.spec.ts",
       "e2e/wexpay-activation-gate.spec.ts",
+      "e2e/wexpay-activation-wizard.spec.ts",
       "e2e/wexpay-opaque-qr.spec.ts",
       "--reporter=list",
     ],

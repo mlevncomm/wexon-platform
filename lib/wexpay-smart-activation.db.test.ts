@@ -566,7 +566,7 @@ describe("smart activation foundation (db)", () => {
     assert.ok((await resolvePublicTableByQr(legacyQr))?.allowed);
   });
 
-  it("public schema has 37 tables and full RLS/grants on new tables", async () => {
+  it("public schema has 38 tables and full RLS/grants on new tables", async () => {
     const tables = await prisma.$queryRaw<Array<{ table_name: string; rls: boolean }>>`
       SELECT c.relname AS table_name, c.relrowsecurity AS rls
       FROM pg_class c
@@ -575,7 +575,12 @@ describe("smart activation foundation (db)", () => {
       ORDER BY c.relname
     `;
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 37);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 38);
+    for (const name of ["ActivationJourney", "ActivationJourneyStep", "TableQrToken", "StaffInvite"]) {
+      const row = tables.find((t) => t.table_name === name);
+      assert.ok(row, `missing table ${name}`);
+      assert.equal(row!.rls, true);
+    }
 
     // Read-only catalog check — never CREATE ROLE / REVOKE / GRANT here.
     // CI creates anon/authenticated before migrate so migration revoke is real.
@@ -588,7 +593,7 @@ describe("smart activation foundation (db)", () => {
     assert.ok(roleNames.has("authenticated"), "authenticated role must exist (create before migrate in CI)");
     assert.ok(roleNames.has("wexon_app"), "wexon_app role must exist");
 
-    for (const name of ["ActivationJourney", "ActivationJourneyStep", "TableQrToken"]) {
+    for (const name of ["ActivationJourney", "ActivationJourneyStep", "TableQrToken", "StaffInvite"]) {
       const row = tables.find((t) => t.table_name === name);
       assert.ok(row, `${name} must exist`);
       assert.equal(row!.rls, true);

@@ -1,6 +1,7 @@
 import {
   ActivationJourneySource,
   ActivationJourneyStatus,
+  ActivationJourneyStepStatus,
   ActivationStepKey,
   type ActivationJourney,
   type ActivationJourneyStep,
@@ -482,3 +483,154 @@ export async function loadOrStartActivationJourneyView(input: {
     throw error;
   }
 }
+
+export type CompleteActivationStepInput = {
+  journeyId: string;
+  expectedVersion: number;
+  stepKey: ActivationStepKey;
+  safeMetadata?: Record<string, unknown>;
+  advanceTo?: ActivationStepKey;
+  markStatus?: ActivationJourneyStepStatus;
+};
+
+/**
+ * Optimistic concurrency: bumps journey.version only when expectedVersion matches.
+ * Marks step COMPLETED (or SKIPPED) and optionally advances currentStep.
+ */
+export async function completeActivationStepInTx(
+  tx: DbClient,
+  input: CompleteActivationStepInput,
+): Promise<ActivationJourneyWithSteps> {
+  const markStatus = input.markStatus ?? ActivationJourneyStepStatus.COMPLETED;
+  const now = new Date();
+
+  const bumped = await tx.activationJourney.updateMany({
+    where: {
+      id: input.journeyId,
+      version: input.expectedVersion,
+      status: { in: [ActivationJourneyStatus.IN_PROGRESS, ActivationJourneyStatus.BLOCKED] },
+    },
+    data: {
+      version: { increment: 1 },
+      ...(input.advanceTo ? { currentStep: input.advanceTo } : {}),
+      updatedAt: now,
+    },
+  });
+  if (bumped.count !== 1) {
+    throw new ActivationJourneyError(
+      "VERSION_CONFLICT",
+      "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+    );
+  }
+
+  const step = await tx.activationJourneyStep.findUnique({
+    where: {
+      journeyId_stepKey: {
+        journeyId: input.journeyId,
+        stepKey: input.stepKey,
+      },
+    },
+  });
+  if (!step) {
+    throw new ActivationJourneyError("STEP_MISSING", "Kurulum adımı bulunamadı.");
+  }
+
+  if (
+    step.status === ActivationJourneyStepStatus.COMPLETED ||
+    step.status === ActivationJourneyStepStatus.SKIPPED
+  ) {
+    // Idempotent: already done.
+  } else {
+    await tx.activationJourneyStep.update({
+      where: { id: step.id },
+      data: {
+        status: markStatus,
+        completedAt: now,
+        attemptCount: { increment: 1 },
+        lastErrorCode: null,
+        ...(input.safeMetadata
+          ? { safeMetadataJson: input.safeMetadata as Prisma.InputJsonValue }
+          : {}),
+      },
+    });
+  }
+
+  const journey = await tx.activationJourney.findUniqueOrThrow({
+    where: { id: input.journeyId },
+    include: { steps: { orderBy: { stepKey: "asc" } } },
+  });
+  return journey;
+}
+
+export async function assertJourneyWritableForActor(input: {
+  organizationId: string;
+  actorUserId: string;
+  expectedVersion: number;
+}): Promise<ActivationJourneyWithSteps> {
+  await assertSelfServeActorMembership(prisma, input.organizationId, input.actorUserId);
+  const journey = await getActivationJourneyForOrg(input.organizationId);
+  if (!journey) {
+    throw new ActivationJourneyError("NOT_STARTED", "Akıllı Aktivasyon henüz başlamadı.");
+  }
+  if (journey.source === ActivationJourneySource.LEGACY_BACKFILL && journey.status === ActivationJourneyStatus.ACTIVE) {
+    throw new ActivationJourneyError("LEGACY_ACTIVE", "Canlı kullanımda sihirbaz yeniden açılmaz.");
+  }
+  if (journey.status === ActivationJourneyStatus.ACTIVE) {
+    throw new ActivationJourneyError("ALREADY_ACTIVE", "Kurulum tamamlandı; sihirbaz kapalı.");
+  }
+  if (journey.status === ActivationJourneyStatus.CANCELLED) {
+    throw new ActivationJourneyError("CANCELLED", "Kurulum iptal edilmiş.");
+  }
+  if (journey.version !== input.expectedVersion) {
+    throw new ActivationJourneyError(
+      "VERSION_CONFLICT",
+      "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+    );
+  }
+  return journey;
+}
+
+export function computeWizardProgress(journey: ActivationJourneyWithSteps | null): {
+  completed: number;
+  total: number;
+  percent: number;
+  activeStep: ActivationStepKey | null;
+} {
+  if (!journey) {
+    return { completed: 0, total: ACTIVATION_STEP_ORDER.length, percent: 0, activeStep: null };
+  }
+  const completed = journey.steps.filter(
+    (s) =>
+      s.status === ActivationJourneyStepStatus.COMPLETED ||
+      s.status === ActivationJourneyStepStatus.SKIPPED,
+  ).length;
+  const total = ACTIVATION_STEP_ORDER.length;
+  const percent = Math.round((completed / total) * 100);
+  return {
+    completed,
+    total,
+    percent,
+    activeStep: journey.currentStep,
+  };
+}
+
+/** PR-2 wizard steps that are interactive. Later steps are upcoming/disabled. */
+export const PR2_WIZARD_STEPS: ActivationStepKey[] = [
+  ActivationStepKey.BUSINESS_PROFILE,
+  ActivationStepKey.BRANCH_SETUP,
+  ActivationStepKey.TABLE_SETUP,
+  ActivationStepKey.STAFF_INVITE,
+];
+
+export function isPr2WizardStep(step: ActivationStepKey): boolean {
+  return PR2_WIZARD_STEPS.includes(step);
+}
+
+export function maskTaxNoForAudit(taxNo: string | null | undefined): string | null {
+  if (!taxNo) return null;
+  const digits = taxNo.replace(/\s+/g, "");
+  if (digits.length <= 4) return `****${digits}`;
+  return `****${digits.slice(-4)}`;
+}
+
+export { ActivationJourneyStepStatus };

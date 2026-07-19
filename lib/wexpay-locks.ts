@@ -34,3 +34,13 @@ export async function lockWexPayTableAccount(tx: LockClient, tableId: string) {
 export async function lockWexPayOrgTableLimit(tx: LockClient, organizationId: string) {
   await advisoryXactLock(tx, "wexpay:org-tables", organizationId);
 }
+
+/** Serializes org-level branch entitlement checks. */
+export async function lockWexPayOrgBranchLimit(tx: LockClient, organizationId: string) {
+  await advisoryXactLock(tx, "wexpay:org-branches", organizationId);
+}
+
+/** Serializes org-level staff seat + pending invite entitlement checks. */
+export async function lockWexPayOrgStaffLimit(tx: LockClient, organizationId: string) {
+  await advisoryXactLock(tx, "wexpay:org-staff", organizationId);
+}

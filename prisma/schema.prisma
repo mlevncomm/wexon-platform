@@ -182,6 +182,12 @@ enum TableQrTokenStatus {
   REVOKED
 }
 
+enum StaffInviteDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 enum AppInstallationStatus {
   ACTIVE
   DISABLED
@@ -225,6 +231,7 @@ model Organization {
   activationFeeLedgers      ActivationFeeLedger[]
   activationJourneys        ActivationJourney[]
   appInstallations          AppInstallation[]
+  staffInvites              StaffInvite[]
   auditLogs                 AuditLog[]
   apiKeys                   ApiKey[]
   webhookEndpoints          WebhookEndpoint[]
@@ -250,6 +257,7 @@ model User {
   updatedAt          DateTime  @updatedAt
 
   memberships          Membership[]
+  createdStaffInvites  StaffInvite[] @relation("StaffInviteCreator")
   auditLogs            AuditLog[]
   apiKeys              ApiKey[]
   subscriptionPayments SubscriptionPayment[]
@@ -586,6 +594,35 @@ model ActivationJourneyStep {
   @@unique([journeyId, stepKey])
   @@index([journeyId])
   @@index([status])
+}
+
+/// Hashed staff invitation — raw token never stored. One open invite per org+email (partial unique).
+model StaffInvite {
+  id                    String                    @id @default(cuid())
+  organizationId        String
+  email                 String
+  role                  MembershipRole
+  tokenHash             String                    @unique
+  tokenPrefix           String
+  expiresAt             DateTime
+  acceptedAt            DateTime?
+  revokedAt             DateTime?
+  createdByUserId       String
+  deliveryStatus        StaffInviteDeliveryStatus @default(PENDING)
+  providerMessageId     String?
+  lastDeliveryErrorCode String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("StaffInviteCreator", fields: [createdByUserId], references: [id])
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([expiresAt])
+  @@index([deliveryStatus])
+  @@index([createdByUserId])
+  @@index([tokenPrefix])
 }
 
 model AppInstallation {
