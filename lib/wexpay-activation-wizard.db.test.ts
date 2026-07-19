@@ -182,8 +182,8 @@ describe("activation wizard security (db)", () => {
           organizationId: orgId,
           actorUserId: ownerId,
           expectedVersion: version,
-          restaurantName: "R",
-          branchName: "B",
+          restaurantName: "Restoran",
+          branchName: "Sube",
           branchAddress: "Addr 1",
         }),
       (err: unknown) =>

@@ -64,14 +64,15 @@ function looksLikeEmailFrom(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-function isHostedOrNodeProduction(env: NodeJS.ProcessEnv): boolean {
-  return env.VERCEL_ENV === "production" || (env.NODE_ENV === "production" && env.VERCEL_ENV !== "preview");
+function isHostedProductionEnv(env: NodeJS.ProcessEnv): boolean {
+  // Hosted Vercel production only — local `next start` (NODE_ENV=production) must still allow fake.
+  return env.VERCEL_ENV === "production";
 }
 
 /**
  * Resolve email transport.
  * Hosted production: only `resend` with explicit FROM + API key (no defaults, no fake).
- * Local/test: `fake` allowed (or default when not explicitly resend).
+ * Local/test/isolated E2E: `fake` allowed (or default when not explicitly resend).
  *
  * NOTE: invite create/resend/accept rate limits in lib/wexon-rate-limit.ts are
  * process-local (not distributed across Vercel isolates).
@@ -83,7 +84,7 @@ export function resolveEmailTransportConfig(
   const fromRaw = (env.WEXON_EMAIL_FROM ?? "").trim();
   const replyTo = (env.WEXON_EMAIL_REPLY_TO ?? "").trim() || null;
   const apiKey = (env.RESEND_API_KEY ?? "").trim();
-  const production = isHostedOrNodeProduction(env);
+  const production = isHostedProductionEnv(env);
 
   if (production) {
     if (providerRaw === "fake") {

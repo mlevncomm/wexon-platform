@@ -16,7 +16,7 @@ import {
   sendTransactionalEmail,
 } from "@/lib/wexon-email";
 import { hashPassword } from "@/lib/wexon-passwords";
-import { isHostedProduction } from "@/lib/wexon-production-guards";
+import { isHostedProduction, getE2eTarget } from "@/lib/wexon-production-guards";
 import { lockWexPayOrgStaffLimit } from "@/lib/wexpay-locks";
 import { completeActivationStepInTx } from "@/lib/wexpay-activation-journey";
 import {
@@ -310,9 +310,14 @@ export async function createStaffInvite(input: {
   });
 
   const config = resolveEmailTransportConfig();
-  const production = isHostedProduction() || process.env.NODE_ENV === "production";
+  // Preview link only for non-hosted environments with fake adapter (local/CI isolated).
+  // Do not key on NODE_ENV alone — `next start` sets production locally.
   const oneTimeInviteUrl =
-    !production && config.ready && config.provider === "fake" && send.ok
+    !isHostedProduction() &&
+    getE2eTarget() !== "production" &&
+    config.ready &&
+    config.provider === "fake" &&
+    send.ok
       ? content.inviteUrl
       : null;
 

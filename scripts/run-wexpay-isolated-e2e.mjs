@@ -47,6 +47,7 @@ function isolatedEnv() {
     SMOKE_PORT: port,
     WEXPAY_PAYTR_ENABLE_API: "false",
     WEXON_E2E_RELAX_RATE_LIMIT: "true",
+    WEXON_EMAIL_PROVIDER: "fake",
     NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
   };
 }
