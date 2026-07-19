@@ -5,6 +5,7 @@ import { calculateTableAccount, filterTableSessionRecords } from "@/lib/wexpay-a
 import { generatePaytrMerchantOid, loadPaytrCredentialBundle } from "@/lib/wexpay-paytr-adapter";
 import { lockWexPayTableAccount } from "@/lib/wexpay-locks";
 import { resolveWexPayPaymentProvider } from "@/lib/wexpay-payment-provider";
+import { buildPublicQrAuditReference } from "@/lib/wexpay-public-qr-audit";
 import type { TenantDb } from "@/lib/wexpay-tenant";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
 
@@ -15,16 +16,16 @@ export class WexPayPublicCheckoutUnavailableError extends Error {
   }
 }
 
-function buildPublicCheckoutRedirectUrls(qrCode: string, paymentId: string) {
+export function buildPublicCheckoutRedirectUrls(publicPath: string, paymentId: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
   if (!appUrl) {
     throw new WexPayValidationError("Uygulama URL yapılandırması eksik.");
   }
-  const encoded = encodeURIComponent(qrCode);
+  const path = publicPath.startsWith("/") ? publicPath : `/${publicPath}`;
   const paymentQuery = `&paymentId=${encodeURIComponent(paymentId)}`;
   return {
-    successUrl: `${appUrl}/wexpay/t/${encoded}?paytr=success${paymentQuery}`,
-    failUrl: `${appUrl}/wexpay/t/${encoded}?paytr=failed${paymentQuery}`,
+    successUrl: `${appUrl}${path}?paytr=success${paymentQuery}`,
+    failUrl: `${appUrl}${path}?paytr=failed${paymentQuery}`,
   };
 }
 
@@ -232,7 +233,7 @@ async function resolvePaytrCheckoutIntent(input: {
   tableId: string;
   orderId: string | null;
   amount: number;
-  qrCode: string;
+  publicPath: string;
   paymentId: string;
   providerRef: string;
   ipAddress: string | null;
@@ -247,7 +248,7 @@ async function resolvePaytrCheckoutIntent(input: {
     currency: "TRY",
     clientIp: input.ipAddress,
     existingProviderRef: input.providerRef,
-    checkoutRedirect: buildPublicCheckoutRedirectUrls(input.qrCode, input.paymentId),
+    checkoutRedirect: buildPublicCheckoutRedirectUrls(input.publicPath, input.paymentId),
   });
 
   if (!intent.externalCheckoutUrl) {
@@ -261,7 +262,11 @@ export async function createPublicCheckoutPayment(input: {
   organizationId: string;
   branchId: string;
   tableId: string;
-  qrCode: string;
+  /** Guest return path (/wexpay/t/... or /q/...). Never logged as opaque secret. */
+  publicPath: string;
+  keyKind: "legacy" | "opaque";
+  tokenId?: string;
+  tokenPrefix?: string;
   orderId?: string | null;
   ipAddress: string | null;
 }) {
@@ -378,14 +383,17 @@ export async function createPublicCheckoutPayment(input: {
         entityId: payment.id,
         ipAddress: input.ipAddress,
         source: "wexpay_public",
-        metadata: {
-          qrCode: input.qrCode,
-          branchId: input.branchId,
+        metadata: buildPublicQrAuditReference({
+          keyKind: input.keyKind,
+          publicKey: input.publicPath,
           tableId: table.id,
+          branchId: input.branchId,
+          tokenId: input.tokenId,
+          tokenPrefix: input.tokenPrefix,
           orderId,
           amount,
           providerRef,
-        },
+        }),
       },
       tx,
     );
@@ -406,7 +414,7 @@ export async function createPublicCheckoutPayment(input: {
       tableId: input.tableId,
       orderId: locked.orderId,
       amount: locked.amount,
-      qrCode: input.qrCode,
+      publicPath: input.publicPath,
       paymentId: locked.paymentId,
       providerRef: locked.providerRef,
       ipAddress: input.ipAddress,

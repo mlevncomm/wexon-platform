@@ -20,6 +20,8 @@ import {
   getCustomerDashboardData,
 } from "@/lib/wexon-core-dashboard";
 import { wexpayHref } from "@/lib/wexon-organization-context";
+import { loadOrStartActivationJourneyView } from "@/lib/wexpay-activation-journey";
+import { getCustomerSession } from "@/lib/wexon-customer-auth";
 
 type DashboardSearchParams = Promise<{ organizationId?: string; organizationSlug?: string; checkout?: string }>;
 
@@ -53,6 +55,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
   const hasPendingOnboarding = onboarding?.onboardingStatus === "PENDING_SETUP";
   const hasWexPayAccess = wexPayAccess?.allowed === true;
   const wexpayAppHref = wexpayHref("/apps/wexpay", organizationContext.organizationId);
+
+  const customerSession = await getCustomerSession();
+  const activationView = hasWexPayAccess
+    ? await loadOrStartActivationJourneyView({
+        organizationId: organization.id,
+        actorUserId: customerSession?.userId ?? null,
+      })
+    : null;
   const todoItems = [
     {
       title: "Bağlı restoran ekleyin",
@@ -138,7 +148,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
           </p>
         </div>
       )}
-      {!isCheckoutSuccess && hasPendingOnboarding && (
+      {!isCheckoutSuccess && hasPendingOnboarding && !activationView && (
         <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-black text-slate-950">WexPay kurulum süreci devam ediyor.</p>
           <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
@@ -147,6 +157,45 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
           </p>
         </div>
       )}
+
+      {activationView && (
+        <div
+          className={
+            activationView.setupMode
+              ? "rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 shadow-sm"
+              : "rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm"
+          }
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-current/70">Akıllı Aktivasyon</p>
+              <p className="mt-1 text-sm font-black">
+                {activationView.setupMode ? "Kurulum Modu" : "Canlı Kullanım"}
+              </p>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-current/80">
+                {activationView.setupMode
+                  ? "WexPay çalışma alanınız kurulum için açık. Canlı QR, misafir sipariş ve ödeme Canlıya Geçiş tamamlanana kadar kapalıdır."
+                  : "Akıllı Aktivasyon tamamlandı. Public QR ve sipariş akışları canlıdır."}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white/70 px-3 py-2 text-xs font-bold text-slate-800">
+              {activationView.statusLabel}
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <DashboardInfoRow label="Durum" value={activationView.statusLabel} />
+            <DashboardInfoRow
+              label="Kaynak"
+              value={activationView.sourceLabel ?? "—"}
+            />
+            <DashboardInfoRow
+              label="Adım"
+              value={activationView.currentStepLabel ?? "—"}
+            />
+          </div>
+        </div>
+      )}
+
       {!organization.isActive && <DashboardAccountStatusNotice />}
 
       <DashboardKpiGrid>

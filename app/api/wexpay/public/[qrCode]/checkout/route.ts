@@ -10,8 +10,9 @@ import {
   getPublicCheckoutPaymentStatus,
   WexPayPublicCheckoutUnavailableError,
 } from "@/lib/wexpay-public-checkout";
+import { buildPublicQrAuditReference, inferPublicQrKeyKind } from "@/lib/wexpay-public-qr-audit";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
-import { resolvePublicTableByQr } from "@/lib/wexpay-read";
+import { resolvePublicTableByPublicKey } from "@/lib/wexpay-read";
 
 /**
  * PUBLIC QR PayTR checkout -> POST /api/wexpay/public/[qrCode]/checkout.
@@ -34,7 +35,7 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
 
   let resolution;
   try {
-    resolution = await resolvePublicTableByQr(qrCode);
+    resolution = await resolvePublicTableByPublicKey(qrCode);
   } catch {
     return Response.json(
       { error: "Servis geçici olarak kullanılamıyor.", reason: "service_unavailable" },
@@ -69,7 +70,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
 
   let resolution;
   try {
-    resolution = await resolvePublicTableByQr(qrCode);
+    resolution = await resolvePublicTableByPublicKey(qrCode);
   } catch {
     return Response.json(
       { error: "Servis geçici olarak kullanılamıyor.", reason: "service_unavailable" },
@@ -83,7 +84,10 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       level: "WARN",
       source: "public_qr",
       ipAddress,
-      metadata: { qrCode },
+      metadata: buildPublicQrAuditReference({
+        publicKey: qrCode,
+        keyKind: inferPublicQrKeyKind(qrCode),
+      }),
     });
     return Response.json({ error: "Masa bulunamadı." }, { status: 404 });
   }
@@ -95,7 +99,13 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       organizationId: resolution.organizationId,
       source: "public_qr",
       ipAddress,
-      metadata: { qrCode, tableId: resolution.table.id },
+      metadata: buildPublicQrAuditReference({
+        publicKey: qrCode,
+        keyKind: resolution.keyKind,
+        tableId: resolution.table.id,
+        tokenId: resolution.tokenId,
+        tokenPrefix: resolution.tokenPrefix,
+      }),
     });
     return Response.json({ error: "Bu işletme şu anda QR ödeme kabul etmiyor.", reason: "access_closed" }, { status: 403 });
   }
@@ -122,7 +132,10 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       organizationId: resolution.organizationId,
       branchId: resolution.branch.id,
       tableId: resolution.table.id,
-      qrCode,
+      publicPath: resolution.publicPath,
+      keyKind: resolution.keyKind,
+      tokenId: resolution.tokenId,
+      tokenPrefix: resolution.tokenPrefix,
       orderId,
       ipAddress,
     });
@@ -145,7 +158,13 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
         organizationId: resolution.organizationId,
         source: "public_qr",
         ipAddress,
-        metadata: { qrCode, tableId: resolution.table.id },
+        metadata: buildPublicQrAuditReference({
+          publicKey: qrCode,
+          keyKind: resolution.keyKind,
+          tableId: resolution.table.id,
+          tokenId: resolution.tokenId,
+          tokenPrefix: resolution.tokenPrefix,
+        }),
       });
       const unavailable = { error: error.message, reason: "checkout_unavailable" as const };
       // Cache unavailable decisions briefly so double-submit does not spawn parallel intents.

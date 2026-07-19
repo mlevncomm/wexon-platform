@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildOpaquePublicQrPath,
   buildPublicTableQrPath,
   buildPublicTableQrUrl,
   buildTableQrDownloadBasename,
@@ -25,6 +26,14 @@ describe("buildPublicTableQrPath", () => {
     assert.throws(() => buildPublicTableQrPath(""), WexPayPublicTableUrlError);
     assert.throws(() => buildPublicTableQrPath("../evil"), WexPayPublicTableUrlError);
     assert.throws(() => buildPublicTableQrPath("a/b"), WexPayPublicTableUrlError);
+  });
+});
+
+describe("buildOpaquePublicQrPath", () => {
+  it("builds /q/{token} without tenant ids", () => {
+    const path = buildOpaquePublicQrPath("AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_");
+    assert.equal(path, "/q/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_");
+    assert.ok(!path.includes("organizationId"));
   });
 });
 

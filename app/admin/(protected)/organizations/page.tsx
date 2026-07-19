@@ -3,10 +3,24 @@ import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStat
 import { AdminActionNotice, AdminFormPanel, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
 import { createAdminOrganizationAction, deactivateAdminOrganizationAction, reactivateAdminOrganizationAction } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminStatus, getAdminOrganizationsData } from "@/lib/wexon-admin";
+import { prisma } from "@/lib/prisma";
+import { buildActivationJourneyView, WEXPAY_PRODUCT_KEY } from "@/lib/wexpay-activation-journey";
 
 export default async function AdminOrganizationsPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
   const { adminError } = await searchParams;
-  const organizations = await getAdminOrganizationsData();
+  const [organizations, activationJourneys] = await Promise.all([
+    getAdminOrganizationsData(),
+    prisma.activationJourney.findMany({
+      where: { product: { key: WEXPAY_PRODUCT_KEY } },
+      include: { steps: true, organization: { select: { id: true, name: true } } },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    }),
+  ]);
+
+  const journeyByOrg = new Map(
+    activationJourneys.map((journey) => [journey.organizationId, buildActivationJourneyView(journey)]),
+  );
 
   return (
     <div className="space-y-8">
@@ -18,6 +32,35 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
         />
       </div>
       {adminError && <AdminActionNotice tone="error">{adminError}</AdminActionNotice>}
+
+      {activationJourneys.length > 0 ? (
+        <AdminPanel>
+          <AdminSectionTitle
+            badge="Akıllı Aktivasyon"
+            title="Aktivasyon yolculukları"
+            description="Read-only liste. Kurulum Modu / Canlıya Geçiş durumunu müşteri detayından inceleyin."
+          />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {activationJourneys.slice(0, 12).map((journey) => {
+              const view = buildActivationJourneyView(journey);
+              return (
+                <Link
+                  key={journey.id}
+                  href={`/admin/organizations/${journey.organizationId}`}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-emerald-300 hover:bg-white"
+                >
+                  <p className="text-sm font-black text-slate-950">{journey.organization.name}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {view.statusLabel}
+                    {view.setupMode ? " · Kurulum Modu" : " · Canlı Kullanım"}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">{view.sourceLabel}</p>
+                </Link>
+              );
+            })}
+          </div>
+        </AdminPanel>
+      ) : null}
 
       <AdminFormPanel
         title="Yeni müşteri oluştur"
@@ -60,6 +103,13 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
                   <AdminInfoRow label="Aktif ürün" value={license?.product.name ?? "-"} />
                   <AdminInfoRow label="Paket" value={license ? displayPlanName(license.plan.name) : "-"} />
                   <AdminInfoRow label="Lisans" value={license ? formatAdminStatus(license.status) : "-"} />
+                  <AdminInfoRow
+                    label="Akıllı Aktivasyon"
+                    value={
+                      journeyByOrg.get(organization.id)?.statusLabel ??
+                      "Başlamadı"
+                    }
+                  />
                   <AdminInfoRow label="İşletme" value={organization.restaurants.length} />
                 </div>
                 <Link href={`/admin/organizations/${organization.id}`} className="mt-5 inline-flex rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white">

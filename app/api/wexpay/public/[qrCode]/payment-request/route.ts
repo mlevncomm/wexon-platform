@@ -4,7 +4,8 @@ import {
   enforcePublicAssistTableCooldown,
   enforcePublicQrIpRateLimit,
 } from "@/lib/wexpay-public-rate-limit";
-import { resolvePublicTableByQr } from "@/lib/wexpay-read";
+import { buildPublicQrAuditReference } from "@/lib/wexpay-public-qr-audit";
+import { resolvePublicTableByPublicKey } from "@/lib/wexpay-read";
 import { createPublicTableAssistNotification } from "@/lib/wexpay-service";
 import { validatePublicNote } from "@/lib/wexpay-validation";
 
@@ -23,7 +24,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
   if (!limited.ok) return limited.response;
   const ipAddress = limited.ipAddress;
 
-  const resolution = await resolvePublicTableByQr(qrCode);
+  const resolution = await resolvePublicTableByPublicKey(qrCode);
   if (!resolution) {
     return Response.json({ error: "Masa bulunamadı." }, { status: 404 });
   }
@@ -78,7 +79,13 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
       organizationId: resolution.organizationId,
       source: "public_qr",
       ipAddress,
-      metadata: { qrCode },
+      metadata: buildPublicQrAuditReference({
+        publicKey: qrCode,
+        keyKind: resolution.keyKind,
+        tableId: resolution.table.id,
+        tokenId: resolution.tokenId,
+        tokenPrefix: resolution.tokenPrefix,
+      }),
     });
     return wexpayApiErrorResponse(error, {
       organizationId: resolution.organizationId,

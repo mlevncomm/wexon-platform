@@ -746,6 +746,102 @@ async function main() {
     },
   });
 
+  // Isolated E2E fixtures are created AFTER migrations, so legacy backfill does not
+  // cover them. Seed an ACTIVE journey so public QR/order stays open without
+  // relaxing the production public-live gate.
+  const stepKeys = [
+    "BUSINESS_PROFILE",
+    "BRANCH_SETUP",
+    "TABLE_SETUP",
+    "STAFF_INVITE",
+    "MENU_IMPORT",
+    "PAYMENT_PROVIDER",
+    "VALIDATION",
+    "GO_LIVE",
+  ];
+  const existingJourney = await prisma.activationJourney.findUnique({
+    where: {
+      organizationId_productId: {
+        organizationId: organization.id,
+        productId: product.id,
+      },
+    },
+    select: { id: true },
+  });
+  if (existingJourney) {
+    await prisma.activationJourney.update({
+      where: { id: existingJourney.id },
+      data: {
+        status: "ACTIVE",
+        source: "LEGACY_BACKFILL",
+        currentStep: "GO_LIVE",
+        completedAt: now,
+        blockedReasonCode: null,
+      },
+    });
+    for (const stepKey of stepKeys) {
+      await prisma.activationJourneyStep.upsert({
+        where: {
+          journeyId_stepKey: { journeyId: existingJourney.id, stepKey },
+        },
+        update: {
+          status: ["STAFF_INVITE", "MENU_IMPORT"].includes(stepKey) ? "SKIPPED" : "COMPLETED",
+          completedAt: now,
+          lastErrorCode: null,
+        },
+        create: {
+          journeyId: existingJourney.id,
+          stepKey,
+          status: ["STAFF_INVITE", "MENU_IMPORT"].includes(stepKey) ? "SKIPPED" : "COMPLETED",
+          attemptCount: 0,
+          completedAt: now,
+        },
+      });
+    }
+  } else {
+    await prisma.activationJourney.create({
+      data: {
+        organizationId: organization.id,
+        productId: product.id,
+        status: "ACTIVE",
+        source: "LEGACY_BACKFILL",
+        currentStep: "GO_LIVE",
+        completedAt: now,
+        version: 1,
+        steps: {
+          create: stepKeys.map((stepKey) => ({
+            stepKey,
+            status: ["STAFF_INVITE", "MENU_IMPORT"].includes(stepKey) ? "SKIPPED" : "COMPLETED",
+            attemptCount: 0,
+            completedAt: now,
+          })),
+        },
+      },
+    });
+  }
+
+  await prisma.activationFeeLedger.upsert({
+    where: {
+      organizationId_productId: {
+        organizationId: organization.id,
+        productId: product.id,
+      },
+    },
+    update: {
+      status: "WAIVED_LEGACY",
+      activationFeeMinor: 0,
+      waivedReason: "isolated_e2e_seed",
+    },
+    create: {
+      organizationId: organization.id,
+      productId: product.id,
+      planId: plan.id,
+      status: "WAIVED_LEGACY",
+      activationFeeMinor: 0,
+      waivedReason: "isolated_e2e_seed",
+    },
+  });
+
   await prisma.auditLog.deleteMany({
     where: {
       organizationId: organization.id,
