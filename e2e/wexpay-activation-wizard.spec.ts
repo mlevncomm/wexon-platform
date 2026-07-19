@@ -225,9 +225,7 @@ test.describe.serial("WexPay activation wizard flow", () => {
       await bare.close();
 
       await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
-      await expect(
-        page.getByRole("heading", { name: /Kurulum sihirbazı|4\. Personel|Sonraki adımlar/ }),
-      ).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Kurulum sihirbazı" })).toBeVisible();
 
       await prisma.user.delete({ where: { id: existingUser.id } }).catch(() => undefined);
     } finally {
