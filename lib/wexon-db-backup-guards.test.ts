@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  assertCurrentSchemaPublicTableCount,
   classifyRecoveryBackup,
   compareRowCountManifests,
   connectionUrlToLibpqEnv,
+  evaluateActivationFeeLedgerRls,
   evaluatePgDumpVersionGate,
+  evaluateRestoreTableCountContract,
   evaluateRestoreTargetGuard,
+  EXPECTED_PUBLIC_TABLE_COUNT,
+  HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER,
   parsePostgresMajorVersion,
   RECOVERY_STATUS,
   sanitizeBackupLog,
@@ -17,6 +22,85 @@ describe("parsePostgresMajorVersion", () => {
     assert.equal(parsePostgresMajorVersion("pg_dump (PostgreSQL) 17.10"), 17);
     assert.equal(parsePostgresMajorVersion("pg_dump (PostgreSQL) 16.4"), 16);
     assert.equal(parsePostgresMajorVersion("bogus"), null);
+  });
+});
+
+describe("current schema table count", () => {
+  it("expects 34 public tables after ActivationFeeLedger", () => {
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 34);
+    assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER, 33);
+    assert.equal(assertCurrentSchemaPublicTableCount(34).ok, true);
+    assert.equal(assertCurrentSchemaPublicTableCount(33).ok, false);
+  });
+
+  it("accepts a current 34-table manifest contract", () => {
+    const rowCounts = Object.fromEntries(
+      Array.from({ length: 34 }, (_, i) => [`T${i}`, i]),
+    );
+    const ok = evaluateRestoreTableCountContract({
+      restoredTableCount: 34,
+      manifest: { tableCount: 34, rowCounts },
+    });
+    assert.equal(ok.ok, true);
+  });
+
+  it("accepts a historical 33-table manifest + 33 restored tables", () => {
+    const rowCounts = Object.fromEntries(
+      Array.from({ length: 33 }, (_, i) => [`H${i}`, i]),
+    );
+    const ok = evaluateRestoreTableCountContract({
+      restoredTableCount: 33,
+      manifest: { tableCount: 33, rowCounts },
+    });
+    assert.equal(ok.ok, true);
+  });
+
+  it("rejects manifest 33 vs restore 34", () => {
+    const rowCounts = Object.fromEntries(
+      Array.from({ length: 33 }, (_, i) => [`H${i}`, i]),
+    );
+    const bad = evaluateRestoreTableCountContract({
+      restoredTableCount: 34,
+      manifest: { tableCount: 33, rowCounts },
+    });
+    assert.equal(bad.ok, false);
+  });
+
+  it("rejects when manifest tableCount differs from rowCounts keys", () => {
+    const bad = evaluateRestoreTableCountContract({
+      restoredTableCount: 33,
+      manifest: { tableCount: 33, rowCounts: { A: 1, B: 2 } },
+    });
+    assert.equal(bad.ok, false);
+  });
+
+  it("rejects missing or corrupt manifests", () => {
+    assert.equal(
+      evaluateRestoreTableCountContract({ restoredTableCount: 34, manifest: null }).ok,
+      false,
+    );
+    assert.equal(
+      evaluateRestoreTableCountContract({
+        restoredTableCount: 34,
+        manifest: { tableCount: 34 },
+      }).ok,
+      false,
+    );
+  });
+
+  it("rejects ActivationFeeLedger without RLS", () => {
+    assert.equal(
+      evaluateActivationFeeLedgerRls({ present: true, relrowsecurity: false }).ok,
+      false,
+    );
+    assert.equal(
+      evaluateActivationFeeLedgerRls({ present: true, relrowsecurity: true }).ok,
+      true,
+    );
+    assert.equal(
+      evaluateActivationFeeLedgerRls({ present: false, relrowsecurity: false }).ok,
+      true,
+    );
   });
 });
 

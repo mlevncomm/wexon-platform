@@ -328,3 +328,28 @@ CROSS JOIN "Product" p
 WHERE o."isDemo" = true
   AND p.key = 'wexpay'
 ON CONFLICT ("organizationId", "productId") DO NOTHING;
+
+-- Security parity with existing public tables (deny-by-default for PostgREST roles).
+-- Do NOT FORCE RLS — Prisma `postgres` runtime must keep working without policies.
+ALTER TABLE public."ActivationFeeLedger" ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    EXECUTE 'REVOKE ALL ON TABLE public."ActivationFeeLedger" FROM anon';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    EXECUTE 'REVOKE ALL ON TABLE public."ActivationFeeLedger" FROM authenticated';
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wexon_app') THEN
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public."ActivationFeeLedger" TO wexon_app';
+    EXECUTE 'DROP POLICY IF EXISTS wexon_app_all ON public."ActivationFeeLedger"';
+    EXECUTE 'CREATE POLICY wexon_app_all ON public."ActivationFeeLedger" FOR ALL TO wexon_app USING (true) WITH CHECK (true)';
+  END IF;
+END
+$$;
