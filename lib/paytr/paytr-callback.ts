@@ -8,8 +8,11 @@ import {
   PaytrSubscriptionError,
 } from "@/lib/paytr/paytr-client";
 import type { PaytrCallbackFields } from "@/lib/paytr/paytr-types";
-import { releaseActivationFeeReservation, ActivationFeeError } from "@/lib/wexon-activation-fee";
-import { settleActivationFeeAfterSubscriptionPaid } from "@/lib/paytr/paytr-subscription-checkout";
+import {
+  ActivationFeeError,
+  markActivationFeePaid,
+  releaseActivationFeeReservation,
+} from "@/lib/wexon-activation-fee";
 
 function asJson(value: Record<string, unknown>): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
@@ -61,7 +64,6 @@ export function verifyOptionalCallbackSecret(request: Request): boolean {
     request.headers.get("x-paytr-callback-secret")?.trim() ||
     "";
   if (!provided || provided.length !== expected.length) return false;
-  // Simple constant-ish compare for optional extra guard (hash remains primary).
   let mismatch = 0;
   for (let i = 0; i < expected.length; i += 1) {
     mismatch |= expected.charCodeAt(i) ^ provided.charCodeAt(i);
@@ -76,7 +78,30 @@ function callbackEventId(fields: PaytrCallbackFields) {
     .slice(0, 32);
 }
 
-async function activateSubscriptionFromPayment(paymentId: string) {
+type Tx = Prisma.TransactionClient;
+
+async function settleActivationFeeForPayment(
+  tx: Tx,
+  payment: {
+    id: string;
+    organizationId: string;
+    activationFeeAmountMinor: number | null;
+    plan: { productId: string };
+  },
+) {
+  await markActivationFeePaid(tx, {
+    organizationId: payment.organizationId,
+    productId: payment.plan.productId,
+    subscriptionPaymentId: payment.id,
+    activationFeeAmountMinor: payment.activationFeeAmountMinor,
+  });
+}
+
+/**
+ * Idempotent subscription activation from a PAID SubscriptionPayment.
+ * Safe to retry when payment.subscriptionId is still null after a partial failure.
+ */
+export async function activateSubscriptionFromPayment(paymentId: string) {
   const payment = await prisma.subscriptionPayment.findUnique({
     where: { id: paymentId },
     include: { plan: { include: { product: true } }, organization: true },
@@ -90,37 +115,106 @@ async function activateSubscriptionFromPayment(paymentId: string) {
   const now = new Date();
   const periodEnd = addPeriod(now, payment.billingInterval);
   const product = payment.plan.product;
+  const invoiceNo = `INV-PAYTR-${payment.merchantOid}`.slice(0, 64);
 
   return prisma.$transaction(async (tx) => {
-    const existingActive = await tx.license.findFirst({
+    // Re-check inside tx to avoid races between concurrent callbacks.
+    const fresh = await tx.subscriptionPayment.findUnique({ where: { id: payment.id } });
+    if (!fresh || fresh.status !== "PAID") return null;
+    if (fresh.subscriptionId) {
+      return tx.subscription.findUnique({ where: { id: fresh.subscriptionId } });
+    }
+
+    const byProviderRef = await tx.subscription.findFirst({
+      where: {
+        organizationId: payment.organizationId,
+        provider: "paytr",
+        providerRef: payment.merchantOid,
+      },
+    });
+    if (byProviderRef) {
+      await tx.subscriptionPayment.update({
+        where: { id: payment.id },
+        data: { subscriptionId: byProviderRef.id },
+      });
+      await tx.appInstallation.upsert({
+        where: {
+          organizationId_productId: {
+            organizationId: payment.organizationId,
+            productId: product.id,
+          },
+        },
+        update: {
+          status: "ACTIVE",
+          licenseId: byProviderRef.licenseId,
+          settingsJson: {
+            onboardingStatus: "PENDING_SETUP",
+            source: "paytr_subscription_checkout",
+          },
+        },
+        create: {
+          organizationId: payment.organizationId,
+          productId: product.id,
+          licenseId: byProviderRef.licenseId,
+          status: "ACTIVE",
+          settingsJson: {
+            onboardingStatus: "PENDING_SETUP",
+            source: "paytr_subscription_checkout",
+          },
+        },
+      });
+      return byProviderRef;
+    }
+
+    let license = await tx.license.findFirst({
       where: {
         organizationId: payment.organizationId,
         productId: product.id,
         status: "ACTIVE",
       },
     });
-    if (existingActive) {
-      const existingSub = await tx.subscription.findUnique({ where: { licenseId: existingActive.id } });
+
+    if (license) {
+      const existingSub = await tx.subscription.findUnique({ where: { licenseId: license.id } });
       if (existingSub) {
         await tx.subscriptionPayment.update({
           where: { id: payment.id },
           data: { subscriptionId: existingSub.id },
         });
+        await tx.appInstallation.upsert({
+          where: {
+            organizationId_productId: {
+              organizationId: payment.organizationId,
+              productId: product.id,
+            },
+          },
+          update: { status: "ACTIVE", licenseId: license.id },
+          create: {
+            organizationId: payment.organizationId,
+            productId: product.id,
+            licenseId: license.id,
+            status: "ACTIVE",
+            settingsJson: {
+              onboardingStatus: "PENDING_SETUP",
+              source: "paytr_subscription_checkout",
+            },
+          },
+        });
         return existingSub;
       }
+    } else {
+      license = await tx.license.create({
+        data: {
+          organizationId: payment.organizationId,
+          productId: product.id,
+          planId: payment.planId,
+          status: "ACTIVE",
+          licenseType: payment.billingInterval === "YEARLY" ? "YEARLY" : "MONTHLY",
+          startsAt: now,
+          endsAt: periodEnd,
+        },
+      });
     }
-
-    const license = await tx.license.create({
-      data: {
-        organizationId: payment.organizationId,
-        productId: product.id,
-        planId: payment.planId,
-        status: "ACTIVE",
-        licenseType: payment.billingInterval === "YEARLY" ? "YEARLY" : "MONTHLY",
-        startsAt: now,
-        endsAt: periodEnd,
-      },
-    });
 
     const subscription = await tx.subscription.create({
       data: {
@@ -144,36 +238,49 @@ async function activateSubscriptionFromPayment(paymentId: string) {
         : taxMinor > 0
           ? Math.round(totalMajor / (1 + (payment.taxRatePct || 20) / 100))
           : totalMajor;
-    const taxMajor = payment.taxAmountMinor != null ? payment.taxAmountMinor / 100 : Math.max(0, totalMajor - subtotalMajor);
+    const taxMajor =
+      payment.taxAmountMinor != null ? payment.taxAmountMinor / 100 : Math.max(0, totalMajor - subtotalMajor);
 
-    const invoice = await tx.invoice.create({
-      data: {
-        organizationId: payment.organizationId,
-        subscriptionId: subscription.id,
-        invoiceNo: `INV-PAYTR-${payment.merchantOid}`.slice(0, 64),
-        status: "PAID",
-        subtotal: subtotalMajor,
-        tax: taxMajor,
-        total: totalMajor,
-        currency: payment.currency,
-        issuedAt: now,
-        paidAt: now,
-      },
-    });
+    const existingInvoice = await tx.invoice.findUnique({ where: { invoiceNo } });
+    const invoice =
+      existingInvoice ??
+      (await tx.invoice.create({
+        data: {
+          organizationId: payment.organizationId,
+          subscriptionId: subscription.id,
+          invoiceNo,
+          status: "PAID",
+          subtotal: subtotalMajor,
+          tax: taxMajor,
+          total: totalMajor,
+          currency: payment.currency,
+          issuedAt: now,
+          paidAt: now,
+        },
+      }));
 
-    await tx.billingPayment.create({
-      data: {
+    const existingBilling = await tx.billingPayment.findFirst({
+      where: {
         organizationId: payment.organizationId,
-        subscriptionId: subscription.id,
-        invoiceId: invoice.id,
-        amount: payment.amount,
-        currency: payment.currency,
-        status: "PAID",
         provider: "paytr",
         providerRef: payment.merchantOid,
-        paidAt: now,
       },
     });
+    if (!existingBilling) {
+      await tx.billingPayment.create({
+        data: {
+          organizationId: payment.organizationId,
+          subscriptionId: subscription.id,
+          invoiceId: invoice.id,
+          amount: payment.amount,
+          currency: payment.currency,
+          status: "PAID",
+          provider: "paytr",
+          providerRef: payment.merchantOid,
+          paidAt: now,
+        },
+      });
+    }
 
     await tx.appInstallation.upsert({
       where: {
@@ -228,8 +335,34 @@ async function activateSubscriptionFromPayment(paymentId: string) {
 }
 
 export type PaytrCallbackHandleResult =
-  | { ok: true; duplicate?: boolean; activated?: boolean }
+  | { ok: true; duplicate?: boolean; activated?: boolean; recovered?: boolean }
   | { ok: false; reason: string; status?: number };
+
+async function auditActivationOwnershipMismatch(input: {
+  organizationId: string;
+  userId: string | null;
+  paymentId: string;
+  merchantOid: string;
+  code: string;
+  duplicatePaid?: boolean;
+}) {
+  await prisma.auditLog.create({
+    data: {
+      organizationId: input.organizationId,
+      userId: input.userId,
+      action: "billing.paytr.activation_fee_ownership_mismatch",
+      entityType: "SubscriptionPayment",
+      entityId: input.paymentId,
+      level: "ERROR",
+      status: "FAILURE",
+      metadataJson: {
+        code: input.code,
+        merchantOid: input.merchantOid,
+        ...(input.duplicatePaid ? { duplicatePaid: true } : {}),
+      },
+    },
+  });
+}
 
 export async function handlePaytrSubscriptionCallback(input: {
   rawBody: string;
@@ -261,10 +394,10 @@ export async function handlePaytrSubscriptionCallback(input: {
         status: "FAILURE",
         metadataJson: asJson(
           redactPaytrPayload({
-          merchantOid: fields.merchantOid,
-          status: fields.status,
-          totalAmount: fields.totalAmount,
-          callbackUrl: getPaytrCallbackUrl(),
+            merchantOid: fields.merchantOid,
+            status: fields.status,
+            totalAmount: fields.totalAmount,
+            callbackUrl: getPaytrCallbackUrl(),
           }),
         ),
       },
@@ -295,30 +428,69 @@ export async function handlePaytrSubscriptionCallback(input: {
 
   if (payment.status === "PAID") {
     try {
-      await settleActivationFeeAfterSubscriptionPaid(payment.id);
+      await prisma.$transaction(async (tx) => {
+        await settleActivationFeeForPayment(tx, payment);
+      });
     } catch (error) {
       if (error instanceof ActivationFeeError) {
-        await prisma.auditLog.create({
-          data: {
-            organizationId: payment.organizationId,
-            userId: payment.userId,
-            action: "billing.paytr.activation_fee_ownership_mismatch",
-            entityType: "SubscriptionPayment",
-            entityId: payment.id,
-            level: "ERROR",
-            status: "FAILURE",
-            metadataJson: {
-              code: error.code,
-              merchantOid: payment.merchantOid,
-              duplicatePaid: true,
-            },
-          },
+        await auditActivationOwnershipMismatch({
+          organizationId: payment.organizationId,
+          userId: payment.userId,
+          paymentId: payment.id,
+          merchantOid: payment.merchantOid,
+          code: error.code,
+          duplicatePaid: true,
         });
+        // Ownership mismatch must not open access; payment already PAID is a reconciliation case.
         return { ok: true, duplicate: true };
       }
       throw error;
     }
-    return { ok: true, duplicate: true };
+
+    if (payment.subscriptionId) {
+      return { ok: true, duplicate: true };
+    }
+
+    // Self-heal: PAID without linked subscription (activation crashed after settle).
+    try {
+      const subscription = await activateSubscriptionFromPayment(payment.id);
+      if (subscription) {
+        await prisma.auditLog.create({
+          data: {
+            organizationId: payment.organizationId,
+            userId: payment.userId,
+            action: "billing.paytr.subscription_activation_recovered",
+            entityType: "SubscriptionPayment",
+            entityId: payment.id,
+            metadataJson: {
+              merchantOid: payment.merchantOid,
+              subscriptionId: subscription.id,
+              planId: payment.planId,
+            },
+          },
+        });
+        return { ok: true, activated: true, recovered: true };
+      }
+      return { ok: true, duplicate: true };
+    } catch (error) {
+      await prisma.auditLog.create({
+        data: {
+          organizationId: payment.organizationId,
+          userId: payment.userId,
+          action: "billing.paytr.subscription_activation_recovery_failed",
+          entityType: "SubscriptionPayment",
+          entityId: payment.id,
+          level: "ERROR",
+          status: "FAILURE",
+          metadataJson: {
+            merchantOid: payment.merchantOid,
+            errorName: error instanceof Error ? error.name : "Error",
+          },
+        },
+      });
+      // Acknowledge to PayTR; leave payment PAID for a later retry.
+      return { ok: true };
+    }
   }
 
   const expectedMinor =
@@ -365,13 +537,29 @@ export async function handlePaytrSubscriptionCallback(input: {
           },
         });
       });
-      // Still acknowledge to PayTR after recording failure — avoids endless retries for bad amount.
       return { ok: true };
     }
 
-    // Ownership check before marking PAID / activating subscription.
+    // Settle activation ledger + mark payment PAID in one transaction.
+    // If activation later fails, a retry can self-heal from PAID + null subscriptionId.
     try {
-      await settleActivationFeeAfterSubscriptionPaid(payment.id);
+      await prisma.$transaction(async (tx) => {
+        await settleActivationFeeForPayment(tx, payment);
+        await tx.subscriptionPayment.update({
+          where: { id: payment.id },
+          data: {
+            status: "PAID",
+            callbackStatus: fields.status,
+            callbackTotalAmount: fields.totalAmount,
+            callbackPaymentAmount: fields.paymentAmount,
+            callbackCurrency: fields.currency,
+            rawCallbackJson: asJson(redacted),
+            paidAt: new Date(),
+            failedReasonCode: null,
+            failedReasonMsg: null,
+          },
+        });
+      });
     } catch (error) {
       if (error instanceof ActivationFeeError) {
         await prisma.$transaction(async (tx) => {
@@ -404,29 +592,33 @@ export async function handlePaytrSubscriptionCallback(input: {
             },
           });
         });
-        // Acknowledge to PayTR; do not activate subscription on ownership mismatch.
         return { ok: true };
       }
       throw error;
     }
 
-    await prisma.subscriptionPayment.update({
-      where: { id: payment.id },
-      data: {
-        status: "PAID",
-        callbackStatus: fields.status,
-        callbackTotalAmount: fields.totalAmount,
-        callbackPaymentAmount: fields.paymentAmount,
-        callbackCurrency: fields.currency,
-        rawCallbackJson: asJson(redacted),
-        paidAt: new Date(),
-        failedReasonCode: null,
-        failedReasonMsg: null,
-      },
-    });
-
-    await activateSubscriptionFromPayment(payment.id);
-    return { ok: true, activated: true };
+    try {
+      await activateSubscriptionFromPayment(payment.id);
+      return { ok: true, activated: true };
+    } catch (error) {
+      await prisma.auditLog.create({
+        data: {
+          organizationId: payment.organizationId,
+          userId: payment.userId,
+          action: "billing.paytr.subscription_activation_pending_retry",
+          entityType: "SubscriptionPayment",
+          entityId: payment.id,
+          level: "ERROR",
+          status: "FAILURE",
+          metadataJson: {
+            merchantOid: payment.merchantOid,
+            errorName: error instanceof Error ? error.name : "Error",
+          },
+        },
+      });
+      // Payment remains PAID; PayTR retry / duplicate callback can self-heal.
+      return { ok: true };
+    }
   }
 
   await prisma.$transaction(async (tx) => {
