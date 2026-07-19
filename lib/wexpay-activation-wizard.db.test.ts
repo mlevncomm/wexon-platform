@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import {
   ActivationWizardError,
   acknowledgeTableQrPack,
+  completeStaffInviteWizardStep,
   createTablesWithOpaqueQr,
   recoverWizardTableQrPack,
   saveBranchSetupStep,
@@ -20,6 +21,7 @@ import {
 import { ActivationJourneyError } from "@/lib/wexpay-activation-journey";
 import { assertEntitlementLimit } from "@/lib/wexon-core-access";
 import { hashPassword } from "@/lib/wexon-passwords";
+import { MembershipRole, MembershipStatus } from ".prisma/client";
 
 assertLocalDbTestGuard(process.env);
 
@@ -159,6 +161,7 @@ describe("activation wizard security (db)", () => {
     await prisma.activationFeeLedger.deleteMany({ where: { organizationId: { in: orgIds } } });
     await prisma.appInstallation.deleteMany({ where: { organizationId: { in: orgIds } } });
     await prisma.license.deleteMany({ where: { organizationId: { in: orgIds } } });
+    await prisma.staffInvite.deleteMany({ where: { organizationId: { in: orgIds } } });
     await prisma.membership.deleteMany({ where: { organizationId: { in: orgIds } } });
     await prisma.auditLog.deleteMany({ where: { organizationId: { in: orgIds } } });
     await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
@@ -357,5 +360,352 @@ describe("activation wizard security (db)", () => {
 
     await prisma.activationJourneyStep.deleteMany({ where: { journeyId: journeyB.id } });
     await prisma.activationJourney.delete({ where: { id: journeyB.id } });
+  });
+
+  it("completed BUSINESS_PROFILE replay does not mutate Organization or add audit", async () => {
+    const before = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    const auditBefore = await prisma.auditLog.count({
+      where: { organizationId: orgId, action: "activation.business_profile.saved" },
+    });
+    const journeyNow = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    assert.notEqual(journeyNow.currentStep, ActivationStepKey.BUSINESS_PROFILE);
+
+    await assert.rejects(
+      () =>
+        saveBusinessProfileStep({
+          organizationId: orgId,
+          actorUserId: ownerId,
+          expectedVersion: journeyNow.version,
+          name: "REPLAY SHOULD NOT APPLY",
+        }),
+      (err: unknown) =>
+        (err instanceof ActivationJourneyError && err.code === "OUT_OF_ORDER") ||
+        (err instanceof ActivationWizardError && err.code === "OUT_OF_ORDER"),
+    );
+
+    const after = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    assert.equal(after.name, before.name);
+    assert.equal(
+      await prisma.auditLog.count({
+        where: { organizationId: orgId, action: "activation.business_profile.saved" },
+      }),
+      auditBefore,
+    );
+    const journeyAfter = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    assert.equal(journeyAfter.currentStep, journeyNow.currentStep);
+    assert.equal(journeyAfter.version, journeyNow.version);
+  });
+
+  it("completed BRANCH_SETUP replay does not create or rename restaurant/branch", async () => {
+    const journeyNow = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    const restaurantsBefore = await prisma.restaurant.count({ where: { organizationId: orgId } });
+    const branchesBefore = await prisma.branch.count({
+      where: { restaurant: { organizationId: orgId } },
+    });
+    const existingBranch = await prisma.branch.findFirstOrThrow({
+      where: { restaurant: { organizationId: orgId } },
+    });
+
+    await assert.rejects(
+      () =>
+        saveBranchSetupStep({
+          organizationId: orgId,
+          actorUserId: ownerId,
+          expectedVersion: journeyNow.version,
+          restaurantName: "Replay Rest",
+          branchName: "Replay Branch",
+          branchAddress: "Replay Address 99",
+          existingBranchId: existingBranch.id,
+        }),
+      (err: unknown) =>
+        (err instanceof ActivationJourneyError && err.code === "OUT_OF_ORDER") ||
+        (err instanceof ActivationWizardError && err.code === "OUT_OF_ORDER"),
+    );
+
+    assert.equal(
+      await prisma.restaurant.count({ where: { organizationId: orgId } }),
+      restaurantsBefore,
+    );
+    assert.equal(
+      await prisma.branch.count({ where: { restaurant: { organizationId: orgId } } }),
+      branchesBefore,
+    );
+    const branchAfter = await prisma.branch.findUniqueOrThrow({ where: { id: existingBranch.id } });
+    assert.equal(branchAfter.name, existingBranch.name);
+    assert.equal(branchAfter.address, existingBranch.address);
+  });
+
+  it("demoted STAFF actor cannot mutate wizard domain inside TX", async () => {
+    const staff = await prisma.user.create({
+      data: {
+        email: `staff-actor-${suffix}@example.com`,
+        name: "Staff Actor",
+        passwordHash: await hashPassword("Password1!"),
+        passwordSetAt: new Date(),
+        isActive: true,
+      },
+    });
+    await prisma.membership.create({
+      data: {
+        organizationId: orgId,
+        userId: staff.id,
+        role: MembershipRole.STAFF,
+        status: MembershipStatus.ACTIVE,
+        acceptedAt: new Date(),
+      },
+    });
+
+    const journeyNow = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    const orgBefore = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    const auditBefore = await prisma.auditLog.count({ where: { organizationId: orgId } });
+
+    await assert.rejects(
+      () =>
+        completeStaffInviteWizardStep({
+          organizationId: orgId,
+          actorUserId: staff.id,
+          expectedVersion: journeyNow.version,
+          skip: true,
+        }),
+      (err: unknown) =>
+        (err instanceof ActivationWizardError &&
+          (err.code === "FORBIDDEN" || err.code === "ACTOR_INACTIVE")) ||
+        (err instanceof ActivationJourneyError && err.code === "FORBIDDEN"),
+    );
+
+    const orgAfter = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    assert.equal(orgAfter.name, orgBefore.name);
+    assert.equal(await prisma.auditLog.count({ where: { organizationId: orgId } }), auditBefore);
+    const journeyAfter = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    assert.equal(journeyAfter.version, journeyNow.version);
+    assert.equal(journeyAfter.currentStep, journeyNow.currentStep);
+
+    await prisma.membership.deleteMany({ where: { userId: staff.id } });
+    await prisma.user.delete({ where: { id: staff.id } });
+  });
+
+  it("STAFF_INVITE: active staff completes; owner-only skip; staff_limit=-1 does not auto-skip", async () => {
+    const journeyNow = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    assert.equal(journeyNow.currentStep, ActivationStepKey.STAFF_INVITE);
+
+    const staffEnt = await prisma.entitlement.findFirstOrThrow({
+      where: { planId, key: "staff_limit" },
+    });
+    const previousStaffLimit = staffEnt.valueInt;
+    await prisma.entitlement.update({
+      where: { id: staffEnt.id },
+      data: { valueInt: -1 },
+    });
+
+    // Unlimited capacity alone must NOT complete or skip without an explicit decision.
+    await assert.rejects(
+      () =>
+        completeStaffInviteWizardStep({
+          organizationId: orgId,
+          actorUserId: ownerId,
+          expectedVersion: journeyNow.version,
+          skip: false,
+        }),
+      (err: unknown) => err instanceof ActivationWizardError && err.code === "NO_INVITES",
+    );
+
+    const skipped = await completeStaffInviteWizardStep({
+      organizationId: orgId,
+      actorUserId: ownerId,
+      expectedVersion: journeyNow.version,
+      skip: true,
+    });
+    assert.equal(skipped.currentStep, ActivationStepKey.MENU_IMPORT);
+    const skippedStep = skipped.steps.find((s) => s.stepKey === ActivationStepKey.STAFF_INVITE);
+    assert.equal(skippedStep?.status, ActivationJourneyStepStatus.SKIPPED);
+    assert.equal(
+      (skippedStep?.safeMetadataJson as { reason?: string } | null)?.reason,
+      "OWNER_ONLY",
+    );
+
+    await prisma.entitlement.update({
+      where: { id: staffEnt.id },
+      data: { valueInt: previousStaffLimit },
+    });
+
+    // Reset step for COMPLETED-via-staff path
+    await prisma.activationJourney.update({
+      where: { id: journeyId },
+      data: { currentStep: ActivationStepKey.STAFF_INVITE, version: skipped.version },
+    });
+    await prisma.activationJourneyStep.update({
+      where: { journeyId_stepKey: { journeyId, stepKey: ActivationStepKey.STAFF_INVITE } },
+      data: { status: ActivationJourneyStepStatus.PENDING, completedAt: null, safeMetadataJson: {} },
+    });
+
+    const staffUser = await prisma.user.create({
+      data: {
+        email: `active-staff-${suffix}@example.com`,
+        name: "Active Staff",
+        passwordHash: await hashPassword("Password1!"),
+        passwordSetAt: new Date(),
+        isActive: true,
+      },
+    });
+    await prisma.membership.create({
+      data: {
+        organizationId: orgId,
+        userId: staffUser.id,
+        role: MembershipRole.STAFF,
+        status: MembershipStatus.ACTIVE,
+        acceptedAt: new Date(),
+      },
+    });
+
+    const j2 = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    const completed = await completeStaffInviteWizardStep({
+      organizationId: orgId,
+      actorUserId: ownerId,
+      expectedVersion: j2.version,
+      skip: false,
+    });
+    assert.equal(completed.currentStep, ActivationStepKey.MENU_IMPORT);
+    assert.equal(
+      completed.steps.find((s) => s.stepKey === ActivationStepKey.STAFF_INVITE)?.status,
+      ActivationJourneyStepStatus.COMPLETED,
+    );
+
+    // Explicit skip with active staff must fail
+    await prisma.activationJourney.update({
+      where: { id: journeyId },
+      data: { currentStep: ActivationStepKey.STAFF_INVITE, version: completed.version },
+    });
+    await prisma.activationJourneyStep.update({
+      where: { journeyId_stepKey: { journeyId, stepKey: ActivationStepKey.STAFF_INVITE } },
+      data: { status: ActivationJourneyStepStatus.PENDING, completedAt: null },
+    });
+    const j3 = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    await assert.rejects(
+      () =>
+        completeStaffInviteWizardStep({
+          organizationId: orgId,
+          actorUserId: ownerId,
+          expectedVersion: j3.version,
+          skip: true,
+        }),
+      (err: unknown) => err instanceof ActivationWizardError && err.code === "SKIP_FORBIDDEN",
+    );
+
+    await prisma.membership.deleteMany({ where: { userId: staffUser.id } });
+    await prisma.user.delete({ where: { id: staffUser.id } });
+  });
+
+  it("FAILED and PENDING invites do not qualify STAFF_INVITE completion", async () => {
+    await prisma.activationJourney.update({
+      where: { id: journeyId },
+      data: { currentStep: ActivationStepKey.STAFF_INVITE },
+    });
+    await prisma.activationJourneyStep.update({
+      where: { journeyId_stepKey: { journeyId, stepKey: ActivationStepKey.STAFF_INVITE } },
+      data: { status: ActivationJourneyStepStatus.PENDING, completedAt: null },
+    });
+    // Remove non-owner staff so only invites could qualify
+    await prisma.membership.deleteMany({
+      where: { organizationId: orgId, role: { not: MembershipRole.OWNER } },
+    });
+    await prisma.staffInvite.deleteMany({ where: { organizationId: orgId } });
+
+    await prisma.staffInvite.create({
+      data: {
+        organizationId: orgId,
+        email: `failed-only-${suffix}@example.com`,
+        role: MembershipRole.STAFF,
+        tokenHash: `hash-failed-${suffix}`,
+        tokenPrefix: "failprefix",
+        expiresAt: new Date(Date.now() + 86400000),
+        createdByUserId: ownerId,
+        deliveryStatus: "FAILED",
+        lastDeliveryErrorCode: "TEST",
+      },
+    });
+    await prisma.staffInvite.create({
+      data: {
+        organizationId: orgId,
+        email: `pending-only-${suffix}@example.com`,
+        role: MembershipRole.STAFF,
+        tokenHash: `hash-pending-${suffix}`,
+        tokenPrefix: "pendprefix",
+        expiresAt: new Date(Date.now() + 86400000),
+        createdByUserId: ownerId,
+        deliveryStatus: "PENDING",
+      },
+    });
+
+    const j = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    await assert.rejects(
+      () =>
+        completeStaffInviteWizardStep({
+          organizationId: orgId,
+          actorUserId: ownerId,
+          expectedVersion: j.version,
+          skip: false,
+        }),
+      (err: unknown) => err instanceof ActivationWizardError && err.code === "NO_INVITES",
+    );
+  });
+
+  it("staff_limit=0 rejects invite create but allows owner-only skip", async () => {
+    const { createStaffInvite, StaffInviteError } = await import("@/lib/wexpay-staff-invite");
+    const staffEnt = await prisma.entitlement.findFirstOrThrow({
+      where: { planId, key: "staff_limit" },
+    });
+    const previousStaffLimit = staffEnt.valueInt;
+    await prisma.entitlement.update({
+      where: { id: staffEnt.id },
+      data: { valueInt: 0 },
+    });
+
+    await prisma.activationJourney.update({
+      where: { id: journeyId },
+      data: { currentStep: ActivationStepKey.STAFF_INVITE },
+    });
+    await prisma.activationJourneyStep.update({
+      where: { journeyId_stepKey: { journeyId, stepKey: ActivationStepKey.STAFF_INVITE } },
+      data: { status: ActivationJourneyStepStatus.PENDING, completedAt: null },
+    });
+    await prisma.membership.deleteMany({
+      where: { organizationId: orgId, role: { not: MembershipRole.OWNER } },
+    });
+    await prisma.staffInvite.deleteMany({ where: { organizationId: orgId } });
+
+    await assert.rejects(
+      () =>
+        createStaffInvite({
+          organizationId: orgId,
+          actorUserId: ownerId,
+          email: `zero-limit-${suffix}@example.com`,
+          role: MembershipRole.STAFF,
+        }),
+      (err: unknown) => err instanceof StaffInviteError && err.code === "STAFF_LIMIT",
+    );
+
+    const j = await prisma.activationJourney.findUniqueOrThrow({ where: { id: journeyId } });
+    const skipped = await completeStaffInviteWizardStep({
+      organizationId: orgId,
+      actorUserId: ownerId,
+      expectedVersion: j.version,
+      skip: true,
+    });
+    assert.equal(
+      skipped.steps.find((s) => s.stepKey === ActivationStepKey.STAFF_INVITE)?.status,
+      ActivationJourneyStepStatus.SKIPPED,
+    );
+    assert.equal(
+      (
+        skipped.steps.find((s) => s.stepKey === ActivationStepKey.STAFF_INVITE)
+          ?.safeMetadataJson as { reason?: string } | null
+      )?.reason,
+      "OWNER_ONLY",
+    );
+
+    await prisma.entitlement.update({
+      where: { id: staffEnt.id },
+      data: { valueInt: previousStaffLimit },
+    });
   });
 });

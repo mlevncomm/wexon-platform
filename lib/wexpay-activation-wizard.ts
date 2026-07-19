@@ -2,20 +2,24 @@ import { randomUUID } from "node:crypto";
 import {
   ActivationStepKey,
   ActivationJourneyStepStatus,
+  MembershipRole,
+  MembershipStatus,
   StaffInviteDeliveryStatus,
   TableStatus,
   type Prisma,
 } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
-import { isEntitlementEnabled } from "@/lib/wexon-core-access";
 import {
   assertJourneyWritableForActor,
+  assertWizardStepMutableInTx,
   completeActivationStepInTx,
   maskTaxNoForAudit,
+  ActivationJourneyError,
 } from "@/lib/wexpay-activation-journey";
 import {
   ActivationTxAccessError,
+  assertActorManageMembershipInTx,
   assertCanonicalLimitInTx,
   assertWexPayAccessInTx,
 } from "@/lib/wexpay-activation-tx-access";
@@ -26,6 +30,12 @@ import {
   rotateTableQrTokenInTx,
   type IssueTableQrTokenResult,
 } from "@/lib/wexpay-table-qr-token";
+
+const WIZARD_ACTOR_ROLES: MembershipRole[] = [
+  MembershipRole.OWNER,
+  MembershipRole.ADMIN,
+  MembershipRole.MANAGER,
+];
 
 function generateLegacyTableQrCode() {
   return `WXP-${randomUUID()}`;
@@ -44,6 +54,9 @@ export class ActivationWizardError extends Error {
 function mapTxAccessError(error: unknown): never {
   if (error instanceof ActivationTxAccessError) {
     throw new ActivationWizardError(error.code, error.message);
+  }
+  if (error instanceof ActivationJourneyError) {
+    throw error;
   }
   throw error;
 }
@@ -104,6 +117,17 @@ export async function saveBusinessProfileStep(input: {
   try {
     return await prisma.$transaction(
       async (tx) => {
+        // Gate BEFORE domain mutation — completed/past step must not rewrite Organization.
+        await assertWizardStepMutableInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.BUSINESS_PROFILE,
+        });
+        await assertActorManageMembershipInTx(tx, {
+          organizationId: input.organizationId,
+          actorUserId: input.actorUserId,
+          roles: WIZARD_ACTOR_ROLES,
+        });
         await assertWexPayAccessInTx(tx, {
           organizationId: input.organizationId,
           productKey: "wexpay",
@@ -192,6 +216,16 @@ export async function saveBranchSetupStep(input: {
       async (tx) => {
         await lockWexPayOrgBranchLimit(tx, input.organizationId);
 
+        await assertWizardStepMutableInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.BRANCH_SETUP,
+        });
+        await assertActorManageMembershipInTx(tx, {
+          organizationId: input.organizationId,
+          actorUserId: input.actorUserId,
+          roles: WIZARD_ACTOR_ROLES,
+        });
         const access = await assertWexPayAccessInTx(tx, {
           organizationId: input.organizationId,
           productKey: "wexpay",
@@ -391,6 +425,16 @@ export async function createTablesWithOpaqueQr(input: {
       async (tx) => {
         await lockWexPayOrgTableLimit(tx, input.organizationId);
 
+        await assertWizardStepMutableInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.TABLE_SETUP,
+        });
+        await assertActorManageMembershipInTx(tx, {
+          organizationId: input.organizationId,
+          actorUserId: input.actorUserId,
+          roles: WIZARD_ACTOR_ROLES,
+        });
         const access = await assertWexPayAccessInTx(tx, {
           organizationId: input.organizationId,
           productKey: "wexpay",
@@ -407,7 +451,6 @@ export async function createTablesWithOpaqueQr(input: {
           throw new ActivationWizardError("CROSS_TENANT", "Şube bulunamadı.");
         }
 
-        // Version gate inside TX (fail stale double-submit before creating tables).
         const bumped = await tx.activationJourney.updateMany({
           where: {
             id: journey.id,
@@ -530,6 +573,16 @@ export async function recoverWizardTableQrPack(input: {
   try {
     return await prisma.$transaction(
       async (tx) => {
+        await assertWizardStepMutableInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.TABLE_SETUP,
+        });
+        await assertActorManageMembershipInTx(tx, {
+          organizationId: input.organizationId,
+          actorUserId: input.actorUserId,
+          roles: WIZARD_ACTOR_ROLES,
+        });
         await assertWexPayAccessInTx(tx, {
           organizationId: input.organizationId,
           productKey: "wexpay",
@@ -620,6 +673,16 @@ export async function acknowledgeTableQrPack(input: {
   try {
     return await prisma.$transaction(
       async (tx) => {
+        await assertWizardStepMutableInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.TABLE_SETUP,
+        });
+        await assertActorManageMembershipInTx(tx, {
+          organizationId: input.organizationId,
+          actorUserId: input.actorUserId,
+          roles: WIZARD_ACTOR_ROLES,
+        });
         await assertWexPayAccessInTx(tx, {
           organizationId: input.organizationId,
           productKey: "wexpay",
@@ -710,15 +773,49 @@ export async function acknowledgeTableQrPack(input: {
 export async function rotateWizardTableQr(input: {
   organizationId: string;
   actorUserId: string;
+  expectedVersion: number;
   tableId: string;
 }): Promise<WizardIssuedQr> {
+  const journey = await assertJourneyWritableForActor({
+    organizationId: input.organizationId,
+    actorUserId: input.actorUserId,
+    expectedVersion: input.expectedVersion,
+  });
+
   const material = generateSecureTableQrTokenMaterial();
   try {
     return await prisma.$transaction(async (tx) => {
+      await assertWizardStepMutableInTx(tx, {
+        journeyId: journey.id,
+        expectedVersion: input.expectedVersion,
+        stepKey: ActivationStepKey.TABLE_SETUP,
+      });
+      await assertActorManageMembershipInTx(tx, {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        roles: WIZARD_ACTOR_ROLES,
+      });
       await assertWexPayAccessInTx(tx, {
         organizationId: input.organizationId,
         productKey: "wexpay",
       });
+
+      const tableStep = await tx.activationJourneyStep.findUnique({
+        where: {
+          journeyId_stepKey: {
+            journeyId: journey.id,
+            stepKey: ActivationStepKey.TABLE_SETUP,
+          },
+        },
+        select: { safeMetadataJson: true },
+      });
+      const packTableIds = readTableIdsFromMetadata(tableStep?.safeMetadataJson);
+      if (!packTableIds.includes(input.tableId)) {
+        throw new ActivationWizardError(
+          "CROSS_TENANT",
+          "Masa bu kurulum paketine ait değil.",
+        );
+      }
 
       const table = await tx.restaurantTable.findFirst({
         where: {
@@ -766,34 +863,30 @@ export async function completeStaffInviteWizardStep(input: {
   try {
     return await prisma.$transaction(
       async (tx) => {
-        const access = await assertWexPayAccessInTx(tx, {
+        await assertWizardStepMutableInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.STAFF_INVITE,
+        });
+        await assertActorManageMembershipInTx(tx, {
+          organizationId: input.organizationId,
+          actorUserId: input.actorUserId,
+          roles: WIZARD_ACTOR_ROLES,
+        });
+        await assertWexPayAccessInTx(tx, {
           organizationId: input.organizationId,
           productKey: "wexpay",
         });
 
-        if (input.skip) {
-          // Fail-closed: UI button alone is not enough — entitlement must allow skip.
-          const skipAllowed =
-            isEntitlementEnabled(access.entitlementMap, "wizard_staff_invite_skippable") ||
-            access.entitlementMap.staff_limit === -1;
-          if (!skipAllowed) {
-            throw new ActivationWizardError(
-              "SKIP_FORBIDDEN",
-              "Bu planda personel daveti adımı atlanamaz.",
-            );
-          }
+        const activeStaffCount = await tx.membership.count({
+          where: {
+            organizationId: input.organizationId,
+            status: MembershipStatus.ACTIVE,
+            role: { not: MembershipRole.OWNER },
+          },
+        });
 
-          return completeActivationStepInTx(tx, {
-            journeyId: journey.id,
-            expectedVersion: input.expectedVersion,
-            stepKey: ActivationStepKey.STAFF_INVITE,
-            advanceTo: ActivationStepKey.MENU_IMPORT,
-            markStatus: ActivationJourneyStepStatus.SKIPPED,
-            safeMetadata: { skipped: true },
-          });
-        }
-
-        const qualifying = await tx.staffInvite.count({
+        const qualifyingInvites = await tx.staffInvite.count({
           where: {
             organizationId: input.organizationId,
             OR: [
@@ -806,10 +899,29 @@ export async function completeStaffInviteWizardStep(input: {
             ],
           },
         });
-        if (qualifying < 1) {
+
+        if (input.skip) {
+          // Explicit owner-only continue — staff_limit=-1 does NOT imply skip.
+          if (activeStaffCount > 0) {
+            throw new ActivationWizardError(
+              "SKIP_FORBIDDEN",
+              "Aktif personel varken bu adım atlanamaz; tamamlayın.",
+            );
+          }
+          return completeActivationStepInTx(tx, {
+            journeyId: journey.id,
+            expectedVersion: input.expectedVersion,
+            stepKey: ActivationStepKey.STAFF_INVITE,
+            advanceTo: ActivationStepKey.MENU_IMPORT,
+            markStatus: ActivationJourneyStepStatus.SKIPPED,
+            safeMetadata: { skipped: true, reason: "OWNER_ONLY" },
+          });
+        }
+
+        if (activeStaffCount < 1 && qualifyingInvites < 1) {
           throw new ActivationWizardError(
             "NO_INVITES",
-            "Devam etmek için kabul edilmiş veya başarıyla gönderilmiş (SENT) bir davet gerekir.",
+            "Devam etmek için aktif personel, kabul edilmiş davet veya SENT davet gerekir; ya da personel eklemeden devam edin.",
           );
         }
 
@@ -819,7 +931,11 @@ export async function completeStaffInviteWizardStep(input: {
           stepKey: ActivationStepKey.STAFF_INVITE,
           advanceTo: ActivationStepKey.MENU_IMPORT,
           markStatus: ActivationJourneyStepStatus.COMPLETED,
-          safeMetadata: { skipped: false, qualifyingInvites: qualifying },
+          safeMetadata: {
+            skipped: false,
+            activeStaffCount,
+            qualifyingInvites,
+          },
         });
       },
       { timeout: 15_000 },

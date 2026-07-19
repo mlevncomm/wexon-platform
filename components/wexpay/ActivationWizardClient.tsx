@@ -458,6 +458,7 @@ export function ActivationWizardClient(props: Props) {
                 {issuedQrs[0] ? (
                   <form action={rotateAction}>
                     <input type="hidden" name="organizationId" value={props.organizationId} />
+                    <input type="hidden" name="expectedVersion" value={String(effectiveVersion)} />
                     <input type="hidden" name="tableId" value={issuedQrs[0].tableId} />
                     <button
                       type="submit"
@@ -571,10 +572,13 @@ export function ActivationWizardClient(props: Props) {
                   disabled={staffDonePending}
                   className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60"
                 >
-                  Şimdilik atla
+                  Personel eklemeden devam et
                 </button>
               </form>
             ) : null}
+            <p className="w-full text-xs font-medium text-slate-500">
+              “Personel eklemeden devam et”, açık bir kullanıcı kararıdır (yalnız sahip hesabıyla devam).
+            </p>
             <ErrorBox state={staffDoneState} />
           </div>
         </section>

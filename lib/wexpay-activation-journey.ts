@@ -494,9 +494,76 @@ export type CompleteActivationStepInput = {
 };
 
 /**
+ * Gate for domain mutations: version + currentStep + non-terminal step + priors.
+ * Call at TX start BEFORE Organization/Restaurant/Branch/Table writes.
+ * Completed/past steps must not mutate domain state (no fake idempotent replay).
+ */
+export async function assertWizardStepMutableInTx(
+  tx: DbClient,
+  input: {
+    journeyId: string;
+    expectedVersion: number;
+    stepKey: ActivationStepKey;
+  },
+): Promise<ActivationJourneyWithSteps> {
+  const journey = await tx.activationJourney.findUnique({
+    where: { id: input.journeyId },
+    include: { steps: { orderBy: { stepKey: "asc" } } },
+  });
+  if (!journey) {
+    throw new ActivationJourneyError("NOT_STARTED", "Akıllı Aktivasyon henüz başlamadı.");
+  }
+  if (journey.version !== input.expectedVersion) {
+    throw new ActivationJourneyError(
+      "VERSION_CONFLICT",
+      "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+    );
+  }
+  if (journey.currentStep !== input.stepKey) {
+    throw new ActivationJourneyError(
+      "OUT_OF_ORDER",
+      "Bu adım şu an aktif değil. Lütfen sıradaki adımdan devam edin.",
+    );
+  }
+
+  const existingStep = journey.steps.find((s) => s.stepKey === input.stepKey);
+  if (!existingStep) {
+    throw new ActivationJourneyError("STEP_MISSING", "Kurulum adımı bulunamadı.");
+  }
+  if (
+    existingStep.status === ActivationJourneyStepStatus.COMPLETED ||
+    existingStep.status === ActivationJourneyStepStatus.SKIPPED
+  ) {
+    throw new ActivationJourneyError(
+      "OUT_OF_ORDER",
+      "Bu kurulum adımı zaten tamamlandı; tekrar değiştirilemez.",
+    );
+  }
+
+  const stepIndex = ACTIVATION_STEP_ORDER.indexOf(input.stepKey);
+  for (let i = 0; i < stepIndex; i++) {
+    const priorKey = ACTIVATION_STEP_ORDER[i]!;
+    const prior = journey.steps.find((s) => s.stepKey === priorKey);
+    if (
+      !prior ||
+      (prior.status !== ActivationJourneyStepStatus.COMPLETED &&
+        prior.status !== ActivationJourneyStepStatus.SKIPPED)
+    ) {
+      throw new ActivationJourneyError(
+        "PRIOR_INCOMPLETE",
+        "Önceki kurulum adımları tamamlanmadan ilerlenemez.",
+      );
+    }
+  }
+
+  return journey;
+}
+
+/**
  * Optimistic concurrency: bumps journey.version only when expectedVersion matches.
  * Marks step COMPLETED (or SKIPPED) and optionally advances currentStep.
  * Server-authoritative: only journey.currentStep may complete; prior PR-2 steps must be done.
+ * Past/completed step replay (currentStep already advanced) → OUT_OF_ORDER, not silent success.
  */
 export async function completeActivationStepInTx(
   tx: DbClient,
@@ -524,29 +591,7 @@ export async function completeActivationStepInTx(
     throw new ActivationJourneyError("STEP_MISSING", "Kurulum adımı bulunamadı.");
   }
 
-  // Idempotent: already terminal for this step.
-  if (
-    existingStep.status === ActivationJourneyStepStatus.COMPLETED ||
-    existingStep.status === ActivationJourneyStepStatus.SKIPPED
-  ) {
-    if (journeyBefore.currentStep === input.stepKey && input.advanceTo) {
-      const bumpedIdempotent = await tx.activationJourney.updateMany({
-        where: { id: input.journeyId, version: input.expectedVersion },
-        data: { version: { increment: 1 }, currentStep: input.advanceTo, updatedAt: now },
-      });
-      if (bumpedIdempotent.count !== 1) {
-        throw new ActivationJourneyError(
-          "VERSION_CONFLICT",
-          "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
-        );
-      }
-    }
-    return tx.activationJourney.findUniqueOrThrow({
-      where: { id: input.journeyId },
-      include: { steps: { orderBy: { stepKey: "asc" } } },
-    });
-  }
-
+  // Past-step replay: step may be terminal but journey already moved on.
   if (journeyBefore.currentStep !== input.stepKey) {
     throw new ActivationJourneyError(
       "OUT_OF_ORDER",
@@ -569,6 +614,29 @@ export async function completeActivationStepInTx(
         "Önceki kurulum adımları tamamlanmadan ilerlenemez.",
       );
     }
+  }
+
+  // Idempotent only while still on this currentStep (e.g. concurrent double-complete).
+  if (
+    existingStep.status === ActivationJourneyStepStatus.COMPLETED ||
+    existingStep.status === ActivationJourneyStepStatus.SKIPPED
+  ) {
+    if (input.advanceTo && journeyBefore.currentStep === input.stepKey) {
+      const bumpedIdempotent = await tx.activationJourney.updateMany({
+        where: { id: input.journeyId, version: input.expectedVersion },
+        data: { version: { increment: 1 }, currentStep: input.advanceTo, updatedAt: now },
+      });
+      if (bumpedIdempotent.count !== 1) {
+        throw new ActivationJourneyError(
+          "VERSION_CONFLICT",
+          "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+        );
+      }
+    }
+    return tx.activationJourney.findUniqueOrThrow({
+      where: { id: input.journeyId },
+      include: { steps: { orderBy: { stepKey: "asc" } } },
+    });
   }
 
   const bumped = await tx.activationJourney.updateMany({

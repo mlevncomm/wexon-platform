@@ -176,10 +176,12 @@ export async function rotateTableQrWizardAction(
 ): Promise<WizardActionState> {
   try {
     const organizationId = readString(formData, "organizationId");
+    const expectedVersion = Number(readString(formData, "expectedVersion") || "0");
     const { user } = await requireWizardActor(organizationId);
     const qr = await rotateWizardTableQr({
       organizationId,
       actorUserId: user.id,
+      expectedVersion,
       tableId: readString(formData, "tableId"),
     });
     revalidatePath("/dashboard/wexpay/activation");

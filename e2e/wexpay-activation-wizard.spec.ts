@@ -186,6 +186,46 @@ test.describe.serial("WexPay activation wizard flow", () => {
       await expect(invitePage).toHaveURL(/\/dashboard/, { timeout: 30_000 });
       await invitePage.close();
 
+      // Accept should complete STAFF_INVITE when that was the active step.
+      const afterAccept = await prisma.activationJourney.findUniqueOrThrow({
+        where: { id: journeyId },
+        include: { steps: true },
+      });
+      expect(afterAccept.currentStep).toBe(ActivationStepKey.MENU_IMPORT);
+      expect(
+        afterAccept.steps.find((s) => s.stepKey === ActivationStepKey.STAFF_INVITE)?.status,
+      ).toBe("COMPLETED");
+
+      const restaurantsAfterAccept = await prisma.restaurant.count({ where: { organizationId: orgId } });
+      const branchesAfterAccept = await prisma.branch.count({
+        where: { restaurant: { organizationId: orgId } },
+      });
+      const tablesAfterAccept = await prisma.restaurantTable.count({
+        where: { branch: { restaurant: { organizationId: orgId } } },
+      });
+
+      // Owner returns — MENU_IMPORT upcoming, resume preserves state.
+      await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
+      await expect(page.getByRole("heading", { name: "Kurulum sihirbazı" })).toBeVisible();
+      await expect(page.getByText(/yakında/i).first()).toBeVisible();
+      await expect(page.getByText(/MENU IMPORT/i)).toBeVisible();
+
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Kurulum sihirbazı" })).toBeVisible();
+      await expect(page.getByText(/MENU IMPORT/i)).toBeVisible();
+
+      expect(await prisma.restaurant.count({ where: { organizationId: orgId } })).toBe(
+        restaurantsAfterAccept,
+      );
+      expect(
+        await prisma.branch.count({ where: { restaurant: { organizationId: orgId } } }),
+      ).toBe(branchesAfterAccept);
+      expect(
+        await prisma.restaurantTable.count({
+          where: { branch: { restaurant: { organizationId: orgId } } },
+        }),
+      ).toBe(tablesAfterAccept);
+
       const existingEmail = `e2e.invite.existing+${stamp}@example.com`;
       const existingUser = await prisma.user.create({
         data: {
@@ -226,6 +266,7 @@ test.describe.serial("WexPay activation wizard flow", () => {
 
       await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
       await expect(page.getByRole("heading", { name: "Kurulum sihirbazı" })).toBeVisible();
+      await expect(page.getByText(/MENU IMPORT/i)).toBeVisible();
 
       await prisma.user.delete({ where: { id: existingUser.id } }).catch(() => undefined);
     } finally {

@@ -61,9 +61,8 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
       ? (tableStep.safeMetadataJson as { awaitingQrAck?: boolean; branchId?: string })
       : {};
 
-  const canSkipStaffInvite =
-    Boolean(wexPayAccess.entitlementMap?.wizard_staff_invite_skippable) ||
-    wexPayAccess.entitlementMap?.staff_limit === -1;
+  // Explicit owner-only continue is always offered; server enforces OWNER_ONLY skip rules.
+  const canSkipStaffInvite = true;
 
   const invites = await listOrganizationStaffInvites(organization.id);
   const continueHref = dashboardHref("/dashboard/wexpay/activation", organizationContext);
