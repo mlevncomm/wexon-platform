@@ -197,39 +197,27 @@ test.describe.serial("WexPay activation wizard flow", () => {
         },
       });
 
-      const afterAccept = await prisma.activationJourney.findUniqueOrThrow({
-        where: { id: journeyId },
+      // Seed an open invite with known plaintext for LOGIN_REQUIRED (UI create already covered above).
+      const { createHash, randomBytes } = await import("node:crypto");
+      const plaintext = randomBytes(32).toString("base64url");
+      const tokenHash = createHash("sha256").update(plaintext, "utf8").digest("hex");
+      await prisma.staffInvite.create({
+        data: {
+          organizationId: orgId,
+          email: existingEmail,
+          role: "STAFF",
+          tokenHash,
+          tokenPrefix: plaintext.slice(0, 10),
+          expiresAt: new Date(Date.now() + 86400000),
+          createdByUserId: owner!.id,
+          deliveryStatus: "SENT",
+        },
       });
-      if (afterAccept.currentStep !== ActivationStepKey.STAFF_INVITE) {
-        await prisma.activationJourney.update({
-          where: { id: journeyId },
-          data: { currentStep: ActivationStepKey.STAFF_INVITE, status: "IN_PROGRESS" },
-        });
-        await prisma.activationJourneyStep.update({
-          where: { journeyId_stepKey: { journeyId, stepKey: ActivationStepKey.STAFF_INVITE } },
-          data: { status: "PENDING", completedAt: null },
-        });
-      }
-
-      await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
-      await expect(page.getByRole("heading", { name: "4. Personel daveti" })).toBeVisible({
-        timeout: 30_000,
-      });
-      await page.locator('input[name="email"]').fill(existingEmail);
-      await page.getByRole("button", { name: "Davet gönder" }).click();
-      await expect(page.getByText(existingEmail)).toBeVisible({ timeout: 30_000 });
-
-      const existingInvitePreview = page
-        .getByText(/Önizleme bağlantısı/i)
-        .locator("..")
-        .locator(".font-mono");
-      await expect(existingInvitePreview).toBeVisible({ timeout: 15_000 });
-      const existingInviteUrlRaw = (await existingInvitePreview.textContent())!.trim();
-      const existingInvitePath = `/invite/${existingInviteUrlRaw.split("/invite/")[1]!}`;
 
       const bare = await context.browser()!.newContext();
       const barePage = await bare.newPage();
-      await barePage.goto(existingInvitePath);
+      await barePage.goto(`/invite/${encodeURIComponent(plaintext)}`);
+      await expect(barePage.getByRole("heading", { name: "Personel daveti" })).toBeVisible();
       await barePage.locator('input[name="email"]').fill(existingEmail);
       await barePage.getByRole("button", { name: "Daveti kabul et" }).click();
       await expect(barePage.getByText(/önce giriş yapmalısınız/i)).toBeVisible({ timeout: 15_000 });
