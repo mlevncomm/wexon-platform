@@ -4,10 +4,12 @@
  */
 
 export const MIN_PG_DUMP_MAJOR = 17;
-/** Current public schema expectation after ActivationFeeLedger migration. */
-export const EXPECTED_PUBLIC_TABLE_COUNT = 34;
+/** Current public schema expectation after Smart Activation foundation (Journey+Step+TableQrToken). */
+export const EXPECTED_PUBLIC_TABLE_COUNT = 37;
 /** Pre-ActivationFeeLedger recovery archives remain valid via their own manifests. */
 export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER = 33;
+/** Pre-Smart-Activation (ActivationFeeLedger era) archives remain valid via their own manifests. */
+export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_SMART_ACTIVATION = 34;
 export const RECOVERY_STATUS = {
   NOT_VERIFIED: "RECOVERY BACKUP OLARAK DOĞRULANMADI",
   RESTORE_VERIFIED: "RESTORE VERIFIED",

@@ -143,6 +143,45 @@ enum ActivationFeeStatus {
   WAIVED_LEGACY
 }
 
+/// Persisted journey statuses. NOT_STARTED is derived when no row exists.
+enum ActivationJourneyStatus {
+  IN_PROGRESS
+  BLOCKED
+  READY
+  ACTIVE
+  CANCELLED
+}
+
+enum ActivationJourneySource {
+  SELF_SERVE
+  ADMIN_ASSISTED
+  LEGACY_BACKFILL
+}
+
+enum ActivationStepKey {
+  BUSINESS_PROFILE
+  BRANCH_SETUP
+  TABLE_SETUP
+  STAFF_INVITE
+  MENU_IMPORT
+  PAYMENT_PROVIDER
+  VALIDATION
+  GO_LIVE
+}
+
+enum ActivationJourneyStepStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  ERROR
+}
+
+enum TableQrTokenStatus {
+  ACTIVE
+  REVOKED
+}
+
 enum AppInstallationStatus {
   ACTIVE
   DISABLED
@@ -184,6 +223,7 @@ model Organization {
   billingPayments           BillingPayment[]
   subscriptionPayments      SubscriptionPayment[]
   activationFeeLedgers      ActivationFeeLedger[]
+  activationJourneys        ActivationJourney[]
   appInstallations          AppInstallation[]
   auditLogs                 AuditLog[]
   apiKeys                   ApiKey[]
@@ -253,6 +293,7 @@ model Product {
   apiKeys              ApiKey[]
   webhookEndpoints     WebhookEndpoint[]
   activationFeeLedgers ActivationFeeLedger[]
+  activationJourneys   ActivationJourney[]
 
   @@index([status])
   @@index([isActive])
@@ -501,6 +542,52 @@ model ActivationFeeLedger {
   @@index([productId])
 }
 
+/// Resumable WexPay Akıllı Aktivasyon journey — one row per organization + product.
+/// NOT_STARTED is not persisted; absence of a row means not started.
+model ActivationJourney {
+  id                 String                   @id @default(cuid())
+  organizationId     String
+  productId          String
+  status             ActivationJourneyStatus  @default(IN_PROGRESS)
+  source             ActivationJourneySource
+  /// UI/navigation convenience only — real completion lives on ActivationJourneyStep + domain data.
+  currentStep        ActivationStepKey        @default(BUSINESS_PROFILE)
+  blockedReasonCode  String?
+  completedAt        DateTime?
+  version            Int                      @default(1)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product                 @relation(fields: [productId], references: [id])
+  steps        ActivationJourneyStep[]
+
+  @@unique([organizationId, productId])
+  @@index([status])
+  @@index([productId])
+  @@index([source])
+}
+
+model ActivationJourneyStep {
+  id               String                      @id @default(cuid())
+  journeyId        String
+  stepKey          ActivationStepKey
+  status           ActivationJourneyStepStatus @default(PENDING)
+  attemptCount     Int                         @default(0)
+  lastErrorCode    String?
+  completedAt      DateTime?
+  /// Safe non-secret metadata only — never PII, tokens, or secrets.
+  safeMetadataJson Json?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  journey ActivationJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  @@unique([journeyId, stepKey])
+  @@index([journeyId])
+  @@index([status])
+}
+
 model AppInstallation {
   id             String                @id @default(cuid())
   organizationId String
@@ -644,9 +731,30 @@ model RestaurantTable {
   orders          CustomerOrder[]
   payments        Payment[]
   receiptRequests ReceiptRequest[]
+  qrTokens        TableQrToken[]
 
   @@unique([branchId, label])
   @@index([branchId])
+}
+
+/// Opaque public QR token for a table. Raw token is never stored — only hash + short prefix.
+model TableQrToken {
+  id         String            @id @default(cuid())
+  tableId    String
+  tokenHash  String            @unique
+  tokenPrefix String
+  status     TableQrTokenStatus @default(ACTIVE)
+  createdAt  DateTime          @default(now())
+  revokedAt  DateTime?
+  rotatedAt  DateTime?
+  lastUsedAt DateTime?
+  updatedAt  DateTime          @updatedAt
+
+  table RestaurantTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@index([tableId])
+  @@index([status])
+  @@index([tokenPrefix])
 }
 
 model MenuCategory {
