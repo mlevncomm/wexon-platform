@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import { getCanonicalTier } from "@/lib/wexpay-canonical-catalog";
 import { buildCheckoutQuote } from "@/lib/wexon-billing-tax-policy";
 import { computeCheckoutQuote } from "@/lib/wexon-checkout-validation";
+import { ActivationFeeError } from "@/lib/wexon-activation-fee";
 
 /**
  * Pure activation-fee due matrix (ledger decisions without DB).
- * Mirrors resolveActivationFeeDue status transitions.
  */
 function isActivationDue(status: "none" | "PENDING" | "PAID" | "WAIVED" | "WAIVED_LEGACY", opts?: { demo?: boolean; reservedFresh?: boolean }) {
   if (opts?.demo) return { due: false as const, reason: "demo" as const };
@@ -18,7 +18,7 @@ function isActivationDue(status: "none" | "PENDING" | "PAID" | "WAIVED" | "WAIVE
 }
 
 describe("smart activation fee policy", () => {
-  it("adds activation only on first purchase quote", () => {
+  it("adds activation only on first purchase quote and keeps ledger line-item separate from checkout gross", () => {
     const tier = getCanonicalTier("essential");
     const first = computeCheckoutQuote({
       plan: { tierKey: "essential" },
@@ -28,6 +28,8 @@ describe("smart activation fee policy", () => {
     assert.equal(first.subscriptionAmountMinor, 750_000);
     assert.equal(first.activationFeeAmountMinor, 2_000_000);
     assert.equal(first.grossAmountMinor, 2_750_000);
+    assert.equal(first.activationGrossAmountMinor, 2_000_000);
+    assert.notEqual(first.activationGrossAmountMinor, first.grossAmountMinor);
 
     const monthlyRenewal = computeCheckoutQuote({
       plan: { tierKey: "essential" },
@@ -63,6 +65,15 @@ describe("smart activation fee policy", () => {
     const reserved = isActivationDue("PENDING", { reservedFresh: true });
     assert.equal(reserved.due, true);
     assert.equal("blocked" in reserved && reserved.blocked, true);
+  });
+
+  it("exposes ActivationFeeError codes for reserved and ownership mismatches", () => {
+    const reserved = new ActivationFeeError("ACTIVATION_FEE_RESERVED");
+    assert.equal(reserved.code, "ACTIVATION_FEE_RESERVED");
+    const mismatch = new ActivationFeeError("ACTIVATION_FEE_OWNERSHIP_MISMATCH");
+    assert.equal(mismatch.code, "ACTIVATION_FEE_OWNERSHIP_MISMATCH");
+    const stale = new ActivationFeeError("ACTIVATION_FEE_STALE_CALLBACK");
+    assert.equal(stale.code, "ACTIVATION_FEE_STALE_CALLBACK");
   });
 
   it("isolates org/product quote amounts by tier", () => {

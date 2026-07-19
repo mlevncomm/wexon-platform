@@ -8,7 +8,7 @@ import {
   PaytrSubscriptionError,
 } from "@/lib/paytr/paytr-client";
 import type { PaytrCallbackFields } from "@/lib/paytr/paytr-types";
-import { releaseActivationFeeReservation } from "@/lib/wexon-activation-fee";
+import { releaseActivationFeeReservation, ActivationFeeError } from "@/lib/wexon-activation-fee";
 import { settleActivationFeeAfterSubscriptionPaid } from "@/lib/paytr/paytr-subscription-checkout";
 
 function asJson(value: Record<string, unknown>): Prisma.InputJsonValue {
@@ -294,7 +294,30 @@ export async function handlePaytrSubscriptionCallback(input: {
   });
 
   if (payment.status === "PAID") {
-    await settleActivationFeeAfterSubscriptionPaid(payment.id);
+    try {
+      await settleActivationFeeAfterSubscriptionPaid(payment.id);
+    } catch (error) {
+      if (error instanceof ActivationFeeError) {
+        await prisma.auditLog.create({
+          data: {
+            organizationId: payment.organizationId,
+            userId: payment.userId,
+            action: "billing.paytr.activation_fee_ownership_mismatch",
+            entityType: "SubscriptionPayment",
+            entityId: payment.id,
+            level: "ERROR",
+            status: "FAILURE",
+            metadataJson: {
+              code: error.code,
+              merchantOid: payment.merchantOid,
+              duplicatePaid: true,
+            },
+          },
+        });
+        return { ok: true, duplicate: true };
+      }
+      throw error;
+    }
     return { ok: true, duplicate: true };
   }
 
@@ -346,6 +369,47 @@ export async function handlePaytrSubscriptionCallback(input: {
       return { ok: true };
     }
 
+    // Ownership check before marking PAID / activating subscription.
+    try {
+      await settleActivationFeeAfterSubscriptionPaid(payment.id);
+    } catch (error) {
+      if (error instanceof ActivationFeeError) {
+        await prisma.$transaction(async (tx) => {
+          await tx.subscriptionPayment.update({
+            where: { id: payment.id },
+            data: {
+              status: "FAILED",
+              callbackStatus: fields.status,
+              callbackTotalAmount: fields.totalAmount,
+              callbackPaymentAmount: fields.paymentAmount,
+              callbackCurrency: fields.currency,
+              failedReasonCode: error.code.toLowerCase(),
+              failedReasonMsg: error.message,
+              rawCallbackJson: asJson(redacted),
+            },
+          });
+          await tx.auditLog.create({
+            data: {
+              organizationId: payment.organizationId,
+              userId: payment.userId,
+              action: "billing.paytr.activation_fee_ownership_mismatch",
+              entityType: "SubscriptionPayment",
+              entityId: payment.id,
+              level: "ERROR",
+              status: "FAILURE",
+              metadataJson: {
+                code: error.code,
+                merchantOid: payment.merchantOid,
+              },
+            },
+          });
+        });
+        // Acknowledge to PayTR; do not activate subscription on ownership mismatch.
+        return { ok: true };
+      }
+      throw error;
+    }
+
     await prisma.subscriptionPayment.update({
       where: { id: payment.id },
       data: {
@@ -362,7 +426,6 @@ export async function handlePaytrSubscriptionCallback(input: {
     });
 
     await activateSubscriptionFromPayment(payment.id);
-    await settleActivationFeeAfterSubscriptionPaid(payment.id);
     return { ok: true, activated: true };
   }
 

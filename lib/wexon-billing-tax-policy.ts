@@ -27,6 +27,11 @@ export type CheckoutQuoteSnapshot = {
   taxEnabledAtPurchase: boolean;
   taxModeAtPurchase: TaxMode;
   currency: string;
+  /** Line-item tax split (deterministic; sums to taxAmountMinor). */
+  subscriptionTaxAmountMinor: number;
+  activationTaxAmountMinor: number;
+  subscriptionGrossAmountMinor: number;
+  activationGrossAmountMinor: number;
 };
 
 export function buildCheckoutQuote(input: {
@@ -48,12 +53,22 @@ export function buildCheckoutQuote(input: {
   if (!Number.isInteger(activationFeeAmountMinor) || activationFeeAmountMinor < 0) {
     throw new Error("activationFeeAmountMinor invalid");
   }
-  const netAmountMinor = subscriptionAmountMinor + activationFeeAmountMinor;
-  const { taxAmountMinor, grossAmountMinor } = computeExclusiveTax({
-    netAmountMinor,
+
+  const subscriptionTax = computeExclusiveTax({
+    netAmountMinor: subscriptionAmountMinor,
     taxRateBps: policy.taxRateBps,
     taxEnabled: policy.taxEnabled,
   });
+  const activationTax = computeExclusiveTax({
+    netAmountMinor: activationFeeAmountMinor,
+    taxRateBps: policy.taxRateBps,
+    taxEnabled: policy.taxEnabled,
+  });
+
+  const netAmountMinor = subscriptionAmountMinor + activationFeeAmountMinor;
+  const taxAmountMinor = subscriptionTax.taxAmountMinor + activationTax.taxAmountMinor;
+  const grossAmountMinor = subscriptionTax.grossAmountMinor + activationTax.grossAmountMinor;
+
   return {
     subscriptionAmountMinor,
     activationFeeAmountMinor,
@@ -64,5 +79,9 @@ export function buildCheckoutQuote(input: {
     taxEnabledAtPurchase: policy.taxEnabled,
     taxModeAtPurchase: policy.taxMode,
     currency: (input.currency ?? "TRY").toUpperCase(),
+    subscriptionTaxAmountMinor: subscriptionTax.taxAmountMinor,
+    activationTaxAmountMinor: activationTax.taxAmountMinor,
+    subscriptionGrossAmountMinor: subscriptionTax.grossAmountMinor,
+    activationGrossAmountMinor: activationTax.grossAmountMinor,
   };
 }

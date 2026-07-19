@@ -3,11 +3,32 @@ import type { CheckoutQuoteSnapshot } from "@/lib/wexon-billing-tax-policy";
 import { majorFromMinor, parseMajorToMinor } from "@/lib/wexon-billing-money";
 import { getCanonicalTier, resolveWexPayTierKey } from "@/lib/wexpay-canonical-catalog";
 
-const ACTIVATION_RESERVE_MS = 30 * 60 * 1000; // abandoned PENDING does not permanently lock
+export const ACTIVATION_RESERVE_MS = 30 * 60 * 1000; // abandoned PENDING does not permanently lock
 
 export type ActivationDueDecision =
   | { due: true; amountMinor: number; reason: "first_purchase" }
   | { due: false; amountMinor: 0; reason: "already_settled" | "waived" | "waived_legacy" | "demo" | "zero_fee" };
+
+export class ActivationFeeError extends Error {
+  readonly code:
+    | "ACTIVATION_FEE_RESERVED"
+    | "ACTIVATION_FEE_OWNERSHIP_MISMATCH"
+    | "ACTIVATION_FEE_STALE_CALLBACK"
+    | "ACTIVATION_FEE_IMMUTABLE";
+
+  constructor(
+    code:
+      | "ACTIVATION_FEE_RESERVED"
+      | "ACTIVATION_FEE_OWNERSHIP_MISMATCH"
+      | "ACTIVATION_FEE_STALE_CALLBACK"
+      | "ACTIVATION_FEE_IMMUTABLE",
+    message?: string,
+  ) {
+    super(message ?? code);
+    this.name = "ActivationFeeError";
+    this.code = code;
+  }
+}
 
 type LedgerClient = {
   activationFeeLedger: Prisma.TransactionClient["activationFeeLedger"];
@@ -19,6 +40,19 @@ function activationMinorForPlan(plan: { tierKey?: string | null; setupFee?: unkn
     return getCanonicalTier(tierKey).activationFeeMinor;
   }
   return parseMajorToMinor(plan.setupFee) ?? 0;
+}
+
+function isFreshReservation(ledger: {
+  status: ActivationFeeStatus;
+  reservedUntil: Date | null;
+  subscriptionPaymentId: string | null;
+}) {
+  return (
+    ledger.status === "PENDING" &&
+    ledger.reservedUntil != null &&
+    ledger.reservedUntil.getTime() > Date.now() &&
+    Boolean(ledger.subscriptionPaymentId)
+  );
 }
 
 /**
@@ -59,17 +93,25 @@ export async function resolveActivationFeeDue(
     if (existing.status === "WAIVED_LEGACY") {
       return { due: false, amountMinor: 0, reason: "waived_legacy", ledgerId: existing.id };
     }
-    // PENDING: if reservation expired or no payment link, fee still due (retry).
-    const reservedFresh =
-      existing.reservedUntil != null && existing.reservedUntil.getTime() > Date.now() && existing.subscriptionPaymentId;
-    if (reservedFresh) {
-      // Concurrent checkout holds a short reservation — still "due" conceptually but blocked by unique row.
+    if (isFreshReservation(existing)) {
       return { due: true, amountMinor: existing.activationFeeMinor || amountMinor, reason: "first_purchase", ledgerId: existing.id };
     }
     return { due: true, amountMinor: amountMinor, reason: "first_purchase", ledgerId: existing.id };
   }
 
   return { due: true, amountMinor, reason: "first_purchase" };
+}
+
+/** Ledger stores activation line-item only (not full checkout gross). */
+function activationLedgerAmounts(quote: CheckoutQuoteSnapshot, activationFeeMinor: number) {
+  return {
+    activationFeeMinor,
+    taxRateBps: quote.taxRateBps,
+    taxEnabledAtPurchase: quote.taxEnabledAtPurchase,
+    taxModeAtPurchase: quote.taxModeAtPurchase,
+    taxAmountMinor: quote.activationTaxAmountMinor,
+    grossAmountMinor: quote.activationGrossAmountMinor,
+  };
 }
 
 export async function reserveActivationFeeForCheckout(
@@ -102,20 +144,22 @@ export async function reserveActivationFeeForCheckout(
     return { status: existing.status, ledgerId: existing.id };
   }
 
-  if (existing?.status === "PENDING" && existing.reservedUntil && existing.reservedUntil.getTime() > Date.now() && existing.subscriptionPaymentId && existing.subscriptionPaymentId !== input.subscriptionPaymentId) {
-    throw new Error("ACTIVATION_FEE_RESERVED");
+  if (
+    existing?.status === "PENDING" &&
+    isFreshReservation(existing) &&
+    existing.subscriptionPaymentId !== input.subscriptionPaymentId
+  ) {
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_RESERVED",
+      "Aktivasyon bedeli için eşzamanlı bir ödeme zaten devam ediyor.",
+    );
   }
 
   const data = {
     planId: input.planId,
     status: "PENDING" as const,
     currency: input.quote.currency,
-    activationFeeMinor: input.activationFeeMinor,
-    taxRateBps: input.quote.taxRateBps,
-    taxEnabledAtPurchase: input.quote.taxEnabledAtPurchase,
-    taxModeAtPurchase: input.quote.taxModeAtPurchase,
-    taxAmountMinor: input.quote.taxAmountMinor,
-    grossAmountMinor: input.quote.grossAmountMinor,
+    ...activationLedgerAmounts(input.quote, input.activationFeeMinor),
     subscriptionPaymentId: input.subscriptionPaymentId,
     reservedUntil,
   };
@@ -137,8 +181,7 @@ export async function reserveActivationFeeForCheckout(
       },
     });
     return { status: created.status, ledgerId: created.id };
-  } catch (error) {
-    // Unique race: re-read
+  } catch {
     const raced = await tx.activationFeeLedger.findUnique({
       where: {
         organizationId_productId: {
@@ -150,14 +193,35 @@ export async function reserveActivationFeeForCheckout(
     if (raced && (raced.status === "PAID" || raced.status === "WAIVED" || raced.status === "WAIVED_LEGACY")) {
       return { status: raced.status, ledgerId: raced.id };
     }
-    throw error;
+    if (raced && isFreshReservation(raced) && raced.subscriptionPaymentId !== input.subscriptionPaymentId) {
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_RESERVED",
+        "Aktivasyon bedeli için eşzamanlı bir ödeme zaten devam ediyor.",
+      );
+    }
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_RESERVED",
+      "Aktivasyon bedeli rezervasyonu oluşturulamadı; lütfen yeniden deneyin.",
+    );
   }
 }
 
+/**
+ * Mark PENDING ledger PAID only when subscriptionPaymentId matches.
+ * Never overwrites PAID/WAIVED/WAIVED_LEGACY with another payment.
+ * Renewals (activationFeeAmountMinor=0) no-op when already settled.
+ */
 export async function markActivationFeePaid(
   tx: LedgerClient,
-  input: { organizationId: string; productId: string; subscriptionPaymentId: string },
+  input: {
+    organizationId: string;
+    productId: string;
+    subscriptionPaymentId: string;
+    /** From immutable payment snapshot; >0 means this payment intended to settle activation. */
+    activationFeeAmountMinor?: number | null;
+  },
 ) {
+  const intendedCharge = input.activationFeeAmountMinor ?? 0;
   const ledger = await tx.activationFeeLedger.findUnique({
     where: {
       organizationId_productId: {
@@ -166,10 +230,52 @@ export async function markActivationFeePaid(
       },
     },
   });
-  if (!ledger) return { updated: false as const };
-  if (ledger.status === "PAID") return { updated: false as const, duplicate: true as const };
+  if (!ledger) {
+    if (intendedCharge > 0) {
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_OWNERSHIP_MISMATCH",
+        "Aktivasyon bedeli ledger kaydı bulunamadı.",
+      );
+    }
+    return { updated: false as const, reason: "missing" as const };
+  }
+
+  if (ledger.status === "PAID") {
+    if (ledger.subscriptionPaymentId === input.subscriptionPaymentId) {
+      return { updated: false as const, duplicate: true as const };
+    }
+    if (intendedCharge > 0) {
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_OWNERSHIP_MISMATCH",
+        "Aktivasyon bedeli başka bir ödeme ile zaten tahsil edilmiş.",
+      );
+    }
+    return { updated: false as const, alreadySettled: true as const };
+  }
+
   if (ledger.status === "WAIVED" || ledger.status === "WAIVED_LEGACY") {
-    return { updated: false as const, waived: true as const };
+    if (intendedCharge > 0) {
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_IMMUTABLE",
+        `Aktivasyon kaydı ${ledger.status} durumunda; bu ödeme aktivasyon tahsil edemez.`,
+      );
+    }
+    return { updated: false as const, waived: true as const, status: ledger.status };
+  }
+
+  // PENDING
+  if (ledger.subscriptionPaymentId == null) {
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_STALE_CALLBACK",
+      "Aktivasyon rezervasyonu süresi dolmuş; manuel reconciliation gerekir.",
+    );
+  }
+
+  if (ledger.subscriptionPaymentId !== input.subscriptionPaymentId) {
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_OWNERSHIP_MISMATCH",
+      "Aktivasyon bedeli rezervasyonu bu ödemeye ait değil.",
+    );
   }
 
   await tx.activationFeeLedger.update({
@@ -217,6 +323,21 @@ export async function waiveActivationFee(
     legacy?: boolean;
   },
 ) {
+  const existing = await tx.activationFeeLedger.findUnique({
+    where: {
+      organizationId_productId: {
+        organizationId: input.organizationId,
+        productId: input.productId,
+      },
+    },
+  });
+  if (existing && (existing.status === "PAID" || existing.status === "WAIVED" || existing.status === "WAIVED_LEGACY")) {
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_IMMUTABLE",
+      `Aktivasyon kaydı ${existing.status} durumunda değiştirilemez.`,
+    );
+  }
+
   const status = input.legacy ? ("WAIVED_LEGACY" as const) : ("WAIVED" as const);
   return tx.activationFeeLedger.upsert({
     where: {
@@ -243,7 +364,6 @@ export async function waiveActivationFee(
     },
   });
 }
-
 
 export function quoteToLegacyMajorDisplay(quote: CheckoutQuoteSnapshot) {
   return {

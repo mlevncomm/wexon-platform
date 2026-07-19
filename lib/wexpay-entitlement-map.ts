@@ -9,10 +9,25 @@ export const WEXPAY_FEATURE_ENTITLEMENT_KEYS = [
   "feature_subscriptions",
   "feature_qr_basic",
   "feature_qr_advanced",
-  "feature_pos_bridge",
+  "feature_guest_order",
+  "feature_kitchen_display",
+  "feature_cashier",
+  "feature_qr_payment",
+  "feature_guest_own_payment",
+  "feature_item_payment",
+  "feature_custom_split",
+  "feature_modifiers",
+  "feature_waiter_calls",
+  "feature_advanced_roles",
+  "feature_advanced_reports",
+  "feature_csv_export",
   "feature_multi_location",
-  "feature_reporting_advanced",
+  "feature_custom_branding",
   "feature_api_access",
+  "feature_webhooks",
+  "feature_pos_integration",
+  "feature_pos_bridge",
+  "feature_reporting_advanced",
   "feature_priority_support",
   "feature_fast_settlement_eligible",
   "feature_custom_settlement",
@@ -20,6 +35,16 @@ export const WEXPAY_FEATURE_ENTITLEMENT_KEYS = [
 ] as const;
 
 export type WexPayFeatureEntitlementKey = (typeof WEXPAY_FEATURE_ENTITLEMENT_KEYS)[number];
+
+/** Features that must remain runtime-disabled until product-ready. */
+export const WEXPAY_UNFINISHED_FEATURE_KEYS = [
+  "feature_api_access",
+  "feature_webhooks",
+  "feature_pos_integration",
+  "feature_pos_bridge",
+  "feature_fast_settlement_eligible",
+  "feature_custom_settlement",
+] as const;
 
 export function entitlementDefaultsForTier(tierKey: WexPayTierKey): Record<string, boolean | number | string> {
   return { ...getTierSeedDefault(tierKey).entitlementDefaults };

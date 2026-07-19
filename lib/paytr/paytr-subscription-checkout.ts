@@ -7,6 +7,7 @@ import {
   type CheckoutBillingInterval,
 } from "@/lib/wexon-checkout-validation";
 import {
+  ActivationFeeError,
   markActivationFeePaid,
   quoteToLegacyMajorDisplay,
   releaseActivationFeeReservation,
@@ -184,8 +185,8 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
           isDemo: organization.isDemo,
         });
       } catch (error) {
-        if (error instanceof Error && error.message === "ACTIVATION_FEE_RESERVED") {
-          throw new CheckoutValidationError("Aktivasyon bedeli için eşzamanlı bir ödeme zaten devam ediyor.");
+        if (error instanceof ActivationFeeError && error.code === "ACTIVATION_FEE_RESERVED") {
+          throw new CheckoutValidationError(error.message);
         }
         throw error;
       }
@@ -295,7 +296,7 @@ export function fingerprintPlan(plan: Plan) {
     .slice(0, 16);
 }
 
-/** Mark activation fee PAID after successful subscription payment (idempotent). */
+/** Mark activation fee PAID after successful subscription payment (idempotent / ownership-safe). */
 export async function settleActivationFeeAfterSubscriptionPaid(paymentId: string) {
   const payment = await prisma.subscriptionPayment.findUnique({
     where: { id: paymentId },
@@ -307,6 +308,7 @@ export async function settleActivationFeeAfterSubscriptionPaid(paymentId: string
       organizationId: payment.organizationId,
       productId: payment.plan.productId,
       subscriptionPaymentId: payment.id,
+      activationFeeAmountMinor: payment.activationFeeAmountMinor,
     });
   });
 }

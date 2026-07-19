@@ -156,8 +156,8 @@ export async function createMockCheckoutSubscriptionAction(formData: FormData) {
           taxRateBps: quote.taxRateBps,
           taxEnabledAtPurchase: quote.taxEnabledAtPurchase,
           taxModeAtPurchase: quote.taxModeAtPurchase,
-          taxAmountMinor: quote.taxAmountMinor,
-          grossAmountMinor: quote.grossAmountMinor,
+          taxAmountMinor: quote.activationTaxAmountMinor,
+          grossAmountMinor: quote.activationGrossAmountMinor,
           paidAt: now,
         },
         update: {

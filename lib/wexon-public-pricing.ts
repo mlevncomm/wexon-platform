@@ -7,6 +7,8 @@ import {
 import {
   getTierSeedDefault,
   resolveWexPayTierKey,
+  WEXPAY_NO_COMMITMENT_LABEL,
+  WEXPAY_ZERO_COMMISSION_LABEL,
   type WexPayCtaKind,
   type WexPayTierKey,
 } from "@/lib/wexpay-tier-config";
@@ -50,6 +52,8 @@ function buildFeatures(
 
   if (reporting) features.push(`Raporlama: ${reporting}`);
   if (support) features.push(`Destek: ${support}`);
+  features.push(WEXPAY_ZERO_COMMISSION_LABEL);
+  features.push(WEXPAY_NO_COMMITMENT_LABEL);
   features.push(`SLA: ${seed.limits.slaDisplay}`);
   return features;
 }
@@ -86,8 +90,8 @@ export async function getPublicWexPayPricingPlans(): Promise<PricingPlan[]> {
         const seed = getTierSeedDefault(tierKey);
         const monthly = num(plan.priceMonthly) ?? seed.monthlyFee;
         const setup = num(plan.setupFee) ?? seed.setupFee;
-        const processing = num(plan.processingFeePct) ?? seed.processingFeePct;
-        const commitment = num(plan.minimumTransactionCommitment) ?? seed.minimumTransactionCommitment;
+        const processing = 0;
+        const commitment = 0;
         return formatTierPriceParts({
           tierKey,
           monthly,
