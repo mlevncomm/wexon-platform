@@ -7,6 +7,7 @@ import { writeAuditFailure } from "@/lib/wexon-audit";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
+import { getActivationJourneyViewForOrg } from "@/lib/wexpay-activation-journey";
 
 function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayAccess>>, { allowed: true }>) {
   return access.organization.restaurants.flatMap((restaurant) =>
@@ -18,6 +19,7 @@ function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayA
 
 /**
  * WexPay access gate + sticky sidebar workspace shell.
+ * License+Install ACTIVE → panel open (Kurulum Modu if journey ≠ ACTIVE).
  */
 export default async function WexPayLayout({ children }: { children: ReactNode }) {
   const selector = await resolvePlatformOrganizationSelector();
@@ -41,6 +43,7 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
   }
 
   const branches = buildBranchOptions(access);
+  const activationView = await getActivationJourneyViewForOrg(access.organization.id);
 
   return (
     <Suspense
@@ -60,6 +63,15 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
           licenseStatus: formatCoreStatus(access.license.status),
         }}
       >
+        {activationView.setupMode ? (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-800/80">Akıllı Aktivasyon</p>
+            <p className="mt-1 text-sm font-black">Kurulum Modu</p>
+            <p className="mt-1 text-sm font-semibold text-amber-900/80">
+              Çalışma alanı kurulum için açık. Canlı QR, misafir sipariş ve ödeme Canlıya Geçiş sonrası açılır.
+            </p>
+          </div>
+        ) : null}
         <Suspense fallback={null}>
           <WexPayKeyboardShortcuts />
         </Suspense>

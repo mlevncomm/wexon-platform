@@ -7,7 +7,7 @@ import { EXPECTED_PUBLIC_TABLE_COUNT } from "@/lib/wexon-db-backup-guards";
 assertLocalDbTestGuard(process.env);
 
 describe("ActivationFeeLedger RLS security (db)", () => {
-  it("public schema has 34 tables and ActivationFeeLedger RLS is enabled", async () => {
+  it("public schema has 37 tables and ActivationFeeLedger RLS is enabled", async () => {
     const tables = await prisma.$queryRaw<
       Array<{ table_name: string; rls: boolean }>
     >`
@@ -19,11 +19,17 @@ describe("ActivationFeeLedger RLS security (db)", () => {
     `;
 
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 34);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 37);
 
     const ledger = tables.find((t) => t.table_name === "ActivationFeeLedger");
     assert.ok(ledger, "ActivationFeeLedger must exist after migration");
     assert.equal(ledger.rls, true);
+
+    for (const name of ["ActivationJourney", "ActivationJourneyStep", "TableQrToken"]) {
+      const row = tables.find((t) => t.table_name === name);
+      assert.ok(row, `${name} must exist`);
+      assert.equal(row.rls, true);
+    }
   });
 
   it("denies anon/authenticated and keeps wexon_app NOLOGIN/NOBYPASSRLS with policy", async () => {

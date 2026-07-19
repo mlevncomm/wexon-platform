@@ -28,6 +28,7 @@ import {
 } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOrganizationDetail, getAdminOrganizationMutationOptions } from "@/lib/wexon-admin";
 import { coreAccessDenialMessage, evaluateProductAccess } from "@/lib/wexon-core-access";
+import { getActivationJourneyViewForOrg } from "@/lib/wexpay-activation-journey";
 
 function dateInput(value: Date | null | undefined) {
   return value ? value.toISOString().slice(0, 10) : "";
@@ -42,10 +43,11 @@ export default async function AdminOrganizationDetailPage({
 }) {
   const { id } = await params;
   const { adminError } = await searchParams;
-  const [organization, options, wexPayCoreAccess] = await Promise.all([
+  const [organization, options, wexPayCoreAccess, activationView] = await Promise.all([
     getAdminOrganizationDetail(id),
     getAdminOrganizationMutationOptions(),
     evaluateProductAccess({ organizationId: id, productKey: "wexpay" }),
+    getActivationJourneyViewForOrg(id),
   ]);
 
   if (!organization) {
@@ -153,6 +155,20 @@ export default async function AdminOrganizationDetailPage({
           <AdminInfoRow label="Paket" value={activePlan} />
           <AdminInfoRow label="İşletme" value={organization.restaurants.length} />
           <AdminInfoRow label="Kullanıcı" value={organization.memberships.length} />
+        </div>
+      </AdminPanel>
+
+      <AdminPanel>
+        <AdminSectionTitle
+          badge="Akıllı Aktivasyon"
+          title="Aktivasyon yolculuğu"
+          description="Read-only durum. Kurulum Modu panel erişimini kapatmaz; public QR yalnız Canlıya Geçiş sonrası açılır."
+        />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <AdminInfoRow label="Durum" value={activationView.statusLabel} />
+          <AdminInfoRow label="Mod" value={activationView.setupMode ? "Kurulum Modu" : "Canlı Kullanım"} />
+          <AdminInfoRow label="Kaynak" value={activationView.sourceLabel ?? "—"} />
+          <AdminInfoRow label="Adım" value={activationView.currentStepLabel ?? "—"} />
         </div>
       </AdminPanel>
 
