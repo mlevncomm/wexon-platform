@@ -204,7 +204,11 @@ export function buildStaffInviteEmailContent(input: {
   invitePathToken: string;
   expiresAt: Date;
 }): { subject: string; html: string; text: string; inviteUrl: string } {
-  const origin = resolveWexonPublicOrigin() || "https://www.wexon.dev";
+  const origin =
+    resolveWexonPublicOrigin() ||
+    (process.env.E2E_BASE_URL ?? "").replace(/\/+$/, "") ||
+    (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "") ||
+    "http://localhost:3000";
   const inviteUrl = `${origin.replace(/\/+$/, "")}/invite/${encodeURIComponent(input.invitePathToken)}`;
   const org = escapeEmailHtml(input.organizationName);
   const role = escapeEmailHtml(input.roleLabel);

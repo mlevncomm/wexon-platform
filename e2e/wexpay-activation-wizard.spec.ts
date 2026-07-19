@@ -171,15 +171,12 @@ test.describe.serial("WexPay activation wizard flow", () => {
 
       const preview = page.getByText(/Önizleme bağlantısı/i).locator("..").locator(".font-mono");
       await expect(preview).toBeVisible({ timeout: 15_000 });
-      const inviteUrl = (await preview.textContent())!.trim();
-      expect(inviteUrl).toContain("/invite/");
+      const inviteUrlRaw = (await preview.textContent())!.trim();
+      expect(inviteUrlRaw).toContain("/invite/");
+      const invitePath = `/invite/${inviteUrlRaw.split("/invite/")[1]!}`;
 
       const invitePage = await context.newPage();
-      await invitePage.goto(inviteUrl.startsWith("http") ? inviteUrl : inviteUrl);
-      // Relative /invite/... paths need origin
-      if (inviteUrl.startsWith("/")) {
-        await invitePage.goto(inviteUrl);
-      }
+      await invitePage.goto(invitePath);
       await expect(invitePage.getByRole("heading", { name: "Personel daveti" })).toBeVisible();
       await expect(invitePage.locator('input[name="email"]')).toHaveValue("");
       await invitePage.locator('input[name="email"]').fill(newEmail);
@@ -227,14 +224,12 @@ test.describe.serial("WexPay activation wizard flow", () => {
         .locator("..")
         .locator(".font-mono");
       await expect(existingInvitePreview).toBeVisible({ timeout: 15_000 });
-      const existingInviteUrl = (await existingInvitePreview.textContent())!.trim();
+      const existingInviteUrlRaw = (await existingInvitePreview.textContent())!.trim();
+      const existingInvitePath = `/invite/${existingInviteUrlRaw.split("/invite/")[1]!}`;
 
       const bare = await context.browser()!.newContext();
       const barePage = await bare.newPage();
-      await barePage.goto(existingInviteUrl.startsWith("/") ? existingInviteUrl : existingInviteUrl);
-      if (existingInviteUrl.startsWith("/")) {
-        await barePage.goto(existingInviteUrl);
-      }
+      await barePage.goto(existingInvitePath);
       await barePage.locator('input[name="email"]').fill(existingEmail);
       await barePage.getByRole("button", { name: "Daveti kabul et" }).click();
       await expect(barePage.getByText(/önce giriş yapmalısınız/i)).toBeVisible({ timeout: 15_000 });
