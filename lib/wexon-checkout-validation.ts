@@ -1,4 +1,8 @@
-import { resolveWexPayTierKey } from "@/lib/wexpay-tier-config";
+import { resolveWexPayTierKey } from "@/lib/wexpay-canonical-catalog";
+import { getCanonicalTier, listCanonicalTiers } from "@/lib/wexpay-canonical-catalog";
+import { buildCheckoutQuote } from "@/lib/wexon-billing-tax-policy";
+import { majorFromMinor, parseMajorToMinor } from "@/lib/wexon-billing-money";
+import type { CheckoutQuoteSnapshot } from "@/lib/wexon-billing-tax-policy";
 
 export class CheckoutValidationError extends Error {
   constructor(message: string) {
@@ -21,8 +25,11 @@ export type PlanPriceSource = {
   priceMonthly?: unknown;
   priceYearly?: unknown;
   priceOneTime?: unknown;
+  setupFee?: unknown;
   currency?: string | null;
   taxRatePct?: number | null;
+  tierKey?: string | null;
+  key?: string | null;
 };
 
 function readString(formData: FormData, key: string) {
@@ -56,58 +63,85 @@ function normalizeInterval(value: string): CheckoutBillingInterval {
   return interval as CheckoutBillingInterval;
 }
 
-function toNumber(value: unknown): number | null {
-  if (value == null) return null;
-  const n = typeof value === "number" ? value : Number(String(value));
-  if (!Number.isFinite(n) || n < 0) return null;
-  return n;
+function subscriptionMinorFromPlan(plan: PlanPriceSource, interval: CheckoutBillingInterval | "one_time"): number {
+  const tierKey = resolveWexPayTierKey(plan.tierKey ?? plan.key ?? null);
+  if (tierKey) {
+    const tier = getCanonicalTier(tierKey);
+    if (interval === "yearly") {
+      if (tier.yearlyPriceMinor == null) {
+        throw new CheckoutValidationError("Seçilen faturalama aralığı için fiyat tanımlı değil.");
+      }
+      return tier.yearlyPriceMinor;
+    }
+    if (interval === "one_time") {
+      throw new CheckoutValidationError("Tek seferlik abonelik fiyatı desteklenmiyor; aktivasyon bedeli ayrıdır.");
+    }
+    return tier.monthlyPriceMinor;
+  }
+
+  let rawMinor: number | null = null;
+  if (interval === "yearly") rawMinor = parseMajorToMinor(plan.priceYearly);
+  else if (interval === "one_time") rawMinor = parseMajorToMinor(plan.priceOneTime);
+  else rawMinor = parseMajorToMinor(plan.priceMonthly);
+
+  if (rawMinor == null) {
+    throw new CheckoutValidationError("Seçilen faturalama aralığı için fiyat tanımlı değil.");
+  }
+  return rawMinor;
 }
 
 /**
- * Compute subscription checkout totals from a DB Plan row.
- * Tax uses plan.taxRatePct (default 20).
+ * Server-authoritative subscription period price (major units) for legacy display.
+ * Tax uses canonical billing tax policy (default: disabled).
+ * Does NOT include activation fee — use computeCheckoutQuote.
  */
 export function computePlanPrice(plan: PlanPriceSource, interval: CheckoutBillingInterval | "one_time") {
-  const taxRatePct = typeof plan.taxRatePct === "number" && Number.isFinite(plan.taxRatePct) ? plan.taxRatePct : 20;
-  const currency = (plan.currency ?? "TRY").toUpperCase();
-
-  let raw: number | null = null;
-  if (interval === "yearly") raw = toNumber(plan.priceYearly);
-  else if (interval === "one_time") raw = toNumber(plan.priceOneTime);
-  else raw = toNumber(plan.priceMonthly);
-
-  if (raw == null) {
-    throw new CheckoutValidationError("Seçilen faturalama aralığı için fiyat tanımlı değil.");
-  }
-
-  const subtotal = Math.round(raw);
-  const tax = Math.round(subtotal * (taxRatePct / 100));
-  const total = subtotal + tax;
-  return { subtotal, tax, total, currency, taxRatePct };
+  const quote = computeCheckoutQuote({
+    plan,
+    interval,
+    activationFeeAmountMinor: 0,
+  });
+  return {
+    subtotal: majorFromMinor(quote.netAmountMinor),
+    tax: majorFromMinor(quote.taxAmountMinor),
+    total: majorFromMinor(quote.grossAmountMinor),
+    currency: quote.currency,
+    taxRatePct: Math.round(quote.taxRateBps / 100),
+  };
 }
 
-/** Narrow fallback used only when a DB plan price is unavailable. */
+export function computeCheckoutQuote(input: {
+  plan: PlanPriceSource;
+  interval: CheckoutBillingInterval | "one_time";
+  activationFeeAmountMinor: number;
+}): CheckoutQuoteSnapshot {
+  const subscriptionAmountMinor = subscriptionMinorFromPlan(input.plan, input.interval);
+  const currency = (input.plan.currency ?? "TRY").toUpperCase();
+  return buildCheckoutQuote({
+    subscriptionAmountMinor,
+    activationFeeAmountMinor: input.activationFeeAmountMinor,
+    currency,
+  });
+}
+
+/** Narrow fallback used only when a DB plan price is unavailable — from canonical catalog. */
 export function checkoutPrice(
   _productKey: "wexpay",
   planKey: CheckoutPlanKey,
   interval: CheckoutBillingInterval,
 ) {
-  const fallback: Record<string, { monthly: number; yearly: number }> = {
-    essential: { monthly: 7000, yearly: 70000 },
-    growth: { monthly: 15000, yearly: 150000 },
-    scale: { monthly: 35000, yearly: 350000 },
-    business_suite: { monthly: 99000, yearly: 990000 },
-    basic: { monthly: 7000, yearly: 70000 },
-    standard: { monthly: 15000, yearly: 150000 },
-    pro: { monthly: 35000, yearly: 350000 },
-  };
-  const prices = fallback[planKey] ?? fallback.essential;
+  const resolved = resolveWexPayTierKey(planKey) ?? "essential";
+  const tier = getCanonicalTier(resolved);
+  if (resolved === "business_suite" && interval === "yearly") {
+    throw new CheckoutValidationError("WexPay Enterprise yıllık fiyatı özel teklifle belirlenir.");
+  }
   return computePlanPrice(
     {
-      priceMonthly: prices.monthly,
-      priceYearly: prices.yearly,
+      tierKey: tier.tierKey,
+      key: tier.planKey,
+      priceMonthly: majorFromMinor(tier.monthlyPriceMinor),
+      priceYearly: tier.yearlyPriceMinor == null ? null : majorFromMinor(tier.yearlyPriceMinor),
       currency: "TRY",
-      taxRatePct: 20,
     },
     interval,
   );
@@ -120,6 +154,10 @@ export function parseCheckoutPayload(formData: FormData, hasCustomerSession: boo
   const email = requiredString(formData, "email", "E-posta").toLowerCase();
   const password = readString(formData, "password");
   const passwordConfirm = readString(formData, "passwordConfirm");
+
+  if (planKey === "business_suite") {
+    throw new CheckoutValidationError("WexPay Enterprise self-serve checkout ile açılamaz. Lütfen teklif için iletişime geçin.");
+  }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CheckoutValidationError("Geçerli bir e-posta adresi girin.");
   if (!hasCustomerSession) {
@@ -139,4 +177,13 @@ export function parseCheckoutPayload(formData: FormData, hasCustomerSession: boo
     phone: readString(formData, "phone") || null,
     country: (readString(formData, "country") || "TR").toUpperCase(),
   };
+}
+
+export function catalogCheckoutFallbackTable() {
+  return listCanonicalTiers().map((t) => ({
+    tierKey: t.tierKey,
+    monthly: majorFromMinor(t.monthlyPriceMinor),
+    yearly: t.yearlyPriceMinor == null ? null : majorFromMinor(t.yearlyPriceMinor),
+    activation: majorFromMinor(t.activationFeeMinor),
+  }));
 }

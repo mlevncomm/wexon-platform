@@ -113,7 +113,7 @@ export async function getPublicWexPayPricingPlans(): Promise<PricingPlan[]> {
 
 export function startingPriceLabel(plans: PricingPlan[]) {
   const essential = plans.find((plan) => plan.id === "essential") ?? plans[0];
-  return essential?.priceLabel ?? "₺7.000/ay";
+  return essential?.priceLabel ?? "₺7.500/ay";
 }
 
 /** Resolve deep-link plan ids including legacy Basic/Standard/Pro. */

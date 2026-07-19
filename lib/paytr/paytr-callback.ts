@@ -8,6 +8,8 @@ import {
   PaytrSubscriptionError,
 } from "@/lib/paytr/paytr-client";
 import type { PaytrCallbackFields } from "@/lib/paytr/paytr-types";
+import { releaseActivationFeeReservation } from "@/lib/wexon-activation-fee";
+import { settleActivationFeeAfterSubscriptionPaid } from "@/lib/paytr/paytr-subscription-checkout";
 
 function asJson(value: Record<string, unknown>): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
@@ -134,10 +136,15 @@ async function activateSubscriptionFromPayment(paymentId: string) {
       },
     });
 
-    const total = Number(payment.amount);
-    const taxRate = payment.taxRatePct || 20;
-    const subtotal = Math.round(total / (1 + taxRate / 100));
-    const tax = total - subtotal;
+    const taxMinor = payment.taxAmountMinor ?? 0;
+    const totalMajor = Number(payment.amount);
+    const subtotalMajor =
+      payment.netAmountMinor != null
+        ? payment.netAmountMinor / 100
+        : taxMinor > 0
+          ? Math.round(totalMajor / (1 + (payment.taxRatePct || 20) / 100))
+          : totalMajor;
+    const taxMajor = payment.taxAmountMinor != null ? payment.taxAmountMinor / 100 : Math.max(0, totalMajor - subtotalMajor);
 
     const invoice = await tx.invoice.create({
       data: {
@@ -145,9 +152,9 @@ async function activateSubscriptionFromPayment(paymentId: string) {
         subscriptionId: subscription.id,
         invoiceNo: `INV-PAYTR-${payment.merchantOid}`.slice(0, 64),
         status: "PAID",
-        subtotal,
-        tax,
-        total,
+        subtotal: subtotalMajor,
+        tax: taxMajor,
+        total: totalMajor,
         currency: payment.currency,
         issuedAt: now,
         paidAt: now,
@@ -267,6 +274,7 @@ export async function handlePaytrSubscriptionCallback(input: {
 
   const payment = await prisma.subscriptionPayment.findUnique({
     where: { merchantOid: fields.merchantOid },
+    include: { plan: true },
   });
   if (!payment) {
     return { ok: false, reason: "unknown_merchant_oid", status: 404 };
@@ -286,40 +294,53 @@ export async function handlePaytrSubscriptionCallback(input: {
   });
 
   if (payment.status === "PAID") {
+    await settleActivationFeeAfterSubscriptionPaid(payment.id);
     return { ok: true, duplicate: true };
   }
 
+  const expectedMinor =
+    payment.grossAmountMinor != null && payment.grossAmountMinor > 0
+      ? payment.grossAmountMinor
+      : payment.amountMinor;
+
   if (success) {
     const callbackMinor = Number(fields.totalAmount);
-    if (!Number.isFinite(callbackMinor) || callbackMinor !== payment.amountMinor) {
-      await prisma.subscriptionPayment.update({
-        where: { id: payment.id },
-        data: {
-          status: "FAILED",
-          callbackStatus: fields.status,
-          callbackTotalAmount: fields.totalAmount,
-          callbackPaymentAmount: fields.paymentAmount,
-          callbackCurrency: fields.currency,
-          failedReasonCode: "amount_mismatch",
-          failedReasonMsg: "Callback tutarı beklenen amountMinor ile eşleşmiyor.",
-          rawCallbackJson: asJson(redacted),
-        },
-      });
-      await prisma.auditLog.create({
-        data: {
-          organizationId: payment.organizationId,
-          userId: payment.userId,
-          action: "billing.paytr.callback_amount_mismatch",
-          entityType: "SubscriptionPayment",
-          entityId: payment.id,
-          level: "ERROR",
-          status: "FAILURE",
-          metadataJson: {
-            expectedMinor: payment.amountMinor,
-            callbackMinor,
-            merchantOid: payment.merchantOid,
+    if (!Number.isFinite(callbackMinor) || callbackMinor !== expectedMinor) {
+      await prisma.$transaction(async (tx) => {
+        await tx.subscriptionPayment.update({
+          where: { id: payment.id },
+          data: {
+            status: "FAILED",
+            callbackStatus: fields.status,
+            callbackTotalAmount: fields.totalAmount,
+            callbackPaymentAmount: fields.paymentAmount,
+            callbackCurrency: fields.currency,
+            failedReasonCode: "amount_mismatch",
+            failedReasonMsg: "Callback tutarı beklenen gross/amountMinor ile eşleşmiyor.",
+            rawCallbackJson: asJson(redacted),
           },
-        },
+        });
+        await releaseActivationFeeReservation(tx, {
+          organizationId: payment.organizationId,
+          productId: payment.plan.productId,
+          subscriptionPaymentId: payment.id,
+        });
+        await tx.auditLog.create({
+          data: {
+            organizationId: payment.organizationId,
+            userId: payment.userId,
+            action: "billing.paytr.callback_amount_mismatch",
+            entityType: "SubscriptionPayment",
+            entityId: payment.id,
+            level: "ERROR",
+            status: "FAILURE",
+            metadataJson: {
+              expectedMinor,
+              callbackMinor,
+              merchantOid: payment.merchantOid,
+            },
+          },
+        });
       });
       // Still acknowledge to PayTR after recording failure — avoids endless retries for bad amount.
       return { ok: true };
@@ -341,36 +362,43 @@ export async function handlePaytrSubscriptionCallback(input: {
     });
 
     await activateSubscriptionFromPayment(payment.id);
+    await settleActivationFeeAfterSubscriptionPaid(payment.id);
     return { ok: true, activated: true };
   }
 
-  await prisma.subscriptionPayment.update({
-    where: { id: payment.id },
-    data: {
-      status: "FAILED",
-      callbackStatus: fields.status,
-      callbackTotalAmount: fields.totalAmount,
-      callbackPaymentAmount: fields.paymentAmount,
-      callbackCurrency: fields.currency,
-      failedReasonCode: fields.failedReasonCode ?? "paytr_failed",
-      failedReasonMsg: fields.failedReasonMsg ?? "PayTR ödeme başarısız.",
-      rawCallbackJson: asJson(redacted),
-    },
-  });
-
-  await prisma.auditLog.create({
-    data: {
-      organizationId: payment.organizationId,
-      userId: payment.userId,
-      action: "billing.paytr.callback_failed",
-      entityType: "SubscriptionPayment",
-      entityId: payment.id,
-      metadataJson: {
-        merchantOid: payment.merchantOid,
-        status: fields.status,
-        failedReasonCode: fields.failedReasonCode,
+  await prisma.$transaction(async (tx) => {
+    await tx.subscriptionPayment.update({
+      where: { id: payment.id },
+      data: {
+        status: "FAILED",
+        callbackStatus: fields.status,
+        callbackTotalAmount: fields.totalAmount,
+        callbackPaymentAmount: fields.paymentAmount,
+        callbackCurrency: fields.currency,
+        failedReasonCode: fields.failedReasonCode ?? "paytr_failed",
+        failedReasonMsg: fields.failedReasonMsg ?? "PayTR ödeme başarısız.",
+        rawCallbackJson: asJson(redacted),
       },
-    },
+    });
+    await releaseActivationFeeReservation(tx, {
+      organizationId: payment.organizationId,
+      productId: payment.plan.productId,
+      subscriptionPaymentId: payment.id,
+    });
+    await tx.auditLog.create({
+      data: {
+        organizationId: payment.organizationId,
+        userId: payment.userId,
+        action: "billing.paytr.callback_failed",
+        entityType: "SubscriptionPayment",
+        entityId: payment.id,
+        metadataJson: {
+          merchantOid: payment.merchantOid,
+          status: fields.status,
+          failedReasonCode: fields.failedReasonCode,
+        },
+      },
+    });
   });
 
   return { ok: true };

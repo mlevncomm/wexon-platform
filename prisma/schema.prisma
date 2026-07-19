@@ -135,6 +135,14 @@ enum SubscriptionPaymentStatus {
   EXPIRED
 }
 
+/// One-time Smart Activation fee per organization + product (Core billing).
+enum ActivationFeeStatus {
+  PENDING
+  PAID
+  WAIVED
+  WAIVED_LEGACY
+}
+
 enum AppInstallationStatus {
   ACTIVE
   DISABLED
@@ -175,6 +183,7 @@ model Organization {
   invoices                  Invoice[]
   billingPayments           BillingPayment[]
   subscriptionPayments      SubscriptionPayment[]
+  activationFeeLedgers      ActivationFeeLedger[]
   appInstallations          AppInstallation[]
   auditLogs                 AuditLog[]
   apiKeys                   ApiKey[]
@@ -238,11 +247,12 @@ model Product {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
-  plans            Plan[]
-  licenses         License[]
-  appInstallations AppInstallation[]
-  apiKeys          ApiKey[]
-  webhookEndpoints WebhookEndpoint[]
+  plans                Plan[]
+  licenses             License[]
+  appInstallations     AppInstallation[]
+  apiKeys              ApiKey[]
+  webhookEndpoints     WebhookEndpoint[]
+  activationFeeLedgers ActivationFeeLedger[]
 
   @@index([status])
   @@index([isActive])
@@ -410,37 +420,47 @@ model BillingPayment {
 
 /// Platform PayTR iFrame ledger for Core subscription checkout (NOT WexPay operational Payment).
 model SubscriptionPayment {
-  id                    String                    @id @default(cuid())
-  organizationId        String
-  subscriptionId        String?
-  planId                String
-  userId                String?
-  provider              String                    @default("PAYTR")
-  providerMode          String                    @default("iframe")
-  merchantOid           String                    @unique
-  amount                Decimal                   @db.Decimal(10, 2)
-  amountMinor           Int
-  currency              String                    @default("TRY")
-  taxRatePct            Int                       @default(20)
-  billingInterval       BillingInterval
-  status                SubscriptionPaymentStatus @default(INITIATED)
-  paytrTokenHash        String?
-  callbackStatus        String?
-  callbackTotalAmount   String?
-  callbackPaymentAmount String?
-  callbackCurrency      String?
-  failedReasonCode      String?
-  failedReasonMsg       String?
-  rawCallbackJson       Json?
-  idempotencyKey        String?                   @unique
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
-  paidAt                DateTime?
+  id                        String                    @id @default(cuid())
+  organizationId            String
+  subscriptionId            String?
+  planId                    String
+  userId                    String?
+  provider                  String                    @default("PAYTR")
+  providerMode              String                    @default("iframe")
+  merchantOid               String                    @unique
+  amount                    Decimal                   @db.Decimal(10, 2)
+  amountMinor               Int
+  currency                  String                    @default("TRY")
+  taxRatePct                Int                       @default(20)
+  /// Immutable checkout quote snapshot (minor units). Additive — legacy rows may be null.
+  subscriptionAmountMinor   Int?
+  activationFeeAmountMinor  Int?
+  netAmountMinor            Int?
+  taxRateBps                Int?
+  taxAmountMinor            Int?
+  grossAmountMinor          Int?
+  taxEnabledAtPurchase      Boolean?
+  taxModeAtPurchase         String?
+  billingInterval           BillingInterval
+  status                    SubscriptionPaymentStatus @default(INITIATED)
+  paytrTokenHash            String?
+  callbackStatus            String?
+  callbackTotalAmount       String?
+  callbackPaymentAmount     String?
+  callbackCurrency          String?
+  failedReasonCode          String?
+  failedReasonMsg           String?
+  rawCallbackJson           Json?
+  idempotencyKey            String?                   @unique
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  paidAt                    DateTime?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
-  plan         Plan          @relation(fields: [planId], references: [id])
-  user         User?         @relation(fields: [userId], references: [id])
+  organization         Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription         Subscription?        @relation(fields: [subscriptionId], references: [id])
+  plan                 Plan                 @relation(fields: [planId], references: [id])
+  user                 User?                @relation(fields: [userId], references: [id])
+  activationFeeLedger  ActivationFeeLedger?
 
   @@index([organizationId])
   @@index([subscriptionId])
@@ -448,6 +468,37 @@ model SubscriptionPayment {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+/// One-time Smart Activation fee ledger — unique per organization + product.
+model ActivationFeeLedger {
+  id                    String              @id @default(cuid())
+  organizationId        String
+  productId             String
+  planId                String?
+  status                ActivationFeeStatus @default(PENDING)
+  currency              String              @default("TRY")
+  activationFeeMinor    Int                 @default(0)
+  taxRateBps            Int                 @default(2000)
+  taxEnabledAtPurchase  Boolean             @default(false)
+  taxModeAtPurchase     String              @default("EXCLUSIVE")
+  taxAmountMinor        Int                 @default(0)
+  grossAmountMinor      Int                 @default(0)
+  waivedReason          String?
+  waivedByUserId        String?
+  subscriptionPaymentId String?             @unique
+  reservedUntil         DateTime?
+  paidAt                DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product             Product              @relation(fields: [productId], references: [id])
+  subscriptionPayment SubscriptionPayment? @relation(fields: [subscriptionPaymentId], references: [id])
+
+  @@unique([organizationId, productId])
+  @@index([status])
+  @@index([productId])
 }
 
 model AppInstallation {

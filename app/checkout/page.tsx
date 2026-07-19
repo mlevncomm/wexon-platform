@@ -19,7 +19,7 @@ const planLabels: Record<CheckoutPlanKey, string> = {
   essential: "WexPay Essential",
   growth: "WexPay Growth",
   scale: "WexPay Scale",
-  business_suite: "WexPay Business Suite",
+  business_suite: "WexPay Enterprise",
   basic: "WexPay Essential (legacy)",
   standard: "WexPay Growth (legacy)",
   pro: "WexPay Scale (legacy)",

@@ -33,6 +33,7 @@ const files = [
   "lib/wexon-entitlement-lifecycle.db.test.ts",
   "lib/wexpay-paytr-webhook.db.test.ts",
   "lib/wexpay-concurrency.db.test.ts",
+  "lib/wexon-activation-fee.db.test.ts",
 ];
 
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...files], {

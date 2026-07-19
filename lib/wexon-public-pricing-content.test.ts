@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { WEXPAY_PRICING_FALLBACK } from "@/lib/wexon-public-pricing-fallback";
 import { WEXPAY_PROCESSING_DISCLAIMER } from "@/lib/wexpay-tier-config";
 
-const EXPECTED_PRICES = ["₺7.000/ay", "₺15.000/ay", "₺35.000/ay", "₺99.000/ay"] as const;
+const EXPECTED_PRICES = ["₺7.500/ay", "₺15.000/ay", "₺35.000/ay", "₺75.000/ay"] as const;
 const EXPECTED_RATES = ["%2,89", "%2,59", "%2,35", "%2,05"] as const;
 
 describe("wexon public pricing commercial content", () => {
@@ -12,6 +12,7 @@ describe("wexon public pricing commercial content", () => {
     WEXPAY_PRICING_FALLBACK.forEach((plan, index) => {
       assert.equal(plan.priceLabel, EXPECTED_PRICES[index]);
     });
+    assert.equal(WEXPAY_PRICING_FALLBACK[3].name, "WexPay Enterprise");
   });
 
   it("processing labels use başlayan language for all tiers", () => {

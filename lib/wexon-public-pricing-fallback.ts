@@ -27,7 +27,7 @@ export const WEXPAY_PRICING_FALLBACK: PricingPlan[] = WEXPAY_TIER_SEED_DEFAULTS.
   name: tier.name,
   audience: tier.audience,
   priceLabel: formatTryMonthly(tier.monthlyFee),
-  billingNote: "Aylık · KDV hariç · uygunluk ve sağlayıcı onayına bağlı",
+  billingNote: "Aylık · vergi yansıtılmaz · uygunluk ve sağlayıcı onayına bağlı",
   features: [
     tier.limits.maxLocations == null ? "Lokasyon: sözleşmeye özel" : `${tier.limits.maxLocations} lokasyon`,
     tier.limits.maxUsers == null ? "Kullanıcı: sözleşmeye özel" : `${tier.limits.maxUsers} kullanıcı`,
@@ -40,8 +40,8 @@ export const WEXPAY_PRICING_FALLBACK: PricingPlan[] = WEXPAY_TIER_SEED_DEFAULTS.
   highlighted: tier.highlighted,
   setupFeeLabel:
     tier.tierKey === "business_suite"
-      ? `${formatTry(tier.setupFee)}'den başlayan kurulum`
-      : `${formatTry(tier.setupFee)} kurulum`,
+      ? `${formatTry(tier.setupFee)}'den başlayan ${tier.activationLabel ?? "Akıllı Aktivasyon Bedeli"}`
+      : `${formatTry(tier.setupFee)} ${tier.activationLabel ?? "Akıllı Aktivasyon Bedeli"}`,
   processingFeeLabel: formatProcessingFrom(tier.processingFeePct),
   commitmentLabel: `${WEXPAY_COMMITMENT_LABEL}: ${formatTry(tier.minimumTransactionCommitment)}`,
   commitmentNote: WEXPAY_COMMITMENT_NOTE,
@@ -71,15 +71,15 @@ export function formatTierPriceParts(input: {
     name: input.name,
     audience: input.audience,
     priceLabel: formatTryMonthly(input.monthly),
-    billingNote: "Aylık · KDV hariç · uygunluk ve sağlayıcı onayına bağlı",
+    billingNote: "Aylık · vergi yansıtılmaz · uygunluk ve sağlayıcı onayına bağlı",
     features: input.features,
     cta: ctaLabelForKind(input.ctaKind),
     ctaHref: ctaHrefForTier(input.tierKey, input.ctaKind),
     highlighted: input.highlighted,
     setupFeeLabel:
       input.tierKey === "business_suite"
-        ? `${formatTry(input.setupFee)}'den başlayan kurulum`
-        : `${formatTry(input.setupFee)} kurulum`,
+        ? `${formatTry(input.setupFee)}'den başlayan Akıllı Aktivasyon Bedeli`
+        : `${formatTry(input.setupFee)} Akıllı Aktivasyon Bedeli`,
     processingFeeLabel: formatProcessingFrom(input.processingFeePct),
     commitmentLabel: `${WEXPAY_COMMITMENT_LABEL}: ${formatTry(input.commitment)}`,
     commitmentNote: WEXPAY_COMMITMENT_NOTE,
