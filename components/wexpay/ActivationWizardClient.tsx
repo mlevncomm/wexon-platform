@@ -1,17 +1,25 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { MembershipRole } from ".prisma/client";
 import {
   acknowledgeQrPackAction,
   completeStaffInviteStepAction,
   createStaffInviteAction,
   createTablesWizardAction,
+  recoverQrPackAction,
   revokeStaffInviteAction,
+  rotateTableQrWizardAction,
   saveBranchSetupAction,
   saveBusinessProfileAction,
   type WizardActionState,
 } from "@/lib/wexpay-activation-wizard-actions";
+import {
+  downloadTableQrPng,
+  generateTableQrDataUrl,
+  buildTableQrPrintHtml,
+} from "@/lib/wexpay-table-qr";
+import type { WizardIssuedQr } from "@/lib/wexpay-activation-wizard";
 
 type StepKey =
   | "BUSINESS_PROFILE"
@@ -53,6 +61,8 @@ type Props = {
   branches: Array<{ id: string; name: string; restaurantId: string; address: string | null }>;
   invites: InviteRow[];
   isLegacyActive: boolean;
+  awaitingQrAck: boolean;
+  canSkipStaffInvite: boolean;
 };
 
 const initial: WizardActionState = { ok: false };
@@ -68,10 +78,108 @@ function ErrorBox({ state }: { state: WizardActionState }) {
   );
 }
 
+function QrPackCards({
+  qrs,
+  originHint,
+}: {
+  qrs: WizardIssuedQr[];
+  originHint: string;
+}) {
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, string> = {};
+      for (const qr of qrs) {
+        const absolute = `${originHint}${qr.publicPath}`;
+        next[qr.tableId] = await generateTableQrDataUrl(absolute);
+      }
+      if (!cancelled) setPreviews(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [qrs, originHint]);
+
+  return (
+    <ul className="space-y-3" data-testid="wizard-qr-pack">
+      {qrs.map((qr) => {
+        const absolute = `${originHint}${qr.publicPath}`;
+        const preview = previews[qr.tableId];
+        return (
+          <li
+            key={qr.tableId}
+            className="flex flex-wrap items-start gap-4 rounded-xl border border-slate-200 px-3 py-3"
+            data-testid="wizard-qr-card"
+          >
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={preview}
+                alt={`${qr.label} QR`}
+                width={120}
+                height={120}
+                className="rounded-lg border border-slate-100"
+                data-testid="wizard-qr-image"
+              />
+            ) : (
+              <div className="flex h-[120px] w-[120px] items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-500">
+                QR…
+              </div>
+            )}
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="font-bold text-slate-900">{qr.label}</p>
+              <p className="break-all font-mono text-xs text-slate-600">{absolute}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-800"
+                  data-testid="wizard-qr-download"
+                  onClick={() => {
+                    void downloadTableQrPng(absolute, qr.label);
+                  }}
+                >
+                  İndir PNG
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-800"
+                  data-testid="wizard-qr-print"
+                  onClick={() => {
+                    void (async () => {
+                      const dataUrl = preview ?? (await generateTableQrDataUrl(absolute));
+                      const html = buildTableQrPrintHtml({
+                        tableLabel: qr.label,
+                        publicUrl: absolute,
+                        qrDataUrl: dataUrl,
+                      });
+                      const win = window.open("", "_blank", "noopener,noreferrer,width=480,height=640");
+                      if (!win) return;
+                      win.document.write(html);
+                      win.document.close();
+                      win.focus();
+                      win.print();
+                    })();
+                  }}
+                >
+                  Yazdır
+                </button>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function ActivationWizardClient(props: Props) {
   const [profileState, profileAction, profilePending] = useActionState(saveBusinessProfileAction, initial);
   const [branchState, branchAction, branchPending] = useActionState(saveBranchSetupAction, initial);
   const [tableState, tableAction, tablePending] = useActionState(createTablesWizardAction, initial);
+  const [recoverState, recoverAction, recoverPending] = useActionState(recoverQrPackAction, initial);
+  const [rotateState, rotateAction, rotatePending] = useActionState(rotateTableQrWizardAction, initial);
   const [ackState, ackAction, ackPending] = useActionState(acknowledgeQrPackAction, initial);
   const [inviteState, inviteAction, invitePending] = useActionState(createStaffInviteAction, initial);
   const [revokeState, revokeAction] = useActionState(revokeStaffInviteAction, initial);
@@ -80,7 +188,27 @@ export function ActivationWizardClient(props: Props) {
     initial,
   );
 
-  const issuedQrs = tableState.ok && tableState.issuedQrs?.length ? tableState.issuedQrs : null;
+  const issuedQrs = useMemo(() => {
+    if (tableState.ok && tableState.issuedQrs?.length) return tableState.issuedQrs;
+    if (recoverState.ok && recoverState.issuedQrs?.length) return recoverState.issuedQrs;
+    if (rotateState.ok && rotateState.issuedQrs?.length) {
+      // Merge rotated single QR into last pack if present
+      const base =
+        (tableState.ok && tableState.issuedQrs) ||
+        (recoverState.ok && recoverState.issuedQrs) ||
+        [];
+      if (!base.length) return rotateState.issuedQrs;
+      const rotated = rotateState.issuedQrs[0]!;
+      return base.map((qr) => (qr.tableId === rotated.tableId ? rotated : qr));
+    }
+    return null;
+  }, [tableState, recoverState, rotateState]);
+
+  const effectiveVersion =
+    tableState.journeyVersion ??
+    recoverState.journeyVersion ??
+    props.journeyVersion;
+
   const oneTimeUrl = inviteState.ok && inviteState.oneTimeInviteUrl ? inviteState.oneTimeInviteUrl : null;
 
   if (props.isLegacyActive) {
@@ -97,7 +225,9 @@ export function ActivationWizardClient(props: Props) {
   const step = props.currentStep;
   const originHint =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN?.replace(/\/+$/, "")) ||
-    "https://www.wexon.dev";
+    (typeof window !== "undefined" ? window.location.origin : "https://www.wexon.dev");
+
+  const showQrPack = Boolean(issuedQrs?.length) || props.awaitingQrAck;
 
   return (
     <div className="space-y-6">
@@ -110,7 +240,7 @@ export function ActivationWizardClient(props: Props) {
         </p>
       </div>
 
-      {step === "BUSINESS_PROFILE" || props.stepStatuses.BUSINESS_PROFILE === "PENDING" ? (
+      {step === "BUSINESS_PROFILE" ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
           <h2 className="text-lg font-black text-slate-950">1. İşletme profili</h2>
           <form action={profileAction} className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -159,21 +289,67 @@ export function ActivationWizardClient(props: Props) {
         </section>
       ) : null}
 
-      {(step === "BRANCH_SETUP" || props.stepStatuses.BUSINESS_PROFILE === "COMPLETED") &&
-      props.stepStatuses.BRANCH_SETUP !== "COMPLETED" ? (
+      {step === "BRANCH_SETUP" ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
           <h2 className="text-lg font-black text-slate-950">2. Şube kurulumu</h2>
           <form action={branchAction} className="mt-4 grid gap-3">
             <input type="hidden" name="organizationId" value={props.organizationId} />
             <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
+            {/* Explicit IDs only when user/server selected them — never auto-pick first row blindly on server. */}
             <input type="hidden" name="existingRestaurantId" value={props.restaurantId ?? ""} />
             <input type="hidden" name="existingBranchId" value={props.branchId ?? ""} />
+            {props.restaurants.length > 1 ? (
+              <label className="block text-sm font-semibold text-slate-700">
+                Mevcut restoran (isteğe bağlı)
+                <select
+                  name="existingRestaurantIdSelect"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                  defaultValue={props.restaurantId ?? ""}
+                  onChange={(e) => {
+                    const hidden = e.currentTarget.form?.elements.namedItem(
+                      "existingRestaurantId",
+                    ) as HTMLInputElement | null;
+                    if (hidden) hidden.value = e.currentTarget.value;
+                  }}
+                >
+                  <option value="">Yeni restoran oluştur</option>
+                  {props.restaurants.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {props.branches.length > 0 ? (
+              <label className="block text-sm font-semibold text-slate-700">
+                Mevcut şube (isteğe bağlı)
+                <select
+                  name="existingBranchIdSelect"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                  defaultValue={props.branchId ?? ""}
+                  onChange={(e) => {
+                    const hidden = e.currentTarget.form?.elements.namedItem(
+                      "existingBranchId",
+                    ) as HTMLInputElement | null;
+                    if (hidden) hidden.value = e.currentTarget.value;
+                  }}
+                >
+                  <option value="">Yeni şube oluştur</option>
+                  {props.branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="block text-sm font-semibold text-slate-700">
               Restoran adı *
               <input
                 name="restaurantName"
                 required
-                defaultValue={props.restaurants[0]?.name ?? props.organization.name}
+                defaultValue={props.restaurants.find((r) => r.id === props.restaurantId)?.name ?? props.organization.name}
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
               />
             </label>
@@ -182,7 +358,7 @@ export function ActivationWizardClient(props: Props) {
               <input
                 name="branchName"
                 required
-                defaultValue={props.branches[0]?.name ?? "Merkez"}
+                defaultValue={props.branches.find((b) => b.id === props.branchId)?.name ?? "Merkez"}
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
               />
             </label>
@@ -191,7 +367,7 @@ export function ActivationWizardClient(props: Props) {
               <input
                 name="branchAddress"
                 required
-                defaultValue={props.branches[0]?.address ?? ""}
+                defaultValue={props.branches.find((b) => b.id === props.branchId)?.address ?? ""}
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
               />
             </label>
@@ -207,63 +383,98 @@ export function ActivationWizardClient(props: Props) {
         </section>
       ) : null}
 
-      {(step === "TABLE_SETUP" || props.stepStatuses.BRANCH_SETUP === "COMPLETED") &&
-      props.stepStatuses.TABLE_SETUP !== "COMPLETED" ? (
+      {step === "TABLE_SETUP" ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
           <h2 className="text-lg font-black text-slate-950">3. Masa ve güvenli QR</h2>
           <p className="mt-2 text-sm font-medium text-slate-600">
             QR bağlantıları yalnız <code className="rounded bg-slate-100 px-1">/q/…</code> opaque token kullanır.
-            Bu güvenli bağlantılar yalnız bir kez gösterilir; kaybedilirse QR yenilenir.
           </p>
-          {!issuedQrs ? (
-            <form action={tableAction} className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input type="hidden" name="organizationId" value={props.organizationId} />
-              <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
-              <input type="hidden" name="branchId" value={props.branchId ?? ""} />
-              <label className="block text-sm font-semibold text-slate-700">
-                Masa adedi
-                <input name="count" type="number" min={1} max={50} defaultValue={5} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
-              </label>
-              <label className="block text-sm font-semibold text-slate-700">
-                Etiket öneki
-                <input name="prefix" defaultValue="Masa" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
-              </label>
-              <label className="block text-sm font-semibold text-slate-700">
-                Koltuk
-                <input name="seats" type="number" min={1} max={50} defaultValue={4} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
-              </label>
-              <label className="block text-sm font-semibold text-slate-700">
-                Başlangıç no
-                <input name="startNumber" type="number" min={1} defaultValue={1} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
-              </label>
-              <button
-                type="submit"
-                disabled={tablePending || !props.branchId}
-                className="sm:col-span-2 w-fit rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
-              >
-                {tablePending ? "Oluşturuluyor…" : "Masaları ve QR’ları oluştur"}
-              </button>
-              <ErrorBox state={tableState} />
-            </form>
+          {!showQrPack || !issuedQrs ? (
+            <div className="mt-4 space-y-3">
+              <form action={tableAction} className="grid gap-3 sm:grid-cols-2">
+                <input type="hidden" name="organizationId" value={props.organizationId} />
+                <input type="hidden" name="expectedVersion" value={String(effectiveVersion)} />
+                <input type="hidden" name="branchId" value={props.branchId ?? ""} />
+                <label className="block text-sm font-semibold text-slate-700">
+                  Masa adedi
+                  <input name="count" type="number" min={1} max={50} defaultValue={5} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Etiket öneki
+                  <input name="prefix" defaultValue="Masa" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Koltuk
+                  <input name="seats" type="number" min={1} max={50} defaultValue={4} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Başlangıç no
+                  <input name="startNumber" type="number" min={1} defaultValue={1} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" />
+                </label>
+                <button
+                  type="submit"
+                  disabled={tablePending || !props.branchId}
+                  className="sm:col-span-2 w-fit rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  {tablePending ? "Oluşturuluyor…" : "Masaları ve QR’ları oluştur"}
+                </button>
+                <ErrorBox state={tableState} />
+              </form>
+              {props.awaitingQrAck ? (
+                <form action={recoverAction}>
+                  <input type="hidden" name="organizationId" value={props.organizationId} />
+                  <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
+                  <button
+                    type="submit"
+                    disabled={recoverPending}
+                    className="rounded-full border border-amber-400 bg-amber-50 px-5 py-2.5 text-sm font-bold text-amber-950 disabled:opacity-60"
+                    data-testid="wizard-qr-recover"
+                  >
+                    {recoverPending ? "Kurtarılıyor…" : "QR paketini güvenli şekilde yenile / kurtar"}
+                  </button>
+                  <ErrorBox state={recoverState} />
+                </form>
+              ) : null}
+            </div>
           ) : (
             <div className="mt-4 space-y-3">
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
-                Bu güvenli bağlantılar yalnız bir kez gösterilir. Kaydedin veya yazdırın; yenilemeden sonra ham token geri getirilmez.
+                Ham token yalnız bu ekranda gösterilir. Kaybederseniz aynı masalar için QR’ı güvenle yenileyin.
               </div>
-              <ul className="space-y-2">
-                {issuedQrs.map((qr) => (
-                  <li key={qr.tableId} className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
-                    <p className="font-bold text-slate-900">{qr.label}</p>
-                    <p className="mt-1 break-all font-mono text-xs text-slate-600">
-                      {originHint}
-                      {qr.publicPath}
-                    </p>
-                  </li>
-                ))}
-              </ul>
+              <QrPackCards qrs={issuedQrs} originHint={originHint} />
+              <div className="flex flex-wrap gap-2">
+                <form action={recoverAction}>
+                  <input type="hidden" name="organizationId" value={props.organizationId} />
+                  <input type="hidden" name="expectedVersion" value={String(effectiveVersion)} />
+                  <button
+                    type="submit"
+                    disabled={recoverPending}
+                    className="rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-slate-800 disabled:opacity-60"
+                    data-testid="wizard-qr-recover"
+                  >
+                    Tüm QR’ları yenile
+                  </button>
+                </form>
+                {issuedQrs[0] ? (
+                  <form action={rotateAction}>
+                    <input type="hidden" name="organizationId" value={props.organizationId} />
+                    <input type="hidden" name="tableId" value={issuedQrs[0].tableId} />
+                    <button
+                      type="submit"
+                      disabled={rotatePending}
+                      className="rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-slate-800 disabled:opacity-60"
+                      data-testid="wizard-qr-rotate-one"
+                    >
+                      İlk masanın QR’ını döndür
+                    </button>
+                  </form>
+                ) : null}
+              </div>
+              <ErrorBox state={recoverState} />
+              <ErrorBox state={rotateState} />
               <form action={ackAction}>
                 <input type="hidden" name="organizationId" value={props.organizationId} />
-                <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
+                <input type="hidden" name="expectedVersion" value={String(effectiveVersion)} />
                 <input type="hidden" name="branchId" value={props.branchId ?? ""} />
                 <button
                   type="submit"
@@ -279,9 +490,7 @@ export function ActivationWizardClient(props: Props) {
         </section>
       ) : null}
 
-      {(step === "STAFF_INVITE" || props.stepStatuses.TABLE_SETUP === "COMPLETED") &&
-      props.stepStatuses.STAFF_INVITE !== "COMPLETED" &&
-      props.stepStatuses.STAFF_INVITE !== "SKIPPED" ? (
+      {step === "STAFF_INVITE" ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
           <h2 className="text-lg font-black text-slate-950">4. Personel daveti</h2>
           <form action={inviteAction} className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -352,18 +561,20 @@ export function ActivationWizardClient(props: Props) {
                 Davet adımını tamamla
               </button>
             </form>
-            <form action={staffDoneAction}>
-              <input type="hidden" name="organizationId" value={props.organizationId} />
-              <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
-              <input type="hidden" name="skip" value="1" />
-              <button
-                type="submit"
-                disabled={staffDonePending}
-                className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60"
-              >
-                Şimdilik atla
-              </button>
-            </form>
+            {props.canSkipStaffInvite ? (
+              <form action={staffDoneAction}>
+                <input type="hidden" name="organizationId" value={props.organizationId} />
+                <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
+                <input type="hidden" name="skip" value="1" />
+                <button
+                  type="submit"
+                  disabled={staffDonePending}
+                  className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60"
+                >
+                  Şimdilik atla
+                </button>
+              </form>
+            ) : null}
             <ErrorBox state={staffDoneState} />
           </div>
         </section>

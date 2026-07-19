@@ -9,6 +9,7 @@ import {
   acknowledgeTableQrPack,
   completeStaffInviteWizardStep,
   rotateWizardTableQr,
+  recoverWizardTableQrPack,
   ActivationWizardError,
   type WizardIssuedQr,
 } from "@/lib/wexpay-activation-wizard";
@@ -32,6 +33,7 @@ export type WizardActionState = {
   code?: string;
   oneTimeInviteUrl?: string | null;
   issuedQrs?: WizardIssuedQr[];
+  journeyVersion?: number;
 };
 
 function readString(formData: FormData, key: string) {
@@ -121,7 +123,27 @@ export async function createTablesWizardAction(
       startNumber: Number(readString(formData, "startNumber") || "1"),
     });
     revalidatePath("/dashboard/wexpay/activation");
-    return { ok: true, issuedQrs: result.qrs };
+    return { ok: true, issuedQrs: result.qrs, journeyVersion: result.journeyVersion };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function recoverQrPackAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = Number(readString(formData, "expectedVersion") || "0");
+    const { user } = await requireWizardActor(organizationId);
+    const result = await recoverWizardTableQrPack({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    return { ok: true, issuedQrs: result.qrs, journeyVersion: result.journeyVersion };
   } catch (error) {
     return mapError(error);
   }

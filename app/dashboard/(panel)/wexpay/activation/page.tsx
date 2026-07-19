@@ -55,6 +55,16 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
       ? (stepMeta.safeMetadataJson as { restaurantId?: string; branchId?: string })
       : {};
 
+  const tableStep = view.journey?.steps.find((s) => s.stepKey === ActivationStepKey.TABLE_SETUP);
+  const tableMeta =
+    tableStep?.safeMetadataJson && typeof tableStep.safeMetadataJson === "object"
+      ? (tableStep.safeMetadataJson as { awaitingQrAck?: boolean; branchId?: string })
+      : {};
+
+  const canSkipStaffInvite =
+    Boolean(wexPayAccess.entitlementMap?.wizard_staff_invite_skippable) ||
+    wexPayAccess.entitlementMap?.staff_limit === -1;
+
   const invites = await listOrganizationStaffInvites(organization.id);
   const continueHref = dashboardHref("/dashboard/wexpay/activation", organizationContext);
 
@@ -64,6 +74,12 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
 
   const isLegacyActive =
     view.journey?.status === "ACTIVE" && view.journey.source === "LEGACY_BACKFILL";
+
+  // Prefer IDs stored in journey step metadata — never invent "first restaurant/branch".
+  const restaurantId = typeof meta.restaurantId === "string" ? meta.restaurantId : null;
+  const branchId =
+    (typeof meta.branchId === "string" ? meta.branchId : null) ??
+    (typeof tableMeta.branchId === "string" ? tableMeta.branchId : null);
 
   return (
     <div className="space-y-6">
@@ -82,8 +98,8 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
         journeyVersion={view.journey?.version ?? 1}
         currentStep={(view.journey?.currentStep ?? "BUSINESS_PROFILE") as ActivationStepKey}
         stepStatuses={stepStatuses}
-        branchId={meta.branchId ?? branches[0]?.id ?? null}
-        restaurantId={meta.restaurantId ?? restaurants[0]?.id ?? null}
+        branchId={branchId}
+        restaurantId={restaurantId}
         restaurants={restaurants}
         branches={branches}
         invites={invites.map((i) => ({
@@ -93,6 +109,8 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
           revokedAt: i.revokedAt?.toISOString() ?? null,
         }))}
         isLegacyActive={Boolean(isLegacyActive) || view.uiStatus === "ACTIVE"}
+        awaitingQrAck={Boolean(tableMeta.awaitingQrAck)}
+        canSkipStaffInvite={canSkipStaffInvite}
       />
     </div>
   );

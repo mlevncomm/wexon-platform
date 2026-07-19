@@ -496,6 +496,7 @@ export type CompleteActivationStepInput = {
 /**
  * Optimistic concurrency: bumps journey.version only when expectedVersion matches.
  * Marks step COMPLETED (or SKIPPED) and optionally advances currentStep.
+ * Server-authoritative: only journey.currentStep may complete; prior PR-2 steps must be done.
  */
 export async function completeActivationStepInTx(
   tx: DbClient,
@@ -503,6 +504,72 @@ export async function completeActivationStepInTx(
 ): Promise<ActivationJourneyWithSteps> {
   const markStatus = input.markStatus ?? ActivationJourneyStepStatus.COMPLETED;
   const now = new Date();
+
+  const journeyBefore = await tx.activationJourney.findUnique({
+    where: { id: input.journeyId },
+    include: { steps: true },
+  });
+  if (!journeyBefore) {
+    throw new ActivationJourneyError("NOT_STARTED", "Akıllı Aktivasyon henüz başlamadı.");
+  }
+  if (journeyBefore.version !== input.expectedVersion) {
+    throw new ActivationJourneyError(
+      "VERSION_CONFLICT",
+      "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+    );
+  }
+
+  const existingStep = journeyBefore.steps.find((s) => s.stepKey === input.stepKey);
+  if (!existingStep) {
+    throw new ActivationJourneyError("STEP_MISSING", "Kurulum adımı bulunamadı.");
+  }
+
+  // Idempotent: already terminal for this step.
+  if (
+    existingStep.status === ActivationJourneyStepStatus.COMPLETED ||
+    existingStep.status === ActivationJourneyStepStatus.SKIPPED
+  ) {
+    if (journeyBefore.currentStep === input.stepKey && input.advanceTo) {
+      const bumpedIdempotent = await tx.activationJourney.updateMany({
+        where: { id: input.journeyId, version: input.expectedVersion },
+        data: { version: { increment: 1 }, currentStep: input.advanceTo, updatedAt: now },
+      });
+      if (bumpedIdempotent.count !== 1) {
+        throw new ActivationJourneyError(
+          "VERSION_CONFLICT",
+          "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+        );
+      }
+    }
+    return tx.activationJourney.findUniqueOrThrow({
+      where: { id: input.journeyId },
+      include: { steps: { orderBy: { stepKey: "asc" } } },
+    });
+  }
+
+  if (journeyBefore.currentStep !== input.stepKey) {
+    throw new ActivationJourneyError(
+      "OUT_OF_ORDER",
+      "Bu adım şu an aktif değil. Lütfen sıradaki adımdan devam edin.",
+    );
+  }
+
+  // Prior required PR-2 steps must be COMPLETED|SKIPPED.
+  const stepIndex = ACTIVATION_STEP_ORDER.indexOf(input.stepKey);
+  for (let i = 0; i < stepIndex; i++) {
+    const priorKey = ACTIVATION_STEP_ORDER[i]!;
+    const prior = journeyBefore.steps.find((s) => s.stepKey === priorKey);
+    if (
+      !prior ||
+      (prior.status !== ActivationJourneyStepStatus.COMPLETED &&
+        prior.status !== ActivationJourneyStepStatus.SKIPPED)
+    ) {
+      throw new ActivationJourneyError(
+        "PRIOR_INCOMPLETE",
+        "Önceki kurulum adımları tamamlanmadan ilerlenemez.",
+      );
+    }
+  }
 
   const bumped = await tx.activationJourney.updateMany({
     where: {
@@ -523,43 +590,23 @@ export async function completeActivationStepInTx(
     );
   }
 
-  const step = await tx.activationJourneyStep.findUnique({
-    where: {
-      journeyId_stepKey: {
-        journeyId: input.journeyId,
-        stepKey: input.stepKey,
-      },
+  await tx.activationJourneyStep.update({
+    where: { id: existingStep.id },
+    data: {
+      status: markStatus,
+      completedAt: now,
+      attemptCount: { increment: 1 },
+      lastErrorCode: null,
+      ...(input.safeMetadata
+        ? { safeMetadataJson: input.safeMetadata as Prisma.InputJsonValue }
+        : {}),
     },
   });
-  if (!step) {
-    throw new ActivationJourneyError("STEP_MISSING", "Kurulum adımı bulunamadı.");
-  }
 
-  if (
-    step.status === ActivationJourneyStepStatus.COMPLETED ||
-    step.status === ActivationJourneyStepStatus.SKIPPED
-  ) {
-    // Idempotent: already done.
-  } else {
-    await tx.activationJourneyStep.update({
-      where: { id: step.id },
-      data: {
-        status: markStatus,
-        completedAt: now,
-        attemptCount: { increment: 1 },
-        lastErrorCode: null,
-        ...(input.safeMetadata
-          ? { safeMetadataJson: input.safeMetadata as Prisma.InputJsonValue }
-          : {}),
-      },
-    });
-  }
-
-  const journey = await tx.activationJourney.findUniqueOrThrow({
+  return tx.activationJourney.findUniqueOrThrow({
     where: { id: input.journeyId },
     include: { steps: { orderBy: { stepKey: "asc" } } },
   });
-  return journey;
 }
 
 export async function assertJourneyWritableForActor(input: {

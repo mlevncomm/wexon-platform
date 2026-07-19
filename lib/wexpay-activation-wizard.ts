@@ -2,21 +2,28 @@ import { randomUUID } from "node:crypto";
 import {
   ActivationStepKey,
   ActivationJourneyStepStatus,
+  StaffInviteDeliveryStatus,
   TableStatus,
   type Prisma,
 } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
-import { evaluateProductAccess } from "@/lib/wexon-core-access";
+import { isEntitlementEnabled } from "@/lib/wexon-core-access";
 import {
   assertJourneyWritableForActor,
   completeActivationStepInTx,
   maskTaxNoForAudit,
 } from "@/lib/wexpay-activation-journey";
+import {
+  ActivationTxAccessError,
+  assertCanonicalLimitInTx,
+  assertWexPayAccessInTx,
+} from "@/lib/wexpay-activation-tx-access";
 import { lockWexPayOrgBranchLimit, lockWexPayOrgTableLimit } from "@/lib/wexpay-locks";
 import {
-  issueTableQrToken,
-  rotateTableQrToken,
+  generateSecureTableQrTokenMaterial,
+  issueTableQrTokenInTx,
+  rotateTableQrTokenInTx,
   type IssueTableQrTokenResult,
 } from "@/lib/wexpay-table-qr-token";
 
@@ -32,6 +39,13 @@ export class ActivationWizardError extends Error {
     this.name = "ActivationWizardError";
     this.code = code;
   }
+}
+
+function mapTxAccessError(error: unknown): never {
+  if (error instanceof ActivationTxAccessError) {
+    throw new ActivationWizardError(error.code, error.message);
+  }
+  throw error;
 }
 
 function slugify(value: string) {
@@ -58,6 +72,13 @@ function optionalEmail(value: string | null | undefined) {
   return v.toLowerCase().slice(0, 120);
 }
 
+function readTableIdsFromMetadata(raw: unknown): string[] {
+  if (!raw || typeof raw !== "object") return [];
+  const tableIds = (raw as { tableIds?: unknown }).tableIds;
+  if (!Array.isArray(tableIds)) return [];
+  return tableIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
 export async function saveBusinessProfileStep(input: {
   organizationId: string;
   actorUserId: string;
@@ -80,54 +101,58 @@ export async function saveBusinessProfileStep(input: {
     expectedVersion: input.expectedVersion,
   });
 
-  return prisma.$transaction(async (tx) => {
-    const access = await evaluateProductAccess({
-      organizationId: input.organizationId,
-      productKey: "wexpay",
-    });
-    if (!access.allowed) {
-      throw new ActivationWizardError("NO_ACCESS", "WexPay erişimi gerekli.");
-    }
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await assertWexPayAccessInTx(tx, {
+          organizationId: input.organizationId,
+          productKey: "wexpay",
+        });
 
-    await tx.organization.update({
-      where: { id: input.organizationId },
-      data: {
-        name,
-        legalName: clampText(input.legalName ?? "", 160) || null,
-        taxNo: clampText(input.taxNo ?? "", 32) || null,
-        phone: clampText(input.phone ?? "", 32) || null,
-        email: optionalEmail(input.email),
-        country: clampText(input.country ?? "TR", 2).toUpperCase() || "TR",
-      },
-    });
+        await tx.organization.update({
+          where: { id: input.organizationId },
+          data: {
+            name,
+            legalName: clampText(input.legalName ?? "", 160) || null,
+            taxNo: clampText(input.taxNo ?? "", 32) || null,
+            phone: clampText(input.phone ?? "", 32) || null,
+            email: optionalEmail(input.email),
+            country: clampText(input.country ?? "TR", 2).toUpperCase() || "TR",
+          },
+        });
 
-    await writeAuditLog(
-      {
-        action: "activation.business_profile.saved",
-        organizationId: input.organizationId,
-        userId: input.actorUserId,
-        entityType: "Organization",
-        entityId: input.organizationId,
-        source: "activation_wizard",
-        metadata: {
-          name,
-          taxNoMasked: maskTaxNoForAudit(input.taxNo),
-          hasLegalName: Boolean(input.legalName?.trim()),
-          hasPhone: Boolean(input.phone?.trim()),
-          hasEmail: Boolean(input.email?.trim()),
-        },
+        await writeAuditLog(
+          {
+            action: "activation.business_profile.saved",
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            entityType: "Organization",
+            entityId: input.organizationId,
+            source: "activation_wizard",
+            metadata: {
+              name,
+              taxNoMasked: maskTaxNoForAudit(input.taxNo),
+              hasLegalName: Boolean(input.legalName?.trim()),
+              hasPhone: Boolean(input.phone?.trim()),
+              hasEmail: Boolean(input.email?.trim()),
+            },
+          },
+          tx,
+        );
+
+        return completeActivationStepInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.BUSINESS_PROFILE,
+          advanceTo: ActivationStepKey.BRANCH_SETUP,
+          safeMetadata: { saved: true },
+        });
       },
-      tx,
+      { timeout: 15_000 },
     );
-
-    return completeActivationStepInTx(tx, {
-      journeyId: journey.id,
-      expectedVersion: input.expectedVersion,
-      stepKey: ActivationStepKey.BUSINESS_PROFILE,
-      advanceTo: ActivationStepKey.BRANCH_SETUP,
-      safeMetadata: { saved: true },
-    });
-  });
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 }
 
 export async function saveBranchSetupStep(input: {
@@ -159,63 +184,93 @@ export async function saveBranchSetupStep(input: {
     expectedVersion: input.expectedVersion,
   });
 
-  return prisma.$transaction(async (tx) => {
-    await lockWexPayOrgBranchLimit(tx, input.organizationId);
+  const explicitRestaurantId = input.existingRestaurantId?.trim() || null;
+  const explicitBranchId = input.existingBranchId?.trim() || null;
 
-    const access = await evaluateProductAccess({
-      organizationId: input.organizationId,
-      productKey: "wexpay",
-    });
-    if (!access.allowed) {
-      throw new ActivationWizardError("NO_ACCESS", "WexPay erişimi gerekli.");
-    }
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await lockWexPayOrgBranchLimit(tx, input.organizationId);
 
-    let restaurantId = input.existingRestaurantId?.trim() || null;
-    let branchId = input.existingBranchId?.trim() || null;
-
-    if (branchId) {
-      const existing = await tx.branch.findFirst({
-        where: {
-          id: branchId,
-          restaurant: { organizationId: input.organizationId },
-        },
-        select: { id: true, restaurantId: true },
-      });
-      if (!existing) {
-        throw new ActivationWizardError("CROSS_TENANT", "Şube bulunamadı.");
-      }
-      restaurantId = existing.restaurantId;
-      await tx.branch.update({
-        where: { id: existing.id },
-        data: { name: branchName, address: branchAddress, isActive: true },
-      });
-    } else {
-      if (restaurantId) {
-        const restaurant = await tx.restaurant.findFirst({
-          where: { id: restaurantId, organizationId: input.organizationId },
-          select: { id: true },
+        const access = await assertWexPayAccessInTx(tx, {
+          organizationId: input.organizationId,
+          productKey: "wexpay",
         });
-        if (!restaurant) {
-          throw new ActivationWizardError("CROSS_TENANT", "Restoran bulunamadı.");
-        }
-      } else {
-        // Idempotent: reuse sole restaurant if name matches, else create.
-        const existingRestaurant = await tx.restaurant.findFirst({
-          where: { organizationId: input.organizationId, isActive: true },
-          orderBy: { createdAt: "asc" },
-        });
-        if (existingRestaurant) {
-          restaurantId = existingRestaurant.id;
-          await tx.restaurant.update({
-            where: { id: existingRestaurant.id },
-            data: { name: restaurantName },
+
+        let restaurantId: string;
+        let branchId: string;
+
+        if (explicitBranchId) {
+          const existing = await tx.branch.findFirst({
+            where: {
+              id: explicitBranchId,
+              restaurant: { organizationId: input.organizationId },
+            },
+            select: { id: true, restaurantId: true },
           });
+          if (!existing) {
+            throw new ActivationWizardError("CROSS_TENANT", "Şube bulunamadı.");
+          }
+          restaurantId = existing.restaurantId;
+          branchId = existing.id;
+          await tx.branch.update({
+            where: { id: existing.id },
+            data: { name: branchName, address: branchAddress, isActive: true },
+          });
+          if (explicitRestaurantId && explicitRestaurantId !== restaurantId) {
+            throw new ActivationWizardError("CROSS_TENANT", "Restoran/şube eşleşmesi geçersiz.");
+          }
+          await tx.restaurant.update({
+            where: { id: restaurantId },
+            data: { name: restaurantName, isActive: true },
+          });
+        } else if (explicitRestaurantId) {
+          const restaurant = await tx.restaurant.findFirst({
+            where: { id: explicitRestaurantId, organizationId: input.organizationId },
+            select: { id: true },
+          });
+          if (!restaurant) {
+            throw new ActivationWizardError("CROSS_TENANT", "Restoran bulunamadı.");
+          }
+          restaurantId = restaurant.id;
+          await tx.restaurant.update({
+            where: { id: restaurantId },
+            data: { name: restaurantName, isActive: true },
+          });
+
+          const branchCount = await tx.branch.count({
+            where: { restaurant: { organizationId: input.organizationId } },
+          });
+          assertCanonicalLimitInTx(access.entitlementMap, "branch_limit", branchCount);
+
+          const branchSlug = slugify(branchName) || "sube";
+          const createdBranch = await tx.branch.create({
+            data: {
+              restaurantId,
+              name: branchName,
+              slug: `${branchSlug}-${Date.now().toString(36)}`,
+              address: branchAddress,
+              isActive: true,
+            },
+          });
+          branchId = createdBranch.id;
         } else {
+          // Create path only — never rename an arbitrary "first" restaurant/branch.
+          const restaurantCount = await tx.restaurant.count({
+            where: { organizationId: input.organizationId },
+          });
+          // branch_limit gates new branches; restaurant create is unconstrained by branch_limit itself.
+          const branchCount = await tx.branch.count({
+            where: { restaurant: { organizationId: input.organizationId } },
+          });
+          assertCanonicalLimitInTx(access.entitlementMap, "branch_limit", branchCount);
+
           let slug = slugify(restaurantName);
           if (!slug) slug = `restoran-${Date.now().toString(36)}`;
           const collision = await tx.restaurant.findFirst({ where: { slug } });
           if (collision) slug = `${slug}-${Date.now().toString(36)}`;
-          const created = await tx.restaurant.create({
+
+          const createdRestaurant = await tx.restaurant.create({
             data: {
               organizationId: input.organizationId,
               name: restaurantName,
@@ -223,65 +278,49 @@ export async function saveBranchSetupStep(input: {
               isActive: true,
             },
           });
-          restaurantId = created.id;
+          restaurantId = createdRestaurant.id;
+
+          const branchSlug = slugify(branchName) || "sube";
+          const createdBranch = await tx.branch.create({
+            data: {
+              restaurantId,
+              name: branchName,
+              slug: `${branchSlug}-${Date.now().toString(36)}`,
+              address: branchAddress,
+              isActive: true,
+            },
+          });
+          branchId = createdBranch.id;
+
+          void restaurantCount;
         }
-      }
 
-      const branchCount = await tx.branch.count({
-        where: { restaurant: { organizationId: input.organizationId } },
-      });
-      // Reuse entitlement helper via raw map if available; otherwise soft check through product access.
-      const branchLimit = access.entitlementMap.branch_limit;
-      if (typeof branchLimit === "number" && branchLimit >= 0 && branchCount >= branchLimit) {
-        throw new ActivationWizardError("BRANCH_LIMIT", "Şube limitinize ulaştınız.");
-      }
-
-      const existingBranch = await tx.branch.findFirst({
-        where: { restaurantId: restaurantId!, isActive: true },
-        orderBy: { createdAt: "asc" },
-      });
-      if (existingBranch) {
-        branchId = existingBranch.id;
-        await tx.branch.update({
-          where: { id: existingBranch.id },
-          data: { name: branchName, address: branchAddress },
-        });
-      } else {
-        const branchSlug = slugify(branchName) || "sube";
-        const createdBranch = await tx.branch.create({
-          data: {
-            restaurantId: restaurantId!,
-            name: branchName,
-            slug: branchSlug,
-            address: branchAddress,
-            isActive: true,
+        await writeAuditLog(
+          {
+            action: "activation.branch_setup.saved",
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            entityType: "Branch",
+            entityId: branchId,
+            source: "activation_wizard",
+            metadata: { restaurantId, branchId, explicit: Boolean(explicitBranchId || explicitRestaurantId) },
           },
+          tx,
+        );
+
+        return completeActivationStepInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.BRANCH_SETUP,
+          advanceTo: ActivationStepKey.TABLE_SETUP,
+          safeMetadata: { restaurantId, branchId },
         });
-        branchId = createdBranch.id;
-      }
-    }
-
-    await writeAuditLog(
-      {
-        action: "activation.branch_setup.saved",
-        organizationId: input.organizationId,
-        userId: input.actorUserId,
-        entityType: "Branch",
-        entityId: branchId!,
-        source: "activation_wizard",
-        metadata: { restaurantId, branchId },
       },
-      tx,
+      { timeout: 15_000 },
     );
-
-    return completeActivationStepInTx(tx, {
-      journeyId: journey.id,
-      expectedVersion: input.expectedVersion,
-      stepKey: ActivationStepKey.BRANCH_SETUP,
-      advanceTo: ActivationStepKey.TABLE_SETUP,
-      safeMetadata: { restaurantId, branchId },
-    });
-  });
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 }
 
 export type WizardIssuedQr = {
@@ -293,6 +332,11 @@ export type WizardIssuedQr = {
   tokenPrefix: string;
 };
 
+/**
+ * Atomic table + opaque QR pack.
+ * Materials generated in memory; hashes written in the same TX as tables/journey/audit.
+ * Double-submit with awaiting pack recovers/rotates the same tables instead of creating more.
+ */
 export async function createTablesWithOpaqueQr(input: {
   organizationId: string;
   actorUserId: string;
@@ -320,92 +364,242 @@ export async function createTablesWithOpaqueQr(input: {
     expectedVersion: input.expectedVersion,
   });
 
-  const branch = await prisma.branch.findFirst({
-    where: {
-      id: input.branchId,
-      restaurant: { organizationId: input.organizationId },
-    },
-    select: { id: true },
-  });
-  if (!branch) {
-    throw new ActivationWizardError("CROSS_TENANT", "Şube bulunamadı.");
-  }
+  const tableStep = journey.steps.find((s) => s.stepKey === ActivationStepKey.TABLE_SETUP);
+  const existingTableIds = readTableIdsFromMetadata(tableStep?.safeMetadataJson);
+  const awaitingAck =
+    Boolean(
+      tableStep?.safeMetadataJson &&
+        typeof tableStep.safeMetadataJson === "object" &&
+        (tableStep.safeMetadataJson as { awaitingQrAck?: boolean }).awaitingQrAck,
+    ) && existingTableIds.length > 0;
 
-  // Create tables under lock (no plaintext tokens in DB).
-  const tables = await prisma.$transaction(async (tx) => {
-    await lockWexPayOrgTableLimit(tx, input.organizationId);
-    const access = await evaluateProductAccess({
-      organizationId: input.organizationId,
-      productKey: "wexpay",
-    });
-    if (!access.allowed) {
-      throw new ActivationWizardError("NO_ACCESS", "WexPay erişimi gerekli.");
-    }
-
-    const currentTables = await tx.restaurantTable.count({
-      where: { branch: { restaurant: { organizationId: input.organizationId } } },
-    });
-    const tableLimit = access.entitlementMap.table_limit;
-    if (typeof tableLimit === "number" && tableLimit >= 0 && currentTables + count > tableLimit) {
-      throw new ActivationWizardError("TABLE_LIMIT", "Masa limitinize ulaştınız.");
-    }
-
-    const created = [];
-    for (let i = 0; i < count; i++) {
-      const label = `${prefix} ${startNumber + i}`.trim();
-      const table = await tx.restaurantTable.create({
-        data: {
-          branchId: input.branchId,
-          label,
-          seats,
-          qrCode: generateLegacyTableQrCode(),
-          status: TableStatus.EMPTY,
-          isActive: true,
-        },
-      });
-      created.push(table);
-    }
-    return created;
-  });
-
-  const qrs: WizardIssuedQr[] = [];
-  for (const table of tables) {
-    const issued: IssueTableQrTokenResult = await issueTableQrToken({
-      tableId: table.id,
+  // Recovery / idempotent path: rotate tokens for the same tables.
+  if (awaitingAck) {
+    return recoverWizardTableQrPack({
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
-    });
-    qrs.push({
-      tableId: table.id,
-      label: table.label,
-      seats: table.seats,
-      plaintext: issued.plaintext,
-      publicPath: issued.publicPath,
-      tokenPrefix: issued.token.tokenPrefix,
+      expectedVersion: input.expectedVersion,
+      tableIds: existingTableIds,
     });
   }
 
-  // Do NOT complete TABLE_SETUP yet — user must acknowledge QR pack.
-  await prisma.activationJourneyStep.update({
-    where: {
-      journeyId_stepKey: {
-        journeyId: journey.id,
-        stepKey: ActivationStepKey.TABLE_SETUP,
+  // Pre-generate opaque materials in memory (never persist plaintext).
+  const materials = Array.from({ length: count }, () => generateSecureTableQrTokenMaterial());
+
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await lockWexPayOrgTableLimit(tx, input.organizationId);
+
+        const access = await assertWexPayAccessInTx(tx, {
+          organizationId: input.organizationId,
+          productKey: "wexpay",
+        });
+
+        const branch = await tx.branch.findFirst({
+          where: {
+            id: input.branchId,
+            restaurant: { organizationId: input.organizationId },
+          },
+          select: { id: true },
+        });
+        if (!branch) {
+          throw new ActivationWizardError("CROSS_TENANT", "Şube bulunamadı.");
+        }
+
+        // Version gate inside TX (fail stale double-submit before creating tables).
+        const bumped = await tx.activationJourney.updateMany({
+          where: {
+            id: journey.id,
+            version: input.expectedVersion,
+            currentStep: ActivationStepKey.TABLE_SETUP,
+          },
+          data: { version: { increment: 1 }, updatedAt: new Date() },
+        });
+        if (bumped.count !== 1) {
+          throw new ActivationWizardError(
+            "VERSION_CONFLICT",
+            "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+          );
+        }
+
+        const currentTables = await tx.restaurantTable.count({
+          where: { branch: { restaurant: { organizationId: input.organizationId } } },
+        });
+        assertCanonicalLimitInTx(access.entitlementMap, "table_limit", currentTables + count - 1);
+
+        const qrs: WizardIssuedQr[] = [];
+        const tableIds: string[] = [];
+
+        for (let i = 0; i < count; i++) {
+          const label = `${prefix} ${startNumber + i}`.trim();
+          const table = await tx.restaurantTable.create({
+            data: {
+              branchId: input.branchId,
+              label,
+              seats,
+              qrCode: generateLegacyTableQrCode(),
+              status: TableStatus.EMPTY,
+              isActive: true,
+            },
+          });
+          tableIds.push(table.id);
+
+          const issued = await issueTableQrTokenInTx(tx, {
+            tableId: table.id,
+            organizationId: input.organizationId,
+            actorUserId: input.actorUserId,
+            material: materials[i]!,
+          });
+
+          qrs.push({
+            tableId: table.id,
+            label: table.label,
+            seats: table.seats,
+            plaintext: issued.plaintext,
+            publicPath: issued.publicPath,
+            tokenPrefix: issued.token.tokenPrefix,
+          });
+        }
+
+        await tx.activationJourneyStep.update({
+          where: {
+            journeyId_stepKey: {
+              journeyId: journey.id,
+              stepKey: ActivationStepKey.TABLE_SETUP,
+            },
+          },
+          data: {
+            status: ActivationJourneyStepStatus.IN_PROGRESS,
+            attemptCount: { increment: 1 },
+            safeMetadataJson: {
+              branchId: input.branchId,
+              tableIds,
+              count: tableIds.length,
+              awaitingQrAck: true,
+            } as Prisma.InputJsonValue,
+          },
+        });
+
+        await writeAuditLog(
+          {
+            action: "activation.table_setup.pack_created",
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            entityType: "Branch",
+            entityId: input.branchId,
+            source: "activation_wizard",
+            metadata: { tableCount: tableIds.length, tableIds },
+          },
+          tx,
+        );
+
+        return { qrs, journeyVersion: input.expectedVersion + 1 };
       },
-    },
-    data: {
-      status: ActivationJourneyStepStatus.IN_PROGRESS,
-      attemptCount: { increment: 1 },
-      safeMetadataJson: {
-        branchId: input.branchId,
-        tableIds: tables.map((t) => t.id),
-        count: tables.length,
-        awaitingQrAck: true,
-      } as Prisma.InputJsonValue,
-    },
+      { timeout: 20_000 },
+    );
+  } catch (error) {
+    mapTxAccessError(error);
+  }
+}
+
+export async function recoverWizardTableQrPack(input: {
+  organizationId: string;
+  actorUserId: string;
+  expectedVersion: number;
+  tableIds?: string[];
+}): Promise<{ qrs: WizardIssuedQr[]; journeyVersion: number }> {
+  const journey = await assertJourneyWritableForActor({
+    organizationId: input.organizationId,
+    actorUserId: input.actorUserId,
+    expectedVersion: input.expectedVersion,
   });
 
-  return { qrs, journeyVersion: journey.version };
+  const tableStep = journey.steps.find((s) => s.stepKey === ActivationStepKey.TABLE_SETUP);
+  const tableIds =
+    input.tableIds && input.tableIds.length > 0
+      ? input.tableIds
+      : readTableIdsFromMetadata(tableStep?.safeMetadataJson);
+
+  if (tableIds.length < 1) {
+    throw new ActivationWizardError("NO_TABLES", "Kurtarılacak masa paketi yok.");
+  }
+
+  const materials = tableIds.map(() => generateSecureTableQrTokenMaterial());
+
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await assertWexPayAccessInTx(tx, {
+          organizationId: input.organizationId,
+          productKey: "wexpay",
+        });
+
+        const bumped = await tx.activationJourney.updateMany({
+          where: {
+            id: journey.id,
+            version: input.expectedVersion,
+            currentStep: ActivationStepKey.TABLE_SETUP,
+          },
+          data: { version: { increment: 1 }, updatedAt: new Date() },
+        });
+        if (bumped.count !== 1) {
+          throw new ActivationWizardError(
+            "VERSION_CONFLICT",
+            "Kurulum başka bir oturumda güncellendi. Sayfayı yenileyip tekrar deneyin.",
+          );
+        }
+
+        const qrs: WizardIssuedQr[] = [];
+        for (let i = 0; i < tableIds.length; i++) {
+          const tableId = tableIds[i]!;
+          const table = await tx.restaurantTable.findFirst({
+            where: {
+              id: tableId,
+              branch: { restaurant: { organizationId: input.organizationId } },
+            },
+          });
+          if (!table) {
+            throw new ActivationWizardError("CROSS_TENANT", "Masa bulunamadı.");
+          }
+
+          const issued = await rotateTableQrTokenInTx(tx, {
+            tableId: table.id,
+            organizationId: input.organizationId,
+            actorUserId: input.actorUserId,
+            material: materials[i],
+          });
+
+          qrs.push({
+            tableId: table.id,
+            label: table.label,
+            seats: table.seats,
+            plaintext: issued.plaintext,
+            publicPath: issued.publicPath,
+            tokenPrefix: issued.token.tokenPrefix,
+          });
+        }
+
+        await writeAuditLog(
+          {
+            action: "activation.table_setup.qr_recovered",
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            entityType: "ActivationJourney",
+            entityId: journey.id,
+            source: "activation_wizard",
+            metadata: { tableCount: tableIds.length, tableIds },
+          },
+          tx,
+        );
+
+        return { qrs, journeyVersion: input.expectedVersion + 1 };
+      },
+      { timeout: 20_000 },
+    );
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 }
 
 export async function acknowledgeTableQrPack(input: {
@@ -420,50 +614,97 @@ export async function acknowledgeTableQrPack(input: {
     expectedVersion: input.expectedVersion,
   });
 
-  const tables = await prisma.restaurantTable.findMany({
-    where: {
-      branchId: input.branchId,
-      branch: { restaurant: { organizationId: input.organizationId } },
-      isActive: true,
-    },
-    select: { id: true },
-  });
-  if (tables.length < 1) {
-    throw new ActivationWizardError("NO_TABLES", "Önce masa oluşturun.");
-  }
+  const tableStep = journey.steps.find((s) => s.stepKey === ActivationStepKey.TABLE_SETUP);
+  const metadataTableIds = readTableIdsFromMetadata(tableStep?.safeMetadataJson);
 
-  for (const table of tables) {
-    const active = await prisma.tableQrToken.findFirst({
-      where: { tableId: table.id, status: "ACTIVE" },
-      select: { id: true },
-    });
-    if (!active) {
-      throw new ActivationWizardError("MISSING_QR", "Her masa için güvenli QR gerekli.");
-    }
-  }
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await assertWexPayAccessInTx(tx, {
+          organizationId: input.organizationId,
+          productKey: "wexpay",
+        });
 
-  return prisma.$transaction(async (tx) => {
-    await writeAuditLog(
-      {
-        action: "activation.table_setup.qr_acknowledged",
-        organizationId: input.organizationId,
-        userId: input.actorUserId,
-        entityType: "Branch",
-        entityId: input.branchId,
-        source: "activation_wizard",
-        metadata: { tableCount: tables.length },
+        const branch = await tx.branch.findFirst({
+          where: {
+            id: input.branchId,
+            restaurant: { organizationId: input.organizationId },
+          },
+          select: { id: true },
+        });
+        if (!branch) {
+          throw new ActivationWizardError("CROSS_TENANT", "Şube bulunamadı.");
+        }
+
+        const tables =
+          metadataTableIds.length > 0
+            ? await tx.restaurantTable.findMany({
+                where: {
+                  id: { in: metadataTableIds },
+                  branchId: input.branchId,
+                  branch: { restaurant: { organizationId: input.organizationId } },
+                  isActive: true,
+                },
+                select: { id: true },
+              })
+            : await tx.restaurantTable.findMany({
+                where: {
+                  branchId: input.branchId,
+                  branch: { restaurant: { organizationId: input.organizationId } },
+                  isActive: true,
+                },
+                select: { id: true },
+              });
+
+        if (tables.length < 1) {
+          throw new ActivationWizardError("NO_TABLES", "Önce masa oluşturun.");
+        }
+        if (metadataTableIds.length > 0 && tables.length !== metadataTableIds.length) {
+          throw new ActivationWizardError("CROSS_TENANT", "Masa sahipliği doğrulanamadı.");
+        }
+
+        for (const table of tables) {
+          const active = await tx.tableQrToken.findFirst({
+            where: { tableId: table.id, status: "ACTIVE" },
+            select: { id: true },
+          });
+          if (!active) {
+            throw new ActivationWizardError("MISSING_QR", "Her masa için güvenli QR gerekli.");
+          }
+        }
+
+        await writeAuditLog(
+          {
+            action: "activation.table_setup.qr_acknowledged",
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            entityType: "Branch",
+            entityId: input.branchId,
+            source: "activation_wizard",
+            metadata: { tableCount: tables.length },
+          },
+          tx,
+        );
+
+        return completeActivationStepInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.TABLE_SETUP,
+          advanceTo: ActivationStepKey.STAFF_INVITE,
+          safeMetadata: {
+            branchId: input.branchId,
+            tableIds: tables.map((t) => t.id),
+            tableCount: tables.length,
+            qrAck: true,
+            awaitingQrAck: false,
+          },
+        });
       },
-      tx,
+      { timeout: 15_000 },
     );
-
-    return completeActivationStepInTx(tx, {
-      journeyId: journey.id,
-      expectedVersion: input.expectedVersion,
-      stepKey: ActivationStepKey.TABLE_SETUP,
-      advanceTo: ActivationStepKey.STAFF_INVITE,
-      safeMetadata: { branchId: input.branchId, tableCount: tables.length, qrAck: true },
-    });
-  });
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 }
 
 export async function rotateWizardTableQr(input: {
@@ -471,30 +712,43 @@ export async function rotateWizardTableQr(input: {
   actorUserId: string;
   tableId: string;
 }): Promise<WizardIssuedQr> {
-  const table = await prisma.restaurantTable.findFirst({
-    where: {
-      id: input.tableId,
-      branch: { restaurant: { organizationId: input.organizationId } },
-    },
-  });
-  if (!table) {
-    throw new ActivationWizardError("CROSS_TENANT", "Masa bulunamadı.");
+  const material = generateSecureTableQrTokenMaterial();
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await assertWexPayAccessInTx(tx, {
+        organizationId: input.organizationId,
+        productKey: "wexpay",
+      });
+
+      const table = await tx.restaurantTable.findFirst({
+        where: {
+          id: input.tableId,
+          branch: { restaurant: { organizationId: input.organizationId } },
+        },
+      });
+      if (!table) {
+        throw new ActivationWizardError("CROSS_TENANT", "Masa bulunamadı.");
+      }
+
+      const issued: IssueTableQrTokenResult = await rotateTableQrTokenInTx(tx, {
+        tableId: table.id,
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        material,
+      });
+
+      return {
+        tableId: table.id,
+        label: table.label,
+        seats: table.seats,
+        plaintext: issued.plaintext,
+        publicPath: issued.publicPath,
+        tokenPrefix: issued.token.tokenPrefix,
+      };
+    });
+  } catch (error) {
+    mapTxAccessError(error);
   }
-
-  const issued = await rotateTableQrToken({
-    tableId: table.id,
-    organizationId: input.organizationId,
-    actorUserId: input.actorUserId,
-  });
-
-  return {
-    tableId: table.id,
-    label: table.label,
-    seats: table.seats,
-    plaintext: issued.plaintext,
-    publicPath: issued.publicPath,
-    tokenPrefix: issued.token.tokenPrefix,
-  };
 }
 
 export async function completeStaffInviteWizardStep(input: {
@@ -509,34 +763,68 @@ export async function completeStaffInviteWizardStep(input: {
     expectedVersion: input.expectedVersion,
   });
 
-  if (!input.skip) {
-    const openOrSent = await prisma.staffInvite.count({
-      where: {
-        organizationId: input.organizationId,
-        OR: [
-          { acceptedAt: { not: null } },
-          { revokedAt: null, expiresAt: { gt: new Date() } },
-        ],
-      },
-    });
-    if (openOrSent < 1) {
-      throw new ActivationWizardError(
-        "NO_INVITES",
-        "Devam etmek için en az bir davet gönderin veya adımı şimdilik atlayın.",
-      );
-    }
-  }
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        const access = await assertWexPayAccessInTx(tx, {
+          organizationId: input.organizationId,
+          productKey: "wexpay",
+        });
 
-  return prisma.$transaction(async (tx) =>
-    completeActivationStepInTx(tx, {
-      journeyId: journey.id,
-      expectedVersion: input.expectedVersion,
-      stepKey: ActivationStepKey.STAFF_INVITE,
-      advanceTo: ActivationStepKey.MENU_IMPORT,
-      markStatus: input.skip
-        ? ActivationJourneyStepStatus.SKIPPED
-        : ActivationJourneyStepStatus.COMPLETED,
-      safeMetadata: { skipped: Boolean(input.skip) },
-    }),
-  );
+        if (input.skip) {
+          // Fail-closed: UI button alone is not enough — entitlement must allow skip.
+          const skipAllowed =
+            isEntitlementEnabled(access.entitlementMap, "wizard_staff_invite_skippable") ||
+            access.entitlementMap.staff_limit === -1;
+          if (!skipAllowed) {
+            throw new ActivationWizardError(
+              "SKIP_FORBIDDEN",
+              "Bu planda personel daveti adımı atlanamaz.",
+            );
+          }
+
+          return completeActivationStepInTx(tx, {
+            journeyId: journey.id,
+            expectedVersion: input.expectedVersion,
+            stepKey: ActivationStepKey.STAFF_INVITE,
+            advanceTo: ActivationStepKey.MENU_IMPORT,
+            markStatus: ActivationJourneyStepStatus.SKIPPED,
+            safeMetadata: { skipped: true },
+          });
+        }
+
+        const qualifying = await tx.staffInvite.count({
+          where: {
+            organizationId: input.organizationId,
+            OR: [
+              { acceptedAt: { not: null } },
+              {
+                revokedAt: null,
+                expiresAt: { gt: new Date() },
+                deliveryStatus: StaffInviteDeliveryStatus.SENT,
+              },
+            ],
+          },
+        });
+        if (qualifying < 1) {
+          throw new ActivationWizardError(
+            "NO_INVITES",
+            "Devam etmek için kabul edilmiş veya başarıyla gönderilmiş (SENT) bir davet gerekir.",
+          );
+        }
+
+        return completeActivationStepInTx(tx, {
+          journeyId: journey.id,
+          expectedVersion: input.expectedVersion,
+          stepKey: ActivationStepKey.STAFF_INVITE,
+          advanceTo: ActivationStepKey.MENU_IMPORT,
+          markStatus: ActivationJourneyStepStatus.COMPLETED,
+          safeMetadata: { skipped: false, qualifyingInvites: qualifying },
+        });
+      },
+      { timeout: 15_000 },
+    );
+  } catch (error) {
+    mapTxAccessError(error);
+  }
 }
