@@ -23,6 +23,11 @@ async function readRawBody(request: Request): Promise<string> {
   return request.text();
 }
 
+/**
+ * PayTR expects plain-text "OK" only when the callback is fully accepted.
+ * Transient activation failures return non-OK (503) so PayTR retries and
+ * self-heal can complete License/Subscription linkage.
+ */
 export async function POST(request: Request) {
   const ip = getRequestIpAddress(request) ?? "unknown";
   const rate = enforceRateLimit("billing.paytr.callback", ip, {

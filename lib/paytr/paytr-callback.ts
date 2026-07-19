@@ -97,11 +97,53 @@ async function settleActivationFeeForPayment(
   });
 }
 
+/** Test-only: next N `activateSubscriptionFromPayment` calls throw before mutating. */
+let testActivationFailuresRemaining = 0;
+
+export function __testOnlyForceActivationFailures(count: number) {
+  testActivationFailuresRemaining = Math.max(0, Math.floor(count));
+}
+
+async function auditActivationPendingRetry(input: {
+  organizationId: string;
+  userId: string | null;
+  paymentId: string;
+  merchantOid: string;
+  action:
+    | "billing.paytr.subscription_activation_pending_retry"
+    | "billing.paytr.subscription_activation_recovery_failed";
+}) {
+  await prisma.auditLog.create({
+    data: {
+      organizationId: input.organizationId,
+      userId: input.userId,
+      action: input.action,
+      entityType: "SubscriptionPayment",
+      entityId: input.paymentId,
+      level: "ERROR",
+      status: "FAILURE",
+      metadataJson: {
+        merchantOid: input.merchantOid,
+        reason: "activation_pending_retry",
+      },
+    },
+  });
+}
+
+function activationPendingRetryResult(): { ok: false; reason: string; status: number } {
+  return { ok: false, reason: "activation_pending_retry", status: 503 };
+}
+
 /**
  * Idempotent subscription activation from a PAID SubscriptionPayment.
  * Safe to retry when payment.subscriptionId is still null after a partial failure.
  */
 export async function activateSubscriptionFromPayment(paymentId: string) {
+  if (testActivationFailuresRemaining > 0) {
+    testActivationFailuresRemaining -= 1;
+    throw new Error("activation_forced_failure");
+  }
+
   const payment = await prisma.subscriptionPayment.findUnique({
     where: { id: paymentId },
     include: { plan: { include: { product: true } }, organization: true },
@@ -452,6 +494,7 @@ export async function handlePaytrSubscriptionCallback(input: {
     }
 
     // Self-heal: PAID without linked subscription (activation crashed after settle).
+    // Must NOT return OK to PayTR until recovery succeeds — otherwise retries stop.
     try {
       const subscription = await activateSubscriptionFromPayment(payment.id);
       if (subscription) {
@@ -471,25 +514,31 @@ export async function handlePaytrSubscriptionCallback(input: {
         });
         return { ok: true, activated: true, recovered: true };
       }
-      return { ok: true, duplicate: true };
-    } catch (error) {
-      await prisma.auditLog.create({
-        data: {
-          organizationId: payment.organizationId,
-          userId: payment.userId,
-          action: "billing.paytr.subscription_activation_recovery_failed",
-          entityType: "SubscriptionPayment",
-          entityId: payment.id,
-          level: "ERROR",
-          status: "FAILURE",
-          metadataJson: {
-            merchantOid: payment.merchantOid,
-            errorName: error instanceof Error ? error.name : "Error",
-          },
-        },
+      const stillOrphan = await prisma.subscriptionPayment.findUnique({
+        where: { id: payment.id },
+        select: { subscriptionId: true },
       });
-      // Acknowledge to PayTR; leave payment PAID for a later retry.
-      return { ok: true };
+      if (stillOrphan?.subscriptionId) {
+        return { ok: true, duplicate: true };
+      }
+      await auditActivationPendingRetry({
+        organizationId: payment.organizationId,
+        userId: payment.userId,
+        paymentId: payment.id,
+        merchantOid: payment.merchantOid,
+        action: "billing.paytr.subscription_activation_recovery_failed",
+      });
+      return activationPendingRetryResult();
+    } catch {
+      await auditActivationPendingRetry({
+        organizationId: payment.organizationId,
+        userId: payment.userId,
+        paymentId: payment.id,
+        merchantOid: payment.merchantOid,
+        action: "billing.paytr.subscription_activation_recovery_failed",
+      });
+      // Payment stays PAID; non-OK forces PayTR to retry so self-heal can run.
+      return activationPendingRetryResult();
     }
   }
 
@@ -600,24 +649,16 @@ export async function handlePaytrSubscriptionCallback(input: {
     try {
       await activateSubscriptionFromPayment(payment.id);
       return { ok: true, activated: true };
-    } catch (error) {
-      await prisma.auditLog.create({
-        data: {
-          organizationId: payment.organizationId,
-          userId: payment.userId,
-          action: "billing.paytr.subscription_activation_pending_retry",
-          entityType: "SubscriptionPayment",
-          entityId: payment.id,
-          level: "ERROR",
-          status: "FAILURE",
-          metadataJson: {
-            merchantOid: payment.merchantOid,
-            errorName: error instanceof Error ? error.name : "Error",
-          },
-        },
+    } catch {
+      await auditActivationPendingRetry({
+        organizationId: payment.organizationId,
+        userId: payment.userId,
+        paymentId: payment.id,
+        merchantOid: payment.merchantOid,
+        action: "billing.paytr.subscription_activation_pending_retry",
       });
-      // Payment remains PAID; PayTR retry / duplicate callback can self-heal.
-      return { ok: true };
+      // Payment remains PAID + null subscriptionId. Non-OK (503) so PayTR retries.
+      return activationPendingRetryResult();
     }
   }
 
