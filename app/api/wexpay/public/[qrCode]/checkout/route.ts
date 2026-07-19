@@ -11,7 +11,7 @@ import {
   WexPayPublicCheckoutUnavailableError,
 } from "@/lib/wexpay-public-checkout";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
-import { resolvePublicTableByQr } from "@/lib/wexpay-read";
+import { resolvePublicTableByPublicKey } from "@/lib/wexpay-read";
 
 /**
  * PUBLIC QR PayTR checkout -> POST /api/wexpay/public/[qrCode]/checkout.
@@ -34,7 +34,7 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
 
   let resolution;
   try {
-    resolution = await resolvePublicTableByQr(qrCode);
+    resolution = await resolvePublicTableByPublicKey(qrCode);
   } catch {
     return Response.json(
       { error: "Servis geçici olarak kullanılamıyor.", reason: "service_unavailable" },
@@ -69,7 +69,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
 
   let resolution;
   try {
-    resolution = await resolvePublicTableByQr(qrCode);
+    resolution = await resolvePublicTableByPublicKey(qrCode);
   } catch {
     return Response.json(
       { error: "Servis geçici olarak kullanılamıyor.", reason: "service_unavailable" },

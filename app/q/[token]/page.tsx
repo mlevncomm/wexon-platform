@@ -4,19 +4,17 @@ import QrCustomerApp from "@/components/qr-order/QrCustomerApp";
 import QrErrorState from "@/components/qr-order/QrErrorState";
 
 type PageProps = {
-  params: Promise<{ qrCode: string }>;
+  params: Promise<{ token: string }>;
   searchParams: Promise<{ paytr?: string; paymentId?: string }>;
 };
 
 /**
- * PUBLIC QR ordering page -> /wexpay/t/[qrCode].
- *
- * Unauthenticated diner view. Tenant + access are resolved from the table
- * qrCode through Wexon Core. Orders post to /api/wexpay/public/[qrCode]/order.
- * PayTR return lands on ?paytr=success|failed&paymentId=… and is handled client-side.
+ * Canonical opaque public QR page -> /q/[token].
+ * Resolves TableQrToken by hash; public-live gated centrally via ActivationJourney ACTIVE.
  */
-export default async function PublicTablePage({ params, searchParams }: PageProps) {
-  const { qrCode } = await params;
+export default async function OpaquePublicTablePage({ params, searchParams }: PageProps) {
+  const { token: rawToken } = await params;
+  const token = decodeURIComponent(rawToken);
   const query = await searchParams;
   const paytr = query.paytr?.trim().toLowerCase();
   const initialPaytrReturn =
@@ -26,7 +24,7 @@ export default async function PublicTablePage({ params, searchParams }: PageProp
 
   let resolution: Awaited<ReturnType<typeof resolvePublicTableByPublicKey>> = null;
   try {
-    resolution = await resolvePublicTableByPublicKey(qrCode);
+    resolution = await resolvePublicTableByPublicKey(token);
   } catch {
     return (
       <QrErrorState
@@ -52,7 +50,7 @@ export default async function PublicTablePage({ params, searchParams }: PageProp
       <QrErrorState
         title="Restoran şu an kapalı"
         message="Bu masa için menü veya sipariş şu anda kullanılamıyor. Lütfen personel ile iletişime geçin."
-        hint="Oturum kapalı veya ürün erişimi aktif değil olabilir."
+        hint="Kurulum Modu devam ediyor veya ürün erişimi aktif değil olabilir."
       />
     );
   }
@@ -72,7 +70,7 @@ export default async function PublicTablePage({ params, searchParams }: PageProp
   return (
     <QrCustomerApp
       context={{
-        qrCode,
+        qrCode: token,
         restaurantName: resolution.restaurant.name,
         branchName: resolution.branch.name,
         tableLabel: resolution.table.label,

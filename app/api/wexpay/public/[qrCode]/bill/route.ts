@@ -1,6 +1,6 @@
 import { wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
-import { resolvePublicTableByQr } from "@/lib/wexpay-read";
+import { resolvePublicTableByPublicKey } from "@/lib/wexpay-read";
 import { getPublicTableBill } from "@/lib/wexpay-service";
 
 /**
@@ -14,7 +14,7 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
   if (!limited.ok) return limited.response;
   const ipAddress = limited.ipAddress;
 
-  const resolution = await resolvePublicTableByQr(qrCode);
+  const resolution = await resolvePublicTableByPublicKey(qrCode);
   if (!resolution) {
     return Response.json({ error: "Masa bulunamadı." }, { status: 404 });
   }

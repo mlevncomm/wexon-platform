@@ -2,6 +2,11 @@ import { OrderStatus, PaymentStatus, TableStatus } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { coreEntitlementNumber, type CoreEntitlementMap, evaluateProductAccess } from "@/lib/wexon-core-access";
 import { filterChargeableOrders, filterOperationalOrders, resolveOperationalTableSession } from "@/lib/wexpay-account";
+import { assertWexPayPublicLiveReady } from "@/lib/wexpay-activation-journey";
+import {
+  findActiveTableQrTokenByPlaintext,
+  touchTableQrTokenLastUsed,
+} from "@/lib/wexpay-table-qr-token";
 
 /**
  * Tenant-scoped read queries for the real WexPay operator UI.
@@ -259,13 +264,27 @@ export type PublicTableResolution = {
   allowed: boolean;
 };
 
-export async function resolvePublicTableByQr(qrCode: string): Promise<PublicTableResolution | null> {
-  const table = await prisma.restaurantTable.findUnique({
-    where: { qrCode },
-    include: { branch: { include: { restaurant: { include: { organization: true } } } } },
-  });
+type PublicTableChain = {
+  id: string;
+  label: string;
+  status: string;
+  isActive: boolean;
+  branch: {
+    id: string;
+    name: string;
+    isActive: boolean;
+    restaurant: {
+      id: string;
+      name: string;
+      isActive: boolean;
+      organizationId: string | null;
+      organization: { isDemo: boolean; isActive: boolean } | null;
+    };
+  };
+};
 
-  if (!table || !table.isActive) return null;
+async function finalizePublicTableResolution(table: PublicTableChain): Promise<PublicTableResolution | null> {
+  if (!table.isActive) return null;
   const branch = table.branch;
   if (!branch.isActive) return null;
   const restaurant = branch.restaurant;
@@ -277,13 +296,67 @@ export async function resolvePublicTableByQr(qrCode: string): Promise<PublicTabl
     productKey: "wexpay",
   });
 
+  // Central live gate — journey must be ACTIVE. Do not duplicate in routes.
+  const liveReady =
+    access.allowed && (await assertWexPayPublicLiveReady(restaurant.organizationId));
+
   return {
     table: { id: table.id, label: table.label, status: table.status },
     branch: { id: branch.id, name: branch.name },
     restaurant: { id: restaurant.id, name: restaurant.name },
     organizationId: restaurant.organizationId,
-    allowed: access.allowed,
+    allowed: liveReady,
   };
+}
+
+/**
+ * Legacy public resolve via RestaurantTable.qrCode (/wexpay/t/{qrCode}).
+ * Public-live requires ActivationJourney.status === ACTIVE (central gate).
+ */
+export async function resolvePublicTableByQr(qrCode: string): Promise<PublicTableResolution | null> {
+  const table = await prisma.restaurantTable.findUnique({
+    where: { qrCode },
+    include: { branch: { include: { restaurant: { include: { organization: true } } } } },
+  });
+
+  if (!table) return null;
+  return finalizePublicTableResolution(table);
+}
+
+/**
+ * Canonical opaque token resolve (/q/{token}). Hash lookup only — never log plaintext.
+ */
+export async function resolvePublicTableByOpaqueToken(
+  opaqueToken: string,
+): Promise<PublicTableResolution | null> {
+  const tokenRow = await findActiveTableQrTokenByPlaintext(opaqueToken);
+  if (!tokenRow) return null;
+
+  const table = await prisma.restaurantTable.findUnique({
+    where: { id: tokenRow.tableId },
+    include: { branch: { include: { restaurant: { include: { organization: true } } } } },
+  });
+  if (!table) return null;
+
+  const resolution = await finalizePublicTableResolution(table);
+  if (resolution?.allowed) {
+    await touchTableQrTokenLastUsed(tokenRow.id).catch(() => undefined);
+  }
+  return resolution;
+}
+
+/**
+ * Unified public key resolve: legacy `RestaurantTable.qrCode` first, then opaque TableQrToken.
+ * All public routes should use this (or the two specialized helpers) — never duplicate journey checks.
+ */
+export async function resolvePublicTableByPublicKey(
+  publicKey: string,
+): Promise<PublicTableResolution | null> {
+  const trimmed = publicKey.trim();
+  if (!trimmed) return null;
+  const legacy = await resolvePublicTableByQr(trimmed);
+  if (legacy) return legacy;
+  return resolvePublicTableByOpaqueToken(trimmed);
 }
 
 /** Public-safe menu (active categories + active in-stock products + modifiers) for a branch. */

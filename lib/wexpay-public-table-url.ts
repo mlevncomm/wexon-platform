@@ -69,10 +69,21 @@ export function buildPublicTableQrPath(qrCode: string): string {
   return `/wexpay/t/${encodeURIComponent(safe)}`;
 }
 
+/** Canonical opaque token path — /q/{token}. */
+export function buildOpaquePublicQrPath(token: string): string {
+  const safe = assertSafeQrCode(token);
+  return `/q/${encodeURIComponent(safe)}`;
+}
+
 /** Absolute canonical guest URL from NEXT_PUBLIC_APP_URL (server-side). */
 export function buildPublicTableQrUrl(qrCode: string, env: NodeJS.ProcessEnv = process.env): string {
   const base = resolveAppBaseUrl(env);
   return `${base}${buildPublicTableQrPath(qrCode)}`;
+}
+
+export function buildOpaquePublicQrUrl(token: string, env: NodeJS.ProcessEnv = process.env): string {
+  const base = resolveAppBaseUrl(env);
+  return `${base}${buildOpaquePublicQrPath(token)}`;
 }
 
 /** Filename-safe slug for downloads: wexpay-<slug>-qr.{png,svg} */

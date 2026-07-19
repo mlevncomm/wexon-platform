@@ -6,7 +6,7 @@ import {
   storeIdempotentResponse,
 } from "@/lib/wexpay-public-idempotency";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
-import { resolvePublicTableByQr } from "@/lib/wexpay-read";
+import { resolvePublicTableByPublicKey } from "@/lib/wexpay-read";
 import { createPublicOrder } from "@/lib/wexpay-service";
 import { validateOrderItems, validatePublicNote } from "@/lib/wexpay-validation";
 
@@ -21,7 +21,7 @@ export async function POST(request: Request, context: { params: Promise<{ qrCode
   if (!limited.ok) return limited.response;
   const ipAddress = limited.ipAddress;
 
-  const resolution = await resolvePublicTableByQr(qrCode);
+  const resolution = await resolvePublicTableByPublicKey(qrCode);
   if (!resolution) {
     writeAuditFailure({
       action: "wexpay.public.qr_not_found",
