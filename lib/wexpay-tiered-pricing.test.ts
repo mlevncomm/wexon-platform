@@ -43,7 +43,7 @@ describe("wexpay commercials invoice math", () => {
 });
 
 describe("wexpay eligibility", () => {
-  it("never auto-approves Business Suite", () => {
+  it("never auto-approves Enterprise (business_suite)", () => {
     const result = evaluateWexPayEligibility({
       monthlyGmvBand: "15m+",
       locationCount: 40,
@@ -83,11 +83,13 @@ describe("wexpay eligibility", () => {
 });
 
 describe("wexpay tier config", () => {
-  it("seed defaults validate and start at 7000", () => {
+  it("seed defaults validate and start at 7500", () => {
     for (const tier of WEXPAY_TIER_SEED_DEFAULTS) {
       assert.deepEqual(validateTierSeedDefault(tier), []);
     }
-    assert.equal(WEXPAY_TIER_SEED_DEFAULTS[0].monthlyFee, 7000);
+    assert.equal(WEXPAY_TIER_SEED_DEFAULTS[0].monthlyFee, 7500);
+    assert.equal(WEXPAY_TIER_SEED_DEFAULTS[3].name, "WexPay Enterprise");
+    assert.equal(WEXPAY_TIER_SEED_DEFAULTS[3].monthlyFee, 75000);
   });
 
   it("maps legacy Basic/Standard/Pro deep links", () => {

@@ -23,10 +23,11 @@ import pg from "pg";
 import {
   evaluateRestoreTargetGuard,
   compareRowCountManifests,
+  evaluateRestoreTableCountContract,
+  evaluateActivationFeeLedgerRls,
   parsePostgresMajorVersion,
   sanitizeBackupLog,
   RECOVERY_STATUS,
-  EXPECTED_PUBLIC_TABLE_COUNT,
   sha256HexEqual,
 } from "./db-backup-lib.mjs";
 
@@ -304,14 +305,37 @@ try {
     ORDER BY c.relname
   `);
 
-  if (tables.rows.length !== EXPECTED_PUBLIC_TABLE_COUNT) {
-    fail(`expected ${EXPECTED_PUBLIC_TABLE_COUNT} public tables, got ${tables.rows.length}`);
+  const stampMatch = basename(archivePath).match(/wexon-full-(.+)\.dump$/);
+  const backupsDir = dirname(archivePath);
+  let manifest = null;
+  if (stampMatch) {
+    const manifestFile = join(backupsDir, `wexon-rowcount-manifest-${stampMatch[1]}.json`);
+    if (existsSync(manifestFile)) {
+      try {
+        manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
+      } catch {
+        fail("row-count manifest is corrupt JSON");
+      }
+    }
   }
+
+  const tableContract = evaluateRestoreTableCountContract({
+    restoredTableCount: tables.rows.length,
+    manifest,
+  });
+  if (!tableContract.ok) fail(tableContract.reason);
 
   const rlsOff = tables.rows.filter((r) => !r.rls);
   if (rlsOff.length > 0) {
     fail(`RLS disabled on: ${rlsOff.map((r) => r.table_name).join(", ")}`);
   }
+
+  const ledgerRow = tables.rows.find((r) => r.table_name === "ActivationFeeLedger");
+  const ledgerRls = evaluateActivationFeeLedgerRls({
+    present: Boolean(ledgerRow),
+    relrowsecurity: ledgerRow?.rls ?? false,
+  });
+  if (!ledgerRls.ok) fail(ledgerRls.reason);
 
   /** @type {Record<string, number>} */
   const actualCounts = {};
@@ -322,17 +346,7 @@ try {
     actualCounts[table_name] = q.rows[0]?.n ?? 0;
   }
 
-  const stampMatch = basename(archivePath).match(/wexon-full-(.+)\.dump$/);
-  const backupsDir = dirname(archivePath);
-  let expectedCounts = null;
-  if (stampMatch) {
-    const manifestFile = join(backupsDir, `wexon-rowcount-manifest-${stampMatch[1]}.json`);
-    if (existsSync(manifestFile)) {
-      expectedCounts = JSON.parse(readFileSync(manifestFile, "utf8")).rowCounts;
-    }
-  }
-  if (!expectedCounts) fail("row-count manifest not found beside archive");
-
+  const expectedCounts = manifest.rowCounts;
   const cmp = compareRowCountManifests(expectedCounts, actualCounts);
   if (!cmp.ok) {
     fail(
@@ -358,6 +372,33 @@ try {
   const p = priv.rows[0];
   if (p.anon_user_select || p.anon_user_insert || p.anon_cred_select || p.auth_user_select) {
     fail(`anon/authenticated privileges still present: ${JSON.stringify(p)}`);
+  }
+
+  if (ledgerRow) {
+    const ledgerPriv = await client.query(`
+      SELECT
+        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'SELECT') AS anon_select,
+        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'INSERT') AS anon_insert,
+        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'UPDATE') AS anon_update,
+        has_table_privilege('anon', 'public."ActivationFeeLedger"', 'DELETE') AS anon_delete,
+        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'SELECT') AS auth_select,
+        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'INSERT') AS auth_insert,
+        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'UPDATE') AS auth_update,
+        has_table_privilege('authenticated', 'public."ActivationFeeLedger"', 'DELETE') AS auth_delete
+    `);
+    const lp = ledgerPriv.rows[0];
+    if (
+      lp.anon_select ||
+      lp.anon_insert ||
+      lp.anon_update ||
+      lp.anon_delete ||
+      lp.auth_select ||
+      lp.auth_insert ||
+      lp.auth_update ||
+      lp.auth_delete
+    ) {
+      fail(`ActivationFeeLedger anon/authenticated privileges still present: ${JSON.stringify(lp)}`);
+    }
   }
 
   const sha256 = createHash("sha256").update(readFileSync(archivePath)).digest("hex");

@@ -16,10 +16,10 @@ test.describe.serial("public journey", () => {
 
     await page.goto("/products/wexpay");
     await expect(page.getByText("WexPay").first()).toBeVisible();
-    await expect(page.getByText(/₺7\.000\/ay|₺7000\/ay/i).first()).toBeVisible();
+    await expect(page.getByText(/₺7\.500\/ay|₺7500\/ay/i).first()).toBeVisible();
     await expect(page.getByText(/₺15\.000\/ay|₺15000\/ay/i).first()).toBeVisible();
     await expect(page.getByText(/₺35\.000\/ay|₺35000\/ay/i).first()).toBeVisible();
-    await expect(page.getByText(/Business Suite/i).first()).toBeVisible();
+    await expect(page.getByText(/Enterprise|Business Suite/i).first()).toBeVisible();
 
     const demoGone = await page.goto("/demo/wexpay");
     expect(demoGone?.status()).toBeGreaterThanOrEqual(400);

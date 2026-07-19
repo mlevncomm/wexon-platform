@@ -1,9 +1,21 @@
 import { createHash } from "crypto";
 import type { BillingInterval, Plan, Prisma } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
-import { computePlanPrice, CheckoutValidationError, type CheckoutBillingInterval } from "@/lib/wexon-checkout-validation";
 import {
-  amountToMinorUnit,
+  computeCheckoutQuote,
+  CheckoutValidationError,
+  type CheckoutBillingInterval,
+} from "@/lib/wexon-checkout-validation";
+import {
+  ActivationFeeError,
+  markActivationFeePaid,
+  quoteToLegacyMajorDisplay,
+  releaseActivationFeeReservation,
+  reserveActivationFeeForCheckout,
+  resolveActivationFeeDue,
+} from "@/lib/wexon-activation-fee";
+import { majorFromMinor } from "@/lib/wexon-billing-money";
+import {
   buildPaytrIframeTokenRequest,
   buildUserBasketForSubscription,
   createPaytrIframeToken,
@@ -58,6 +70,9 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
   if (!plan || !plan.product.isActive || plan.product.status !== "ACTIVE") {
     throw new CheckoutValidationError("Seçilen paket bulunamadı veya aktif değil.");
   }
+  if (plan.tierKey === "business_suite" || plan.key === "wexpay_business_suite") {
+    throw new CheckoutValidationError("WexPay Enterprise self-serve checkout ile açılamaz.");
+  }
 
   const membership = await prisma.membership.findFirst({
     where: {
@@ -70,6 +85,11 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
     throw new PaytrSubscriptionError("Organizasyon erişimi doğrulanamadı.", "forbidden");
   }
 
+  const organization = await prisma.organization.findUniqueOrThrow({
+    where: { id: input.organizationId },
+    select: { id: true, isDemo: true },
+  });
+
   const existingActiveLicense = await prisma.license.findFirst({
     where: {
       organizationId: input.organizationId,
@@ -81,20 +101,11 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
     throw new CheckoutValidationError("Bu organizasyon için aktif abonelik zaten bulunuyor.");
   }
 
-  let price;
-  try {
-    price = computePlanPrice(plan, input.billingInterval);
-  } catch (error) {
-    if (error instanceof CheckoutValidationError) throw error;
-    throw new CheckoutValidationError("Fiyat hesaplanamadı.");
-  }
-
   if (input.idempotencyKey) {
     const existing = await prisma.subscriptionPayment.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
     });
     if (existing && existing.organizationId === input.organizationId && existing.paytrTokenHash) {
-      // Token itself is not stored; client must create a fresh session if needed.
       return {
         paymentId: existing.id,
         merchantOid: existing.merchantOid,
@@ -105,29 +116,83 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
     }
   }
 
+  const due = await resolveActivationFeeDue(prisma, {
+    organizationId: input.organizationId,
+    productId: plan.productId,
+    plan,
+    isDemo: organization.isDemo,
+  });
+
+  let quote;
+  try {
+    quote = computeCheckoutQuote({
+      plan,
+      interval: input.billingInterval,
+      activationFeeAmountMinor: due.due ? due.amountMinor : 0,
+    });
+  } catch (error) {
+    if (error instanceof CheckoutValidationError) throw error;
+    throw new CheckoutValidationError("Fiyat hesaplanamadı.");
+  }
+
+  const display = quoteToLegacyMajorDisplay(quote);
   const credentials = loadPaytrSubscriptionCredentials();
   const urls = getPaytrReturnUrls();
   const merchantOid = generateMerchantOid();
-  const amountMinor = amountToMinorUnit(price.total);
-  const userBasketBase64 = buildUserBasketForSubscription({ planName: plan.name, total: price.total });
+  const amountMinor = quote.grossAmountMinor;
+  const userBasketBase64 = buildUserBasketForSubscription({
+    planName: plan.name,
+    total: display.total,
+  });
   const userIp = resolveClientIp(input.userIp);
 
-  const payment = await prisma.subscriptionPayment.create({
-    data: {
-      organizationId: input.organizationId,
-      planId: plan.id,
-      userId: input.userId,
-      provider: "PAYTR",
-      providerMode: "iframe",
-      merchantOid,
-      amount: price.total,
-      amountMinor,
-      currency: price.currency,
-      taxRatePct: price.taxRatePct,
-      billingInterval: toBillingInterval(input.billingInterval),
-      status: "INITIATED",
-      idempotencyKey: input.idempotencyKey || null,
-    },
+  const payment = await prisma.$transaction(async (tx) => {
+    const created = await tx.subscriptionPayment.create({
+      data: {
+        organizationId: input.organizationId,
+        planId: plan.id,
+        userId: input.userId,
+        provider: "PAYTR",
+        providerMode: "iframe",
+        merchantOid,
+        amount: display.total,
+        amountMinor,
+        currency: quote.currency,
+        taxRatePct: Math.round(quote.taxRateBps / 100),
+        subscriptionAmountMinor: quote.subscriptionAmountMinor,
+        activationFeeAmountMinor: quote.activationFeeAmountMinor,
+        netAmountMinor: quote.netAmountMinor,
+        taxRateBps: quote.taxRateBps,
+        taxAmountMinor: quote.taxAmountMinor,
+        grossAmountMinor: quote.grossAmountMinor,
+        taxEnabledAtPurchase: quote.taxEnabledAtPurchase,
+        taxModeAtPurchase: quote.taxModeAtPurchase,
+        billingInterval: toBillingInterval(input.billingInterval),
+        status: "INITIATED",
+        idempotencyKey: input.idempotencyKey || null,
+      },
+    });
+
+    if (due.due && due.amountMinor > 0) {
+      try {
+        await reserveActivationFeeForCheckout(tx, {
+          organizationId: input.organizationId,
+          productId: plan.productId,
+          planId: plan.id,
+          activationFeeMinor: due.amountMinor,
+          quote,
+          subscriptionPaymentId: created.id,
+          isDemo: organization.isDemo,
+        });
+      } catch (error) {
+        if (error instanceof ActivationFeeError && error.code === "ACTIVATION_FEE_RESERVED") {
+          throw new CheckoutValidationError(error.message);
+        }
+        throw error;
+      }
+    }
+
+    return created;
   });
 
   const formBody = buildPaytrIframeTokenRequest({
@@ -142,7 +207,7 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
     userPhone: input.userPhone?.trim() || "05000000000",
     merchantOkUrl: `${urls.okUrl}?paymentId=${encodeURIComponent(payment.id)}`,
     merchantFailUrl: `${urls.failUrl}?paymentId=${encodeURIComponent(payment.id)}`,
-    currency: price.currency,
+    currency: quote.currency,
   });
 
   try {
@@ -165,8 +230,10 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
         metadataJson: {
           merchantOid,
           planId: plan.id,
-          amount: price.total,
-          currency: price.currency,
+          amount: display.total,
+          currency: quote.currency,
+          activationFeeAmountMinor: quote.activationFeeAmountMinor,
+          grossAmountMinor: quote.grossAmountMinor,
           testMode: process.env.PAYTR_TEST_MODE !== "false",
         },
       },
@@ -177,21 +244,29 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
       merchantOid: updated.merchantOid,
       iframeToken: token.iframeToken,
       iframeUrl: token.iframeUrl,
-      amount: price.total,
-      currency: price.currency,
-      subtotal: price.subtotal,
-      tax: price.tax,
-      taxRatePct: price.taxRatePct,
+      amount: display.total,
+      currency: quote.currency,
+      subtotal: display.subtotal,
+      tax: display.tax,
+      taxRatePct: display.taxRatePct,
+      activationFee: majorFromMinor(quote.activationFeeAmountMinor),
       planName: plan.name,
       reused: false as const,
     };
   } catch (error) {
-    await prisma.subscriptionPayment.update({
-      where: { id: payment.id },
-      data: {
-        status: "FAILED",
-        failedReasonMsg: error instanceof Error ? error.message : "Token oluşturulamadı",
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.subscriptionPayment.update({
+        where: { id: payment.id },
+        data: {
+          status: "FAILED",
+          failedReasonMsg: error instanceof Error ? error.message : "Token oluşturulamadı",
+        },
+      });
+      await releaseActivationFeeReservation(tx, {
+        organizationId: input.organizationId,
+        productId: plan.productId,
+        subscriptionPaymentId: payment.id,
+      });
     });
     throw error;
   }
@@ -212,12 +287,30 @@ export function fingerprintPlan(plan: Plan) {
         id: plan.id,
         priceMonthly: plan.priceMonthly?.toString(),
         priceYearly: plan.priceYearly?.toString(),
+        setupFee: plan.setupFee?.toString(),
         taxRatePct: plan.taxRatePct,
         currency: plan.currency,
       }),
     )
     .digest("hex")
     .slice(0, 16);
+}
+
+/** Mark activation fee PAID after successful subscription payment (idempotent / ownership-safe). */
+export async function settleActivationFeeAfterSubscriptionPaid(paymentId: string) {
+  const payment = await prisma.subscriptionPayment.findUnique({
+    where: { id: paymentId },
+    include: { plan: true },
+  });
+  if (!payment) return;
+  await prisma.$transaction(async (tx) => {
+    await markActivationFeePaid(tx, {
+      organizationId: payment.organizationId,
+      productId: payment.plan.productId,
+      subscriptionPaymentId: payment.id,
+      activationFeeAmountMinor: payment.activationFeeAmountMinor,
+    });
+  });
 }
 
 export type { Prisma };

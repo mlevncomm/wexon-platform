@@ -26,6 +26,7 @@ import {
   evaluatePgDumpVersionGate,
   parsePostgresMajorVersion,
   sanitizeBackupLog,
+  assertCurrentSchemaPublicTableCount,
   RECOVERY_STATUS,
   EXPECTED_PUBLIC_TABLE_COUNT,
   MIN_PG_DUMP_MAJOR,
@@ -156,6 +157,11 @@ try {
       `SELECT COUNT(*)::int AS n FROM public."${String(table_name).replace(/"/g, '""')}"`,
     );
     rowCounts[table_name] = q.rows[0]?.n ?? 0;
+  }
+
+  const schemaCount = assertCurrentSchemaPublicTableCount(Object.keys(rowCounts).length);
+  if (!schemaCount.ok) {
+    throw new Error(schemaCount.reason);
   }
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));

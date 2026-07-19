@@ -4,7 +4,10 @@
  */
 
 export const MIN_PG_DUMP_MAJOR = 17;
-export const EXPECTED_PUBLIC_TABLE_COUNT = 33;
+/** Current public schema expectation after ActivationFeeLedger migration. */
+export const EXPECTED_PUBLIC_TABLE_COUNT = 34;
+/** Pre-ActivationFeeLedger recovery archives remain valid via their own manifests. */
+export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER = 33;
 export const RECOVERY_STATUS = {
   NOT_VERIFIED: "RECOVERY BACKUP OLARAK DOĞRULANMADI",
   RESTORE_VERIFIED: "RESTORE VERIFIED",
@@ -212,6 +215,77 @@ export function evaluateRestoreTargetGuard(
 
 export function sha256HexEqual(a: string, b: string): boolean {
   return String(a || "").toLowerCase() === String(b || "").toLowerCase();
+}
+
+export type RowCountManifest = {
+  tableCount?: number;
+  rowCounts?: Record<string, number>;
+  expectedPublicTableCount?: number;
+};
+
+/**
+ * Fresh dumps of the live schema must match the current public table count.
+ * Historical archives are validated separately via their own manifests.
+ */
+export function assertCurrentSchemaPublicTableCount(
+  actual: number,
+  expected: number = EXPECTED_PUBLIC_TABLE_COUNT,
+): { ok: true } | { ok: false; reason: string } {
+  if (!Number.isFinite(actual) || actual !== expected) {
+    return {
+      ok: false,
+      reason: `public table count ${actual} does not match current schema expectation ${expected}`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Restore verification must follow the archive manifest tableCount (historical 33
+ * or current 34), not the live schema constant alone.
+ */
+export function evaluateRestoreTableCountContract(input: {
+  restoredTableCount: number;
+  manifest: RowCountManifest | null | undefined;
+}): { ok: true; expectedTableCount: number } | { ok: false; reason: string } {
+  const manifest = input.manifest;
+  if (!manifest || typeof manifest !== "object") {
+    return { ok: false, reason: "row-count manifest missing or invalid" };
+  }
+  const rowCounts = manifest.rowCounts;
+  if (!rowCounts || typeof rowCounts !== "object" || Array.isArray(rowCounts)) {
+    return { ok: false, reason: "row-count manifest missing rowCounts object" };
+  }
+  const rowKeyCount = Object.keys(rowCounts).length;
+  const declared = manifest.tableCount;
+  if (declared == null || !Number.isFinite(Number(declared))) {
+    return { ok: false, reason: "row-count manifest missing tableCount" };
+  }
+  const expectedTableCount = Number(declared);
+  if (expectedTableCount !== rowKeyCount) {
+    return {
+      ok: false,
+      reason: `manifest tableCount ${expectedTableCount} != rowCounts keys ${rowKeyCount}`,
+    };
+  }
+  if (input.restoredTableCount !== expectedTableCount) {
+    return {
+      ok: false,
+      reason: `restored table count ${input.restoredTableCount} != manifest tableCount ${expectedTableCount}`,
+    };
+  }
+  return { ok: true, expectedTableCount };
+}
+
+export function evaluateActivationFeeLedgerRls(input: {
+  present: boolean;
+  relrowsecurity: boolean | null | undefined;
+}): { ok: true } | { ok: false; reason: string } {
+  if (!input.present) return { ok: true };
+  if (!input.relrowsecurity) {
+    return { ok: false, reason: "ActivationFeeLedger exists but ROW LEVEL SECURITY is disabled" };
+  }
+  return { ok: true };
 }
 
 export function compareRowCountManifests(

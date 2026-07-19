@@ -4,7 +4,15 @@ import { redirect } from "next/navigation";
 import { createCustomerSessionCookie, getCurrentCustomerUser, getCustomerSession } from "@/lib/wexon-customer-auth";
 import { hashPassword, verifyPassword } from "@/lib/wexon-passwords";
 import { prisma } from "@/lib/prisma";
-import { computePlanPrice, CheckoutValidationError, parseCheckoutPayload } from "@/lib/wexon-checkout-validation";
+import {
+  computeCheckoutQuote,
+  CheckoutValidationError,
+  parseCheckoutPayload,
+} from "@/lib/wexon-checkout-validation";
+import {
+  quoteToLegacyMajorDisplay,
+  resolveActivationFeeDue,
+} from "@/lib/wexon-activation-fee";
 import { normalizeSignupSlug } from "@/lib/wexon-signup-validation";
 
 function checkoutError(message: string, productKey = "wexpay", planKey = "standard"): never {
@@ -53,13 +61,6 @@ export async function createMockCheckoutSubscriptionAction(formData: FormData) {
 
   const now = new Date();
   const periodEnd = addPeriod(now, payload.billingInterval);
-  let price;
-  try {
-    price = computePlanPrice(plan, payload.billingInterval);
-  } catch (error) {
-    if (error instanceof CheckoutValidationError) checkoutError(error.message, payload.productKey, payload.planKey);
-    throw error;
-  }
   const interval = payload.billingInterval === "yearly" ? "YEARLY" : "MONTHLY";
   const mockRef = `mock_${Date.now()}`;
 
@@ -99,13 +100,77 @@ export async function createMockCheckoutSubscriptionAction(formData: FormData) {
     const existingActiveLicense = await tx.license.findFirst({ where: { organizationId: organization.id, productId: product.id, status: "ACTIVE" } });
     if (existingActiveLicense) throw new CheckoutValidationError("Bu organizasyon için aktif WexPay aboneliği zaten bulunuyor.");
 
+    const due = await resolveActivationFeeDue(tx, {
+      organizationId: organization.id,
+      productId: product.id,
+      plan,
+      isDemo: organization.isDemo,
+    });
+    let quote;
+    try {
+      quote = computeCheckoutQuote({
+        plan,
+        interval: payload.billingInterval,
+        activationFeeAmountMinor: due.due ? due.amountMinor : 0,
+      });
+    } catch (error) {
+      if (error instanceof CheckoutValidationError) throw error;
+      throw new CheckoutValidationError("Fiyat hesaplanamadı.");
+    }
+    const price = quoteToLegacyMajorDisplay(quote);
+
     const license = await tx.license.create({ data: { organizationId: organization.id, productId: product.id, planId: plan.id, status: "ACTIVE", licenseType: interval, startsAt: now, endsAt: periodEnd } });
     const subscription = await tx.subscription.create({ data: { organizationId: organization.id, licenseId: license.id, planId: plan.id, status: "ACTIVE", interval, currentPeriodStart: now, currentPeriodEnd: periodEnd, provider: "mock", providerRef: mockRef } });
     const invoice = await tx.invoice.create({ data: { organizationId: organization.id, subscriptionId: subscription.id, invoiceNo: `INV-${Date.now()}`, status: "PAID", subtotal: price.subtotal, tax: price.tax, total: price.total, currency: price.currency, issuedAt: now, paidAt: now } });
     await tx.billingPayment.create({ data: { organizationId: organization.id, subscriptionId: subscription.id, invoiceId: invoice.id, amount: price.total, currency: price.currency, status: "PAID", provider: "mock", providerRef: mockRef, paidAt: now } });
     await tx.appInstallation.upsert({ where: { organizationId_productId: { organizationId: organization.id, productId: product.id } }, update: { status: "ACTIVE", licenseId: license.id, settingsJson: { onboardingStatus: "PENDING_SETUP", message: "Kurulum süreciniz başlatıldı. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçecektir.", estimatedBusinessDays: 5, source: "mock_checkout" } }, create: { organizationId: organization.id, productId: product.id, licenseId: license.id, status: "ACTIVE", settingsJson: { onboardingStatus: "PENDING_SETUP", message: "Kurulum süreciniz başlatıldı. Ekibimiz 5 iş günü içinde kurulum detaylarını netleştirmek için sizinle iletişime geçecektir.", estimatedBusinessDays: 5, source: "mock_checkout" } } });
 
-    await tx.auditLog.create({ data: { organizationId: organization.id, userId: user.id, action: "customer.checkout.completed", entityType: "Subscription", entityId: subscription.id, metadataJson: { productKey: payload.productKey, planKey: payload.planKey, billingInterval: payload.billingInterval, mockPayment: true, amount: price.total, currency: price.currency, onboardingStatus: "PENDING_SETUP" } } });
+    if (organization.isDemo) {
+      await tx.activationFeeLedger.upsert({
+        where: {
+          organizationId_productId: { organizationId: organization.id, productId: product.id },
+        },
+        create: {
+          organizationId: organization.id,
+          productId: product.id,
+          planId: plan.id,
+          status: "WAIVED",
+          currency: quote.currency,
+          activationFeeMinor: 0,
+          waivedReason: "demo_organization",
+        },
+        update: {},
+      });
+    } else if (due.due && due.amountMinor > 0) {
+      await tx.activationFeeLedger.upsert({
+        where: {
+          organizationId_productId: { organizationId: organization.id, productId: product.id },
+        },
+        create: {
+          organizationId: organization.id,
+          productId: product.id,
+          planId: plan.id,
+          status: "PAID",
+          currency: quote.currency,
+          activationFeeMinor: quote.activationFeeAmountMinor,
+          taxRateBps: quote.taxRateBps,
+          taxEnabledAtPurchase: quote.taxEnabledAtPurchase,
+          taxModeAtPurchase: quote.taxModeAtPurchase,
+          taxAmountMinor: quote.activationTaxAmountMinor,
+          grossAmountMinor: quote.activationGrossAmountMinor,
+          paidAt: now,
+        },
+        update: {
+          status: "PAID",
+          planId: plan.id,
+          activationFeeMinor: quote.activationFeeAmountMinor,
+          paidAt: now,
+          reservedUntil: null,
+        },
+      });
+    }
+
+    await tx.auditLog.create({ data: { organizationId: organization.id, userId: user.id, action: "customer.checkout.completed", entityType: "Subscription", entityId: subscription.id, metadataJson: { productKey: payload.productKey, planKey: payload.planKey, billingInterval: payload.billingInterval, mockPayment: true, amount: price.total, currency: price.currency, activationFeeAmountMinor: quote.activationFeeAmountMinor, onboardingStatus: "PENDING_SETUP" } } });
     await tx.auditLog.create({ data: { organizationId: organization.id, userId: user.id, action: "customer.subscription.created", entityType: "Subscription", entityId: subscription.id, metadataJson: { productKey: payload.productKey, planKey: payload.planKey, billingInterval: payload.billingInterval } } });
     await tx.auditLog.create({ data: { organizationId: organization.id, userId: user.id, action: "customer.onboarding.started", entityType: "AppInstallation", entityId: license.id, metadataJson: { onboardingStatus: "PENDING_SETUP", estimatedBusinessDays: 5 } } });
 

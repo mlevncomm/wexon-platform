@@ -426,19 +426,74 @@ export type EntitlementLimitResult =
   | { ok: false; limit: number; current: number; key: string; message: string };
 
 /**
- * Server-side entitlement limit assertion. A limit of 0 (or missing) is treated
- * as unlimited so products without an explicit cap are not accidentally blocked.
+ * Canonical entitlement limit semantics:
+ * - missing → deny
+ * - 0 → deny (feature/limit off)
+ * - positive → hard cap (allow while current < limit)
+ * - -1 → unlimited
+ * - < -1 or non-numeric → deny
+ *
+ * Non-canonical / unknown plans must not be treated as unlimited when keys are absent.
  */
 export function assertEntitlementLimit(
   entitlements: CoreEntitlementMap,
   key: string,
   currentCount: number,
 ): EntitlementLimitResult {
-  const limit = coreEntitlementNumber(entitlements, key);
-  const unlimited = !Number.isFinite(limit) || limit <= 0;
+  if (!(key in entitlements)) {
+    return {
+      ok: false,
+      limit: 0,
+      current: currentCount,
+      key,
+      message: `Plan hakkınızda "${key}" tanımlı değil; işlem reddedildi.`,
+    };
+  }
 
-  if (unlimited || currentCount < limit) {
-    return { ok: true, limit, current: currentCount, unlimited };
+  const raw = entitlements[key];
+  if (typeof raw === "boolean") {
+    return {
+      ok: false,
+      limit: 0,
+      current: currentCount,
+      key,
+      message: `Plan limiti "${key}" sayısal değil; işlem reddedildi.`,
+    };
+  }
+
+  const limit = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(limit) || !Number.isInteger(limit)) {
+    return {
+      ok: false,
+      limit: 0,
+      current: currentCount,
+      key,
+      message: `Plan limiti "${key}" geçersiz; işlem reddedildi.`,
+    };
+  }
+  if (limit < -1) {
+    return {
+      ok: false,
+      limit,
+      current: currentCount,
+      key,
+      message: `Plan limiti "${key}" geçersiz (${limit}); işlem reddedildi.`,
+    };
+  }
+  if (limit === -1) {
+    return { ok: true, limit, current: currentCount, unlimited: true };
+  }
+  if (limit === 0) {
+    return {
+      ok: false,
+      limit: 0,
+      current: currentCount,
+      key,
+      message: `Planınızda "${key}" kapalı (0).`,
+    };
+  }
+  if (currentCount < limit) {
+    return { ok: true, limit, current: currentCount, unlimited: false };
   }
 
   return {
@@ -471,10 +526,17 @@ export function assertStaffEntitlementLimit(
   return assertEntitlementLimit(access.entitlementMap, "staff_limit", currentCount);
 }
 
+/**
+ * Feature gate: missing → deny; 0/false → disabled; 1/true/positive → enabled.
+ */
 export function isEntitlementEnabled(entitlements: CoreEntitlementMap, key: string) {
+  if (!(key in entitlements)) return false;
   const value = entitlements[key];
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value > 0;
-  if (typeof value === "string") return value.trim().length > 0 && value !== "none" && value !== "false";
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    return trimmed.length > 0 && trimmed !== "none" && trimmed !== "false" && trimmed !== "0";
+  }
   return false;
 }

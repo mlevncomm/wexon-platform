@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { WEXPAY_PRICING_FALLBACK } from "@/lib/wexon-public-pricing-fallback";
-import { WEXPAY_PROCESSING_DISCLAIMER } from "@/lib/wexpay-tier-config";
+import {
+  WEXPAY_NO_COMMITMENT_LABEL,
+  WEXPAY_PROCESSING_DISCLAIMER,
+  WEXPAY_ZERO_COMMISSION_LABEL,
+} from "@/lib/wexpay-tier-config";
 
-const EXPECTED_PRICES = ["₺7.000/ay", "₺15.000/ay", "₺35.000/ay", "₺99.000/ay"] as const;
-const EXPECTED_RATES = ["%2,89", "%2,59", "%2,35", "%2,05"] as const;
+const EXPECTED_PRICES = ["₺7.500/ay", "₺15.000/ay", "₺35.000/ay", "₺75.000/ay"] as const;
 
 describe("wexon public pricing commercial content", () => {
   it("fallback exposes four tiers with DB-aligned monthly prices", () => {
@@ -12,13 +15,17 @@ describe("wexon public pricing commercial content", () => {
     WEXPAY_PRICING_FALLBACK.forEach((plan, index) => {
       assert.equal(plan.priceLabel, EXPECTED_PRICES[index]);
     });
+    assert.equal(WEXPAY_PRICING_FALLBACK[3].name, "WexPay Enterprise");
   });
 
-  it("processing labels use başlayan language for all tiers", () => {
-    WEXPAY_PRICING_FALLBACK.forEach((plan, index) => {
-      assert.ok(plan.processingFeeLabel?.includes("başlayan"), plan.processingFeeLabel);
-      assert.ok(plan.processingFeeLabel?.includes(EXPECTED_RATES[index]), plan.processingFeeLabel);
-    });
+  it("shows zero Wexon commission and no minimum commitment", () => {
+    for (const plan of WEXPAY_PRICING_FALLBACK) {
+      assert.equal(plan.processingFeeLabel, WEXPAY_ZERO_COMMISSION_LABEL);
+      assert.equal(plan.commitmentLabel, WEXPAY_NO_COMMITMENT_LABEL);
+      assert.ok(plan.features.includes(WEXPAY_ZERO_COMMISSION_LABEL));
+      assert.ok(plan.features.includes(WEXPAY_NO_COMMITMENT_LABEL));
+      assert.doesNotMatch(plan.processingFeeLabel ?? "", /%2,/);
+    }
   });
 
   it("CTAs use self-serve checkout for Essential/Growth and meeting for Scale/Suite", () => {
@@ -38,9 +45,9 @@ describe("wexon public pricing commercial content", () => {
     assert.ok(!suite?.ctaHref?.includes("/checkout"), suite?.ctaHref);
   });
 
-  it("includes shared processing disclaimer on every plan model", () => {
-    assert.match(WEXPAY_PROCESSING_DISCLAIMER, /İşlem oranları;/);
-    assert.match(WEXPAY_PROCESSING_DISCLAIMER, /ödeme sağlayıcısı onayına bağlıdır/);
+  it("includes tenant-merchant PayTR disclaimer on every plan model", () => {
+    assert.match(WEXPAY_PROCESSING_DISCLAIMER, /PayTR merchant/i);
+    assert.match(WEXPAY_PROCESSING_DISCLAIMER, /Sanal POS komisyonları/);
     for (const plan of WEXPAY_PRICING_FALLBACK) {
       assert.equal(plan.processingDisclaimer, WEXPAY_PROCESSING_DISCLAIMER);
     }
@@ -51,6 +58,7 @@ describe("wexon public pricing commercial content", () => {
       const blob = [plan.name, plan.audience, ...plan.features, plan.processingFeeLabel ?? ""].join(" ");
       assert.doesNotMatch(blob, /WexPay Pilot/i);
       assert.doesNotMatch(blob, /marketplace|split payout|fon dağıtım/i);
+      assert.doesNotMatch(blob, /işlem komisyonu gelirinin aylık tabanı/i);
     }
   });
 });

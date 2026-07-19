@@ -832,8 +832,8 @@ export type EntitlementUsageRow = {
 };
 
 /**
- * Entitlement usage vs. plan limit for the settings readout. A limit of 0 or
- * less is treated as unlimited (consistent with `assertEntitlementLimit`).
+ * Entitlement usage vs. plan limit for the settings readout.
+ * Canonical: -1 = unlimited; 0/missing = not unlimited (closed / undefined).
  */
 export async function getEntitlementUsage(
   organizationId: string,
@@ -854,8 +854,11 @@ export async function getEntitlementUsage(
   ];
 
   return rows.map((row) => {
+    if (!(row.key in entitlementMap)) {
+      return { ...row, limit: 0, unlimited: false };
+    }
     const limit = coreEntitlementNumber(entitlementMap, row.key);
-    const unlimited = !Number.isFinite(limit) || limit <= 0;
-    return { ...row, limit, unlimited };
+    const unlimited = limit === -1;
+    return { ...row, limit: Number.isFinite(limit) ? limit : 0, unlimited };
   });
 }

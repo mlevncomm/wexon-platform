@@ -69,8 +69,8 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
             <option value="ONE_TIME">Tek seferlik</option>
           </AdminSelectField>
           <AdminTextField label="Sıra" name="sortOrder" type="number" defaultValue="0" />
-          <AdminTextField label="Aylık fiyat (TRY)" name="priceMonthly" type="number" placeholder="7000" />
-          <AdminTextField label="Yıllık fiyat (TRY)" name="priceYearly" type="number" placeholder="70000" />
+          <AdminTextField label="Aylık fiyat (TRY)" name="priceMonthly" type="number" placeholder="7500" />
+          <AdminTextField label="Yıllık fiyat (TRY)" name="priceYearly" type="number" placeholder="75000" />
           <AdminTextField label="Kurulum ücreti (TRY)" name="setupFee" type="number" placeholder="12000" />
           <AdminTextField label="İşlem ücreti başlangıç %" name="processingFeePct" type="number" placeholder="2.89" />
           <AdminTextField label="Aylık minimum işlem taahhüdü (TRY)" name="minimumTransactionCommitment" type="number" placeholder="10000" />
