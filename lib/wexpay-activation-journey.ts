@@ -9,7 +9,7 @@ import {
 } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
-import { evaluateProductAccess } from "@/lib/wexon-core-access";
+import { evaluateProductAccess, evaluateSubscriptionLifecycle } from "@/lib/wexon-core-access";
 
 export const WEXPAY_PRODUCT_KEY = "wexpay";
 
@@ -30,6 +30,8 @@ export const ACTIVATION_UI_NOT_STARTED = "NOT_STARTED" as const;
 export type ActivationUiStatus = ActivationJourneyStatus | typeof ACTIVATION_UI_NOT_STARTED;
 
 export const SETTLED_ACTIVATION_FEE_STATUSES = ["PAID", "WAIVED", "WAIVED_LEGACY"] as const;
+
+const ALLOWED_LICENSE_STATUSES = new Set(["ACTIVE", "TRIAL"]);
 
 export class ActivationJourneyError extends Error {
   readonly code: string;
@@ -199,7 +201,10 @@ function mapAccessDenialToJourneyCode(reason: string | undefined): string {
       return "INSTALL_INACTIVE";
     case "subscription_cancelled":
     case "subscription_expired":
+    case "subscription_period_ended":
+      return "LICENSE_INACTIVE";
     case "subscription_past_due":
+      // Existing Core policy retains access on PAST_DUE — should not reach here as deny.
       return "LICENSE_INACTIVE";
     default:
       return "ACCESS_DENIED";
@@ -207,11 +212,11 @@ function mapAccessDenialToJourneyCode(reason: string | undefined): string {
 }
 
 async function assertSelfServeActorMembership(
-  tx: DbClient,
+  client: DbClient,
   organizationId: string,
   actorUserId: string,
 ): Promise<void> {
-  const user = await tx.user.findUnique({
+  const user = await client.user.findUnique({
     where: { id: actorUserId },
     select: { id: true, isActive: true },
   });
@@ -219,7 +224,7 @@ async function assertSelfServeActorMembership(
     throw new ActivationJourneyError("ACTOR_INACTIVE", "Kullanıcı aktif değil.");
   }
 
-  const membership = await tx.membership.findUnique({
+  const membership = await client.membership.findUnique({
     where: {
       organizationId_userId: {
         organizationId,
@@ -236,6 +241,10 @@ async function assertSelfServeActorMembership(
   }
 }
 
+/**
+ * Transaction-boundary revalidation of org/product/license/subscription/install/fee.
+ * Uses evaluateSubscriptionLifecycle — no new grace policy.
+ */
 async function assertJourneyStartPreconditionsInTx(
   tx: DbClient,
   organizationId: string,
@@ -256,16 +265,32 @@ async function assertJourneyStartPreconditionsInTx(
     throw new ActivationJourneyError("DEMO_FORBIDDEN", "Demo organizasyonlarda aktivasyon başlatılamaz.");
   }
 
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    select: { id: true, isActive: true, status: true },
+  });
+  if (!product || !product.isActive || product.status !== "ACTIVE") {
+    throw new ActivationJourneyError("PRODUCT_MISSING", "WexPay ürünü aktif değil.");
+  }
+
   const license = await tx.license.findFirst({
     where: {
       organizationId,
       productId,
-      status: "ACTIVE",
+      status: { in: ["ACTIVE", "TRIAL"] },
     },
-    select: { id: true, startsAt: true, endsAt: true, status: true },
+    select: {
+      id: true,
+      startsAt: true,
+      endsAt: true,
+      status: true,
+      subscription: {
+        select: { status: true, cancelAt: true, currentPeriodEnd: true },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
-  if (!license) {
+  if (!license || !ALLOWED_LICENSE_STATUSES.has(license.status)) {
     throw new ActivationJourneyError("LICENSE_INACTIVE", "Aktif WexPay lisansı gerekli.");
   }
   if (license.startsAt > at) {
@@ -273,6 +298,14 @@ async function assertJourneyStartPreconditionsInTx(
   }
   if (license.endsAt && license.endsAt < at) {
     throw new ActivationJourneyError("LICENSE_INACTIVE", "Lisans süresi dolmuş.");
+  }
+
+  const lifecycle = evaluateSubscriptionLifecycle(license.subscription ?? null, at);
+  if (!lifecycle.ok) {
+    throw new ActivationJourneyError(
+      "LICENSE_INACTIVE",
+      "Abonelik durumu aktivasyon başlatmaya uygun değil.",
+    );
   }
 
   const installation = await tx.appInstallation.findUnique({
@@ -304,8 +337,7 @@ async function assertJourneyStartPreconditionsInTx(
 
 /**
  * Self-serve journey start. Requires authenticated actor with ACTIVE membership.
- * Always creates source=SELF_SERVE. Never called from PayTR callback.
- * Journey + steps + started audit are atomic in one transaction.
+ * Auth/membership/access always run before returning an existing journey.
  */
 export async function startSelfServeActivationJourney(input: {
   organizationId: string;
@@ -323,10 +355,10 @@ export async function startSelfServeActivationJourney(input: {
     throw new ActivationJourneyError("PRODUCT_MISSING", "WexPay ürünü bulunamadı.");
   }
 
-  const existing = await getActivationJourneyForOrg(input.organizationId);
-  if (existing) return existing;
+  // 1–3: actor + membership before any journey disclosure.
+  await assertSelfServeActorMembership(prisma, input.organizationId, input.actorUserId);
 
-  // Early Core access decision (dates, subscription lifecycle). Re-checked in TX.
+  // 4: Core product access (dates + subscription lifecycle).
   const access = await evaluateProductAccess({
     organizationId: input.organizationId,
     productKey: WEXPAY_PRODUCT_KEY,
@@ -337,6 +369,10 @@ export async function startSelfServeActivationJourney(input: {
       "WexPay erişimi aktivasyon başlatmak için uygun değil.",
     );
   }
+
+  // 5: Only after auth — idempotent return of existing journey.
+  const existing = await getActivationJourneyForOrg(input.organizationId);
+  if (existing) return existing;
 
   try {
     return await prisma.$transaction(
@@ -354,8 +390,6 @@ export async function startSelfServeActivationJourney(input: {
         });
         if (raced) return raced;
 
-        // Re-validate fee/license/install/org inside TX (TOCTOU). Core access
-        // dates/subscription were already checked outside; TX rechecks license window.
         await assertJourneyStartPreconditionsInTx(tx, input.organizationId, product.id, new Date());
 
         const created = await tx.activationJourney.create({
@@ -405,6 +439,7 @@ export async function startSelfServeActivationJourney(input: {
       "code" in error &&
       (error as { code?: string }).code === "P2002"
     ) {
+      await assertSelfServeActorMembership(prisma, input.organizationId, input.actorUserId);
       const raced = await getActivationJourneyForOrg(input.organizationId);
       if (raced) return raced;
     }
@@ -423,15 +458,13 @@ export async function ensureActivationJourneyStarted(input: {
 }
 
 /**
- * Dashboard helper: try lazy self-serve start when eligible; otherwise return derived view.
+ * Dashboard helper: never returns an existing journey without actor membership.
+ * Unauthorized callers see derived NOT_STARTED (no journey disclosure).
  */
 export async function loadOrStartActivationJourneyView(input: {
   organizationId: string;
   actorUserId?: string | null;
 }): Promise<ActivationJourneyView> {
-  const existing = await getActivationJourneyForOrg(input.organizationId);
-  if (existing) return buildActivationJourneyView(existing);
-
   if (!input.actorUserId) {
     return buildActivationJourneyView(null);
   }

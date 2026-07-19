@@ -6,8 +6,10 @@ import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
 import {
   ActivationJourneyError,
+  ACTIVATION_UI_NOT_STARTED,
   assertWexPayPublicLiveReady,
   getActivationJourneyForOrg,
+  loadOrStartActivationJourneyView,
   startSelfServeActivationJourney,
 } from "@/lib/wexpay-activation-journey";
 import {
@@ -133,6 +135,7 @@ describe("smart activation foundation (db)", () => {
     for (const oid of [orgA, orgB]) {
       if (!oid) continue;
       await prisma.activationJourney.deleteMany({ where: { organizationId: oid } }).catch(() => undefined);
+      await prisma.subscription.deleteMany({ where: { organizationId: oid } }).catch(() => undefined);
       await prisma.activationFeeLedger.deleteMany({ where: { organizationId: oid } }).catch(() => undefined);
       await prisma.appInstallation.deleteMany({ where: { organizationId: oid } }).catch(() => undefined);
       await prisma.license.deleteMany({ where: { organizationId: oid } }).catch(() => undefined);
@@ -182,6 +185,188 @@ describe("smart activation foundation (db)", () => {
       (err: unknown) => err instanceof ActivationJourneyError && err.code === "TENANT_FORBIDDEN",
     );
     assert.equal(await prisma.activationJourney.count({ where: { organizationId: orgB } }), 0);
+  });
+
+  it("does not disclose an existing Org B journey to a non-member before auth", async () => {
+    await prisma.activationJourney.deleteMany({ where: { organizationId: orgB } });
+    await prisma.auditLog.deleteMany({
+      where: { organizationId: orgB, action: "activation.journey.started" },
+    });
+
+    const owned = await startSelfServeActivationJourney({
+      organizationId: orgB,
+      actorUserId: userB,
+    });
+    assert.equal(owned.status, ActivationJourneyStatus.IN_PROGRESS);
+
+    const auditsBefore = await prisma.auditLog.count({
+      where: { organizationId: orgB, action: "activation.journey.started" },
+    });
+    const stepsBefore = await prisma.activationJourneyStep.count({
+      where: { journeyId: owned.id },
+    });
+    const statusBefore = owned.status;
+    const currentStepBefore = owned.currentStep;
+
+    let leaked: unknown = null;
+    await assert.rejects(
+      async () => {
+        try {
+          leaked = await startSelfServeActivationJourney({
+            organizationId: orgB,
+            actorUserId: userA,
+          });
+        } catch (error) {
+          if (error instanceof ActivationJourneyError) {
+            assert.equal(error.code, "TENANT_FORBIDDEN");
+            assert.ok(!error.message.includes(owned.id));
+            assert.ok(!JSON.stringify(error).includes(owned.id));
+          }
+          throw error;
+        }
+      },
+      (err: unknown) => err instanceof ActivationJourneyError && err.code === "TENANT_FORBIDDEN",
+    );
+    assert.equal(leaked, null);
+
+    const unauthorizedView = await loadOrStartActivationJourneyView({
+      organizationId: orgB,
+      actorUserId: userA,
+    });
+    assert.equal(unauthorizedView.uiStatus, ACTIVATION_UI_NOT_STARTED);
+    assert.equal(unauthorizedView.journey, null);
+
+    const afterForbidden = await getActivationJourneyForOrg(orgB);
+    assert.ok(afterForbidden);
+    assert.equal(afterForbidden!.id, owned.id);
+    assert.equal(afterForbidden!.status, statusBefore);
+    assert.equal(afterForbidden!.currentStep, currentStepBefore);
+    assert.equal(
+      await prisma.auditLog.count({
+        where: { organizationId: orgB, action: "activation.journey.started" },
+      }),
+      auditsBefore,
+    );
+    assert.equal(
+      await prisma.activationJourneyStep.count({ where: { journeyId: owned.id } }),
+      stepsBefore,
+    );
+
+    const idempotent = await startSelfServeActivationJourney({
+      organizationId: orgB,
+      actorUserId: userB,
+    });
+    assert.equal(idempotent.id, owned.id);
+    assert.equal(
+      await prisma.auditLog.count({
+        where: { organizationId: orgB, action: "activation.journey.started" },
+      }),
+      auditsBefore,
+    );
+  });
+
+  it("rejects terminal/past subscription lifecycle and allows future cancelAt + manual license", async () => {
+    await prisma.activationJourney.deleteMany({ where: { organizationId: orgB } });
+    await prisma.subscription.deleteMany({ where: { organizationId: orgB } });
+
+    const licenseB = await prisma.license.findFirst({ where: { organizationId: orgB } });
+    assert.ok(licenseB);
+    await prisma.license.update({
+      where: { id: licenseB!.id },
+      data: {
+        status: "ACTIVE",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
+    await prisma.appInstallation.update({
+      where: { organizationId_productId: { organizationId: orgB, productId } },
+      data: { status: "ACTIVE" },
+    });
+
+    async function replaceSubscription(data: {
+      status: "ACTIVE" | "CANCELLED" | "EXPIRED" | "TRIALING" | "PAST_DUE";
+      cancelAt?: Date | null;
+      currentPeriodEnd?: Date | null;
+    }) {
+      await prisma.subscription.deleteMany({ where: { organizationId: orgB } });
+      await prisma.activationJourney.deleteMany({ where: { organizationId: orgB } });
+      return prisma.subscription.create({
+        data: {
+          organizationId: orgB,
+          licenseId: licenseB!.id,
+          planId,
+          status: data.status,
+          interval: "MONTHLY",
+          currentPeriodStart: new Date(Date.now() - 7 * 86_400_000),
+          currentPeriodEnd: data.currentPeriodEnd ?? new Date(Date.now() + 23 * 86_400_000),
+          cancelAt: data.cancelAt ?? null,
+        },
+      });
+    }
+
+    await replaceSubscription({ status: "CANCELLED" });
+    await assert.rejects(
+      () => startSelfServeActivationJourney({ organizationId: orgB, actorUserId: userB }),
+      (err: unknown) => err instanceof ActivationJourneyError && err.code === "LICENSE_INACTIVE",
+    );
+    assert.equal(await prisma.activationJourney.count({ where: { organizationId: orgB } }), 0);
+
+    await replaceSubscription({ status: "EXPIRED" });
+    await assert.rejects(
+      () => startSelfServeActivationJourney({ organizationId: orgB, actorUserId: userB }),
+      (err: unknown) => err instanceof ActivationJourneyError && err.code === "LICENSE_INACTIVE",
+    );
+    assert.equal(await prisma.activationJourney.count({ where: { organizationId: orgB } }), 0);
+
+    await replaceSubscription({
+      status: "ACTIVE",
+      currentPeriodEnd: new Date(Date.now() - 60_000),
+    });
+    await assert.rejects(
+      () => startSelfServeActivationJourney({ organizationId: orgB, actorUserId: userB }),
+      (err: unknown) => err instanceof ActivationJourneyError && err.code === "LICENSE_INACTIVE",
+    );
+    assert.equal(await prisma.activationJourney.count({ where: { organizationId: orgB } }), 0);
+
+    await replaceSubscription({
+      status: "ACTIVE",
+      cancelAt: new Date(Date.now() - 1_000),
+    });
+    await assert.rejects(
+      () => startSelfServeActivationJourney({ organizationId: orgB, actorUserId: userB }),
+      (err: unknown) => err instanceof ActivationJourneyError && err.code === "LICENSE_INACTIVE",
+    );
+    assert.equal(await prisma.activationJourney.count({ where: { organizationId: orgB } }), 0);
+
+    await replaceSubscription({
+      status: "ACTIVE",
+      cancelAt: new Date(),
+    });
+    await assert.rejects(
+      () => startSelfServeActivationJourney({ organizationId: orgB, actorUserId: userB }),
+      (err: unknown) => err instanceof ActivationJourneyError && err.code === "LICENSE_INACTIVE",
+    );
+    assert.equal(await prisma.activationJourney.count({ where: { organizationId: orgB } }), 0);
+
+    await replaceSubscription({
+      status: "ACTIVE",
+      cancelAt: new Date(Date.now() + 7 * 86_400_000),
+    });
+    const withFutureCancel = await startSelfServeActivationJourney({
+      organizationId: orgB,
+      actorUserId: userB,
+    });
+    assert.equal(withFutureCancel.status, ActivationJourneyStatus.IN_PROGRESS);
+
+    await prisma.activationJourney.deleteMany({ where: { organizationId: orgB } });
+    await prisma.subscription.deleteMany({ where: { organizationId: orgB } });
+    const manual = await startSelfServeActivationJourney({
+      organizationId: orgB,
+      actorUserId: userB,
+    });
+    assert.equal(manual.status, ActivationJourneyStatus.IN_PROGRESS);
+    assert.equal(await prisma.subscription.count({ where: { organizationId: orgB } }), 0);
   });
 
   it("rejects future-start and expired licenses and disabled install", async () => {
@@ -392,21 +577,21 @@ describe("smart activation foundation (db)", () => {
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
     assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 37);
 
-    await prisma.$executeRawUnsafe(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
-      END $$;
-    `);
+    // Read-only catalog check — never CREATE ROLE / REVOKE / GRANT here.
+    // CI creates anon/authenticated before migrate so migration revoke is real.
+    const roles = await prisma.$queryRaw<Array<{ rolname: string }>>`
+      SELECT rolname FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'wexon_app')
+      ORDER BY rolname
+    `;
+    const roleNames = new Set(roles.map((r) => r.rolname));
+    assert.ok(roleNames.has("anon"), "anon role must exist (create before migrate in CI)");
+    assert.ok(roleNames.has("authenticated"), "authenticated role must exist (create before migrate in CI)");
+    assert.ok(roleNames.has("wexon_app"), "wexon_app role must exist");
 
     for (const name of ["ActivationJourney", "ActivationJourneyStep", "TableQrToken"]) {
       const row = tables.find((t) => t.table_name === name);
       assert.ok(row, `${name} must exist`);
       assert.equal(row!.rls, true);
-
-      await prisma.$executeRawUnsafe(
-        `REVOKE ALL ON TABLE public."${name}" FROM anon, authenticated`,
-      );
 
       const priv = await prisma.$queryRawUnsafe<
         Array<{

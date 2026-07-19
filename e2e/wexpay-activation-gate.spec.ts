@@ -10,7 +10,7 @@ import { loadFixtures } from "./helpers";
 test.describe.serial("wexpay activation public gate", () => {
   const fixtures = loadFixtures();
 
-  test("public menu/order closed while journey is not ACTIVE", async ({ request }) => {
+  test("public menu/order/checkout/bill closed while journey is not ACTIVE", async ({ request }) => {
     test.setTimeout(120_000);
     test.skip(!fixtures.dbAvailable || !fixtures.fixturesReady || !fixtures.qrCode || !fixtures.realOrgId, "fixtures required");
 
@@ -37,6 +37,7 @@ test.describe.serial("wexpay activation public gate", () => {
       completedAt: journey!.completedAt,
       source: journey!.source,
     };
+    const qr = encodeURIComponent(fixtures.qrCode!);
 
     try {
       await prisma.activationJourney.update({
@@ -44,18 +45,26 @@ test.describe.serial("wexpay activation public gate", () => {
         data: { status: "IN_PROGRESS", completedAt: null },
       });
 
-      const menu = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
+      const menu = await request.get(`/api/wexpay/public/${qr}`);
       expect(menu.status()).toBe(403);
-      const menuBody = await menu.json();
-      expect(menuBody.reason).toBe("access_closed");
+      expect((await menu.json()).reason).toBe("access_closed");
 
-      const order = await request.post(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}/order`, {
+      const order = await request.post(`/api/wexpay/public/${qr}/order`, {
         data: { items: [] },
       });
-      expect([403, 400]).toContain(order.status());
-      if (order.status() === 403) {
-        expect((await order.json()).reason).toBe("access_closed");
-      }
+      expect(order.status()).toBe(403);
+      expect((await order.json()).reason).toBe("access_closed");
+
+      const checkout = await request.post(`/api/wexpay/public/${qr}/checkout`, {
+        data: { orderId: "gate-closed-order" },
+        headers: { "Idempotency-Key": `gate-closed-${Date.now()}` },
+      });
+      expect(checkout.status()).toBe(403);
+      expect((await checkout.json()).reason).toBe("access_closed");
+
+      const bill = await request.get(`/api/wexpay/public/${qr}/bill`);
+      expect(bill.status()).toBe(403);
+      expect((await bill.json()).reason).toBe("access_closed");
     } finally {
       await prisma.activationJourney.update({
         where: { id: journey!.id },
@@ -64,7 +73,7 @@ test.describe.serial("wexpay activation public gate", () => {
       await prisma.$disconnect();
     }
 
-    const restored = await request.get(`/api/wexpay/public/${encodeURIComponent(fixtures.qrCode!)}`);
+    const restored = await request.get(`/api/wexpay/public/${qr}`);
     expect(restored.status()).toBe(200);
   });
 });

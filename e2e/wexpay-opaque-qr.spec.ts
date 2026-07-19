@@ -14,7 +14,7 @@ function hashToken(plaintext: string) {
 test.describe.serial("wexpay opaque QR", () => {
   const fixtures = loadFixtures();
 
-  test("issue/rotate/revoke opaque token and keep legacy working", async ({ request }) => {
+  test("issue/rotate/revoke opaque token and keep legacy working", async ({ page, request }) => {
     test.setTimeout(180_000);
     test.skip(!fixtures.dbAvailable || !fixtures.fixturesReady || !fixtures.qrCode || !fixtures.realOrgId, "fixtures required");
 
@@ -54,12 +54,10 @@ test.describe.serial("wexpay opaque QR", () => {
       expect(menuJson.table?.label).toBeTruthy();
       expect(JSON.stringify(menuJson)).not.toContain(plaintext);
 
-      const pageRes = await request.get(`/q/${encodeURIComponent(plaintext)}`);
-      expect(pageRes.status()).toBe(200);
-      const html = await pageRes.text();
-      // Page may embed public key in client context for API calls — that is protocol.
-      // Assert we did not dump a DB audit blob with the raw token into HTML.
-      expect(html).not.toMatch(/wexpay\.qr\.(issued|rotated|revoked)/);
+      await page.goto(`/q/${encodeURIComponent(plaintext)}`);
+      await expect(page.getByTestId("qr-error-state")).toHaveCount(0);
+      await expect(page.getByTestId("qr-cta-order")).toBeVisible();
+      await expect(page.getByTestId("qr-cta-order")).toContainText(/Menüyü İncele/i);
 
       const rotatedPlain = randomBytes(32).toString("base64url");
       await prisma.tableQrToken.update({

@@ -105,6 +105,24 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Ensure PostgREST roles exist before migrations
+        # Migration REVOKE/GRANT blocks are conditional on these roles.
+        # Creating them here lets CI measure real migration revoke state (no test-time REVOKE).
+        run: |
+          PGPASSWORD=wexon psql -h 127.0.0.1 -U wexon -d wexon_test -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wexon_app') THEN
+              CREATE ROLE wexon_app NOLOGIN NOBYPASSRLS;
+            END IF;
+          END $$;
+          SQL
+
       - name: Apply migrations to ephemeral CI database
         run: npx prisma migrate deploy
 
