@@ -339,72 +339,65 @@ export async function startSelfServeActivationJourney(input: {
   }
 
   try {
-    return await prisma.$transaction(async (tx) => {
-      await assertSelfServeActorMembership(tx, input.organizationId, input.actorUserId);
+    return await prisma.$transaction(
+      async (tx) => {
+        await assertSelfServeActorMembership(tx, input.organizationId, input.actorUserId);
 
-      const raced = await tx.activationJourney.findUnique({
-        where: {
-          organizationId_productId: {
+        const raced = await tx.activationJourney.findUnique({
+          where: {
+            organizationId_productId: {
+              organizationId: input.organizationId,
+              productId: product.id,
+            },
+          },
+          include: { steps: { orderBy: { stepKey: "asc" } } },
+        });
+        if (raced) return raced;
+
+        // Re-validate fee/license/install/org inside TX (TOCTOU). Core access
+        // dates/subscription were already checked outside; TX rechecks license window.
+        await assertJourneyStartPreconditionsInTx(tx, input.organizationId, product.id, new Date());
+
+        const created = await tx.activationJourney.create({
+          data: {
             organizationId: input.organizationId,
             productId: product.id,
-          },
-        },
-        include: { steps: { orderBy: { stepKey: "asc" } } },
-      });
-      if (raced) return raced;
-
-      await assertJourneyStartPreconditionsInTx(tx, input.organizationId, product.id, new Date());
-
-      // Re-validate Core access shape inside TX boundary (TOCTOU).
-      const accessAgain = await evaluateProductAccess({
-        organizationId: input.organizationId,
-        productKey: WEXPAY_PRODUCT_KEY,
-      });
-      if (!accessAgain.allowed) {
-        throw new ActivationJourneyError(
-          mapAccessDenialToJourneyCode(accessAgain.reason),
-          "WexPay erişimi aktivasyon başlatmak için uygun değil.",
-        );
-      }
-
-      const created = await tx.activationJourney.create({
-        data: {
-          organizationId: input.organizationId,
-          productId: product.id,
-          status: ActivationJourneyStatus.IN_PROGRESS,
-          source: ActivationJourneySource.SELF_SERVE,
-          currentStep: ActivationStepKey.BUSINESS_PROFILE,
-          version: 1,
-          steps: {
-            create: ACTIVATION_STEP_ORDER.map((stepKey) => ({
-              stepKey,
-              status: "PENDING",
-              attemptCount: 0,
-            })),
-          },
-        },
-        include: { steps: { orderBy: { stepKey: "asc" } } },
-      });
-
-      await writeAuditLog(
-        {
-          action: "activation.journey.started",
-          organizationId: input.organizationId,
-          userId: input.actorUserId,
-          entityType: "ActivationJourney",
-          entityId: created.id,
-          source: "activation_journey",
-          message: "Akıllı Aktivasyon yolculuğu başlatıldı.",
-          metadata: {
+            status: ActivationJourneyStatus.IN_PROGRESS,
             source: ActivationJourneySource.SELF_SERVE,
-            status: created.status,
+            currentStep: ActivationStepKey.BUSINESS_PROFILE,
+            version: 1,
+            steps: {
+              create: ACTIVATION_STEP_ORDER.map((stepKey) => ({
+                stepKey,
+                status: "PENDING",
+                attemptCount: 0,
+              })),
+            },
           },
-        },
-        tx,
-      );
+          include: { steps: { orderBy: { stepKey: "asc" } } },
+        });
 
-      return created;
-    });
+        await writeAuditLog(
+          {
+            action: "activation.journey.started",
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            entityType: "ActivationJourney",
+            entityId: created.id,
+            source: "activation_journey",
+            message: "Akıllı Aktivasyon yolculuğu başlatıldı.",
+            metadata: {
+              source: ActivationJourneySource.SELF_SERVE,
+              status: created.status,
+            },
+          },
+          tx,
+        );
+
+        return created;
+      },
+      { timeout: 15_000 },
+    );
   } catch (error) {
     if (
       typeof error === "object" &&

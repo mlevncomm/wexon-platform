@@ -461,6 +461,11 @@ describe("smart activation foundation (db)", () => {
     assert.ok(Number.isFinite(await prisma.activationJourneyStep.count()));
     assert.ok(Number.isFinite(await prisma.tableQrToken.count()));
 
+    await prisma.tableQrToken.updateMany({
+      where: { tableId, status: "ACTIVE" },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    });
+
     const materialA = generateSecureTableQrTokenMaterial();
     await prisma.tableQrToken.create({
       data: {
