@@ -262,6 +262,12 @@ export type PublicTableResolution = {
   restaurant: { id: string; name: string };
   organizationId: string;
   allowed: boolean;
+  /** How the public key was resolved — never log the plaintext key. */
+  keyKind: "legacy" | "opaque";
+  /** Guest path prefix for redirects (/wexpay/t/... or /q/...). */
+  publicPath: string;
+  tokenId?: string;
+  tokenPrefix?: string;
 };
 
 type PublicTableChain = {
@@ -283,7 +289,15 @@ type PublicTableChain = {
   };
 };
 
-async function finalizePublicTableResolution(table: PublicTableChain): Promise<PublicTableResolution | null> {
+async function finalizePublicTableResolution(
+  table: PublicTableChain,
+  keyMeta: {
+    keyKind: "legacy" | "opaque";
+    publicPath: string;
+    tokenId?: string;
+    tokenPrefix?: string;
+  },
+): Promise<PublicTableResolution | null> {
   if (!table.isActive) return null;
   const branch = table.branch;
   if (!branch.isActive) return null;
@@ -306,6 +320,10 @@ async function finalizePublicTableResolution(table: PublicTableChain): Promise<P
     restaurant: { id: restaurant.id, name: restaurant.name },
     organizationId: restaurant.organizationId,
     allowed: liveReady,
+    keyKind: keyMeta.keyKind,
+    publicPath: keyMeta.publicPath,
+    ...(keyMeta.tokenId ? { tokenId: keyMeta.tokenId } : {}),
+    ...(keyMeta.tokenPrefix ? { tokenPrefix: keyMeta.tokenPrefix } : {}),
   };
 }
 
@@ -320,7 +338,10 @@ export async function resolvePublicTableByQr(qrCode: string): Promise<PublicTabl
   });
 
   if (!table) return null;
-  return finalizePublicTableResolution(table);
+  return finalizePublicTableResolution(table, {
+    keyKind: "legacy",
+    publicPath: `/wexpay/t/${encodeURIComponent(qrCode.trim())}`,
+  });
 }
 
 /**
@@ -338,7 +359,12 @@ export async function resolvePublicTableByOpaqueToken(
   });
   if (!table) return null;
 
-  const resolution = await finalizePublicTableResolution(table);
+  const resolution = await finalizePublicTableResolution(table, {
+    keyKind: "opaque",
+    publicPath: `/q/${encodeURIComponent(opaqueToken.trim())}`,
+    tokenId: tokenRow.id,
+    tokenPrefix: tokenRow.tokenPrefix,
+  });
   if (resolution?.allowed) {
     await touchTableQrTokenLastUsed(tokenRow.id).catch(() => undefined);
   }

@@ -1,5 +1,6 @@
 import { writeAuditFailure } from "@/lib/wexon-audit";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
+import { buildPublicQrAuditReference, inferPublicQrKeyKind } from "@/lib/wexpay-public-qr-audit";
 import { getPublicBranchMenu, resolvePublicTableByPublicKey } from "@/lib/wexpay-read";
 import { toPublicMenuModifierGroups } from "@/lib/wexpay-order-pricing";
 
@@ -23,7 +24,10 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
       level: "WARN",
       source: "public_qr",
       ipAddress: limited.ipAddress,
-      metadata: { qrCode },
+      metadata: buildPublicQrAuditReference({
+        publicKey: qrCode,
+        keyKind: inferPublicQrKeyKind(qrCode),
+      }),
     });
     return Response.json({ error: "Masa bulunamadı." }, { status: 404 });
   }

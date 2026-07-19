@@ -278,8 +278,14 @@ export async function touchTableQrTokenLastUsed(
   tokenId: string,
   client: DbClient = prisma,
 ): Promise<void> {
-  await client.tableQrToken.update({
-    where: { id: tokenId },
+  // Throttle writes: only bump when never set or older than 5 minutes.
+  const threshold = new Date(Date.now() - 5 * 60 * 1000);
+  await client.tableQrToken.updateMany({
+    where: {
+      id: tokenId,
+      status: TableQrTokenStatus.ACTIVE,
+      OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: threshold } }],
+    },
     data: { lastUsedAt: new Date() },
   });
 }

@@ -9,6 +9,7 @@ import {
 } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
+import { evaluateProductAccess } from "@/lib/wexon-core-access";
 
 export const WEXPAY_PRODUCT_KEY = "wexpay";
 
@@ -51,7 +52,6 @@ export type ActivationJourneyView = {
   setupMode: boolean;
   publicLive: boolean;
   journey: ActivationJourneyWithSteps | null;
-  /** Human-readable labels for read-only UI */
   statusLabel: string;
   sourceLabel: string | null;
   currentStepLabel: string | null;
@@ -129,10 +129,6 @@ export function buildActivationJourneyView(
   };
 }
 
-/**
- * Central public-live gate. Public QR/menu/order/payment must call this
- * (via resolvePublicTableByQr / opaque token resolve) — never copy per-route.
- */
 export async function assertWexPayPublicLiveReady(
   organizationId: string,
   client: DbClient = prisma,
@@ -185,43 +181,69 @@ export async function getActivationJourneyViewForOrg(
   return buildActivationJourneyView(journey);
 }
 
-type LazyStartInput = {
-  organizationId: string;
-  source?: ActivationJourneySource;
-  actorUserId?: string | null;
-};
+function mapAccessDenialToJourneyCode(reason: string | undefined): string {
+  switch (reason) {
+    case "organization_missing":
+      return "ORG_NOT_FOUND";
+    case "organization_inactive":
+      return "ORG_INACTIVE";
+    case "license_missing":
+    case "license_inactive":
+    case "license_suspended":
+    case "license_cancelled":
+    case "license_expired":
+    case "license_not_started":
+      return "LICENSE_INACTIVE";
+    case "installation_missing":
+    case "installation_inactive":
+      return "INSTALL_INACTIVE";
+    case "subscription_cancelled":
+    case "subscription_expired":
+    case "subscription_past_due":
+      return "LICENSE_INACTIVE";
+    default:
+      return "ACCESS_DENIED";
+  }
+}
 
-/**
- * Idempotent lazy journey start. Never called from PayTR callback.
- * Fail-closed for demo / inactive org / missing license+install / unsettled fee.
- */
-export async function ensureActivationJourneyStarted(
-  input: LazyStartInput,
-  client: DbClient = prisma,
-): Promise<ActivationJourneyWithSteps> {
-  const source = input.source ?? ActivationJourneySource.SELF_SERVE;
-
-  const product = await client.product.findFirst({
-    where: { key: WEXPAY_PRODUCT_KEY },
-    select: { id: true },
+async function assertSelfServeActorMembership(
+  tx: DbClient,
+  organizationId: string,
+  actorUserId: string,
+): Promise<void> {
+  const user = await tx.user.findUnique({
+    where: { id: actorUserId },
+    select: { id: true, isActive: true },
   });
-  if (!product) {
-    throw new ActivationJourneyError("PRODUCT_MISSING", "WexPay ürünü bulunamadı.");
+  if (!user || !user.isActive) {
+    throw new ActivationJourneyError("ACTOR_INACTIVE", "Kullanıcı aktif değil.");
   }
 
-  const existing = await client.activationJourney.findUnique({
+  const membership = await tx.membership.findUnique({
     where: {
-      organizationId_productId: {
-        organizationId: input.organizationId,
-        productId: product.id,
+      organizationId_userId: {
+        organizationId,
+        userId: actorUserId,
       },
     },
-    include: { steps: { orderBy: { stepKey: "asc" } } },
+    select: { status: true },
   });
-  if (existing) return existing;
+  if (!membership || membership.status !== "ACTIVE") {
+    throw new ActivationJourneyError(
+      "TENANT_FORBIDDEN",
+      "Bu organizasyon için aktivasyon başlatma yetkiniz yok.",
+    );
+  }
+}
 
-  const organization = await client.organization.findUnique({
-    where: { id: input.organizationId },
+async function assertJourneyStartPreconditionsInTx(
+  tx: DbClient,
+  organizationId: string,
+  productId: string,
+  at: Date,
+): Promise<void> {
+  const organization = await tx.organization.findUnique({
+    where: { id: organizationId },
     select: { id: true, isActive: true, isDemo: true },
   });
   if (!organization) {
@@ -234,24 +256,28 @@ export async function ensureActivationJourneyStarted(
     throw new ActivationJourneyError("DEMO_FORBIDDEN", "Demo organizasyonlarda aktivasyon başlatılamaz.");
   }
 
-  const license = await client.license.findFirst({
+  const license = await tx.license.findFirst({
     where: {
-      organizationId: input.organizationId,
-      productId: product.id,
+      organizationId,
+      productId,
       status: "ACTIVE",
     },
-    select: { id: true },
+    select: { id: true, startsAt: true, endsAt: true, status: true },
+    orderBy: { createdAt: "desc" },
   });
   if (!license) {
     throw new ActivationJourneyError("LICENSE_INACTIVE", "Aktif WexPay lisansı gerekli.");
   }
+  if (license.startsAt > at) {
+    throw new ActivationJourneyError("LICENSE_INACTIVE", "Lisans henüz başlamadı.");
+  }
+  if (license.endsAt && license.endsAt < at) {
+    throw new ActivationJourneyError("LICENSE_INACTIVE", "Lisans süresi dolmuş.");
+  }
 
-  const installation = await client.appInstallation.findUnique({
+  const installation = await tx.appInstallation.findUnique({
     where: {
-      organizationId_productId: {
-        organizationId: input.organizationId,
-        productId: product.id,
-      },
+      organizationId_productId: { organizationId, productId },
     },
     select: { status: true },
   });
@@ -259,64 +285,64 @@ export async function ensureActivationJourneyStarted(
     throw new ActivationJourneyError("INSTALL_INACTIVE", "Aktif WexPay kurulumu gerekli.");
   }
 
-  const fee = await client.activationFeeLedger.findUnique({
+  const fee = await tx.activationFeeLedger.findUnique({
     where: {
-      organizationId_productId: {
-        organizationId: input.organizationId,
-        productId: product.id,
-      },
+      organizationId_productId: { organizationId, productId },
     },
     select: { status: true },
   });
-  if (!fee || !SETTLED_ACTIVATION_FEE_STATUSES.includes(fee.status as (typeof SETTLED_ACTIVATION_FEE_STATUSES)[number])) {
-    throw new ActivationJourneyError("FEE_UNSETTLED", "Aktivasyon ücreti tamamlanmadan yolculuk başlatılamaz.");
+  if (
+    !fee ||
+    !SETTLED_ACTIVATION_FEE_STATUSES.includes(fee.status as (typeof SETTLED_ACTIVATION_FEE_STATUSES)[number])
+  ) {
+    throw new ActivationJourneyError(
+      "FEE_UNSETTLED",
+      "Aktivasyon ücreti tamamlanmadan yolculuk başlatılamaz.",
+    );
+  }
+}
+
+/**
+ * Self-serve journey start. Requires authenticated actor with ACTIVE membership.
+ * Always creates source=SELF_SERVE. Never called from PayTR callback.
+ * Journey + steps + started audit are atomic in one transaction.
+ */
+export async function startSelfServeActivationJourney(input: {
+  organizationId: string;
+  actorUserId: string;
+}): Promise<ActivationJourneyWithSteps> {
+  if (!input.actorUserId?.trim()) {
+    throw new ActivationJourneyError("ACTOR_REQUIRED", "Oturum gerekli.");
+  }
+
+  const product = await prisma.product.findFirst({
+    where: { key: WEXPAY_PRODUCT_KEY },
+    select: { id: true },
+  });
+  if (!product) {
+    throw new ActivationJourneyError("PRODUCT_MISSING", "WexPay ürünü bulunamadı.");
+  }
+
+  const existing = await getActivationJourneyForOrg(input.organizationId);
+  if (existing) return existing;
+
+  // Early Core access decision (dates, subscription lifecycle). Re-checked in TX.
+  const access = await evaluateProductAccess({
+    organizationId: input.organizationId,
+    productKey: WEXPAY_PRODUCT_KEY,
+  });
+  if (!access.allowed) {
+    throw new ActivationJourneyError(
+      mapAccessDenialToJourneyCode(access.reason),
+      "WexPay erişimi aktivasyon başlatmak için uygun değil.",
+    );
   }
 
   try {
-    const created = await client.activationJourney.create({
-      data: {
-        organizationId: input.organizationId,
-        productId: product.id,
-        status: ActivationJourneyStatus.IN_PROGRESS,
-        source,
-        currentStep: ActivationStepKey.BUSINESS_PROFILE,
-        version: 1,
-        steps: {
-          create: ACTIVATION_STEP_ORDER.map((stepKey) => ({
-            stepKey,
-            status: "PENDING",
-            attemptCount: 0,
-          })),
-        },
-      },
-      include: { steps: { orderBy: { stepKey: "asc" } } },
-    });
+    return await prisma.$transaction(async (tx) => {
+      await assertSelfServeActorMembership(tx, input.organizationId, input.actorUserId);
 
-    await writeAuditLog({
-      action: "activation.journey.started",
-      organizationId: input.organizationId,
-      userId: input.actorUserId ?? null,
-      entityType: "ActivationJourney",
-      entityId: created.id,
-      source: "activation_journey",
-      message: "Akıllı Aktivasyon yolculuğu başlatıldı.",
-      metadata: {
-        source,
-        status: created.status,
-        // never include secrets
-      },
-    });
-
-    return created;
-  } catch (error) {
-    // Concurrent start: unique conflict → return the winner row.
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      (error as { code?: string }).code === "P2002"
-    ) {
-      const raced = await client.activationJourney.findUnique({
+      const raced = await tx.activationJourney.findUnique({
         where: {
           organizationId_productId: {
             organizationId: input.organizationId,
@@ -326,28 +352,101 @@ export async function ensureActivationJourneyStarted(
         include: { steps: { orderBy: { stepKey: "asc" } } },
       });
       if (raced) return raced;
+
+      await assertJourneyStartPreconditionsInTx(tx, input.organizationId, product.id, new Date());
+
+      // Re-validate Core access shape inside TX boundary (TOCTOU).
+      const accessAgain = await evaluateProductAccess({
+        organizationId: input.organizationId,
+        productKey: WEXPAY_PRODUCT_KEY,
+      });
+      if (!accessAgain.allowed) {
+        throw new ActivationJourneyError(
+          mapAccessDenialToJourneyCode(accessAgain.reason),
+          "WexPay erişimi aktivasyon başlatmak için uygun değil.",
+        );
+      }
+
+      const created = await tx.activationJourney.create({
+        data: {
+          organizationId: input.organizationId,
+          productId: product.id,
+          status: ActivationJourneyStatus.IN_PROGRESS,
+          source: ActivationJourneySource.SELF_SERVE,
+          currentStep: ActivationStepKey.BUSINESS_PROFILE,
+          version: 1,
+          steps: {
+            create: ACTIVATION_STEP_ORDER.map((stepKey) => ({
+              stepKey,
+              status: "PENDING",
+              attemptCount: 0,
+            })),
+          },
+        },
+        include: { steps: { orderBy: { stepKey: "asc" } } },
+      });
+
+      await writeAuditLog(
+        {
+          action: "activation.journey.started",
+          organizationId: input.organizationId,
+          userId: input.actorUserId,
+          entityType: "ActivationJourney",
+          entityId: created.id,
+          source: "activation_journey",
+          message: "Akıllı Aktivasyon yolculuğu başlatıldı.",
+          metadata: {
+            source: ActivationJourneySource.SELF_SERVE,
+            status: created.status,
+          },
+        },
+        tx,
+      );
+
+      return created;
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
+      const raced = await getActivationJourneyForOrg(input.organizationId);
+      if (raced) return raced;
     }
     throw error;
   }
 }
 
 /**
- * Dashboard helper: try lazy start when eligible; otherwise return derived view.
- * Never throws for fee/demo gates — returns NOT_STARTED / existing view.
+ * @deprecated Prefer startSelfServeActivationJourney. Kept as thin alias for SELF_SERVE only.
+ */
+export async function ensureActivationJourneyStarted(input: {
+  organizationId: string;
+  actorUserId: string;
+}): Promise<ActivationJourneyWithSteps> {
+  return startSelfServeActivationJourney(input);
+}
+
+/**
+ * Dashboard helper: try lazy self-serve start when eligible; otherwise return derived view.
  */
 export async function loadOrStartActivationJourneyView(input: {
   organizationId: string;
   actorUserId?: string | null;
-  source?: ActivationJourneySource;
 }): Promise<ActivationJourneyView> {
   const existing = await getActivationJourneyForOrg(input.organizationId);
   if (existing) return buildActivationJourneyView(existing);
 
+  if (!input.actorUserId) {
+    return buildActivationJourneyView(null);
+  }
+
   try {
-    const started = await ensureActivationJourneyStarted({
+    const started = await startSelfServeActivationJourney({
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
-      source: input.source,
     });
     return buildActivationJourneyView(started);
   } catch (error) {

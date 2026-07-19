@@ -5,6 +5,10 @@
 import { getRequestIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import { isHostedProduction } from "@/lib/wexon-production-guards";
 import {
+  buildPublicQrAuditReference,
+  inferPublicQrKeyKind,
+} from "@/lib/wexpay-public-qr-audit";
+import {
   enforceRateLimit,
   RATE_LIMITS,
   resolveRateLimitConfig,
@@ -126,11 +130,12 @@ export function enforcePublicQrIpRateLimit(input: {
     level: "WARN",
     source: "public_qr",
     ipAddress,
-    metadata: {
-      qrCode: input.qrCode,
+    metadata: buildPublicQrAuditReference({
+      publicKey: input.qrCode,
+      keyKind: inferPublicQrKeyKind(input.qrCode),
       kind: input.kind,
       retryAfterSeconds: rateLimit.retryAfterSeconds,
-    },
+    }),
   });
 
   return { ok: false, ipAddress, response: rateLimitedJsonResponse(rateLimit) };
@@ -163,12 +168,13 @@ export function enforcePublicAssistTableCooldown(input: {
     level: "WARN",
     source: "public_qr",
     ipAddress: input.ipAddress,
-    metadata: {
-      qrCode: input.qrCode,
+    metadata: buildPublicQrAuditReference({
+      publicKey: input.qrCode,
+      keyKind: inferPublicQrKeyKind(input.qrCode),
       tableId: input.tableId,
       kind: input.kind,
       retryAfterSeconds: rateLimit.retryAfterSeconds,
-    },
+    }),
   });
 
   return { ok: false, response: cooldownJsonResponse(rateLimit) };
