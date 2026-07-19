@@ -99,10 +99,18 @@ async function runOnce(label) {
   if (failed > 0) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
-  if (passed < 1) {
+  // Includes activation wizard flow (2) plus core WexPay isolated specs.
+  const MIN_ISOLATED_PASSES = 12;
+  if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
-      `[isolated-e2e] ${label}: fail-closed — need ≥1 passing test (got passed=${passed}, skipped=${skipped})`,
+      `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
     );
+  }
+  if (
+    combined.includes("logged-in wizard: profile") &&
+    /logged-in wizard: profile[\s\S]{0,200}\bskipped\b/i.test(combined)
+  ) {
+    throw new Error(`[isolated-e2e] ${label}: wizard flow test must not skip`);
   }
 
   const report = await cleanupWexPayE2ERun();

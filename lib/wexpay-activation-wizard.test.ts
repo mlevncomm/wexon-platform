@@ -52,6 +52,30 @@ describe("staff invite tokens", () => {
 });
 
 describe("email adapter", () => {
+  it("rejects fake provider in hosted production", () => {
+    const cfg = resolveEmailTransportConfig({
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      WEXON_EMAIL_PROVIDER: "fake",
+      RESEND_API_KEY: "re_test",
+      WEXON_EMAIL_FROM: "Wexon <davet@mail.wexon.dev>",
+    } as NodeJS.ProcessEnv);
+    assert.equal(cfg.ready, false);
+    if (!cfg.ready) assert.equal(cfg.reasonCode, "FAKE_FORBIDDEN_IN_PRODUCTION");
+  });
+
+  it("requires explicit From in production (no default)", () => {
+    const cfg = resolveEmailTransportConfig({
+      NODE_ENV: "production",
+      VERCEL_ENV: "production",
+      WEXON_EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "re_test",
+      WEXON_EMAIL_FROM: "",
+    } as NodeJS.ProcessEnv);
+    assert.equal(cfg.ready, false);
+    if (!cfg.ready) assert.equal(cfg.reasonCode, "MISSING_OR_INVALID_EMAIL_FROM");
+  });
+
   it("fail-closes in production without Resend key", () => {
     const cfg = resolveEmailTransportConfig({
       NODE_ENV: "production",
@@ -62,6 +86,31 @@ describe("email adapter", () => {
     } as NodeJS.ProcessEnv);
     assert.equal(cfg.ready, false);
     if (!cfg.ready) assert.equal(cfg.reasonCode, "MISSING_RESEND_API_KEY");
+  });
+
+  it("strips CRLF from subject headers", async () => {
+    const prevProvider = process.env.WEXON_EMAIL_PROVIDER;
+    const prevVercel = process.env.VERCEL_ENV;
+    process.env.WEXON_EMAIL_PROVIDER = "fake";
+    delete process.env.VERCEL_ENV;
+    clearFakeEmailOutbox();
+    try {
+      const result = await sendTransactionalEmail({
+        to: "a@example.com",
+        subject: "Hello\r\nBcc: evil@x.com",
+        html: "<p>x</p>",
+        text: "x",
+        idempotencyKey: "crlf-1",
+      });
+      assert.equal(result.ok, true);
+      assert.ok(!getFakeEmailOutbox()[0]?.subject.includes("\n"));
+      assert.ok(!getFakeEmailOutbox()[0]?.subject.includes("\r"));
+    } finally {
+      if (prevProvider === undefined) delete process.env.WEXON_EMAIL_PROVIDER;
+      else process.env.WEXON_EMAIL_PROVIDER = prevProvider;
+      if (prevVercel === undefined) delete process.env.VERCEL_ENV;
+      else process.env.VERCEL_ENV = prevVercel;
+    }
   });
 
   it("uses fake adapter outside production by default", async () => {
