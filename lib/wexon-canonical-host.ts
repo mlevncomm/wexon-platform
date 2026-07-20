@@ -74,6 +74,139 @@ export function stripPathPrefix(pathname: string, prefix: string) {
   return pathname;
 }
 
+/**
+ * Public product routes that exist at the Next.js root (not under /dashboard or /apps).
+ * Must never be treated as a global "already internal" bypass across surfaces —
+ * otherwise core `/wexpay/activation` would skip the `/dashboard` rewrite (404).
+ */
+export const PUBLIC_ROOT_PASSTHROUGH_PREFIXES = ["/q", "/invite", "/wexpay/t"] as const;
+
+export function isPublicRootPassthroughPath(pathname: string) {
+  return PUBLIC_ROOT_PASSTHROUGH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function prefixedPath(pathname: string, prefix: string) {
+  if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return pathname;
+  if (pathname === "/") return prefix;
+  return `${prefix}${pathname}`;
+}
+
+export type SurfaceRouteDecision = {
+  surface: HostSurface;
+  incomingPathname: string;
+  /** Pathname the Next.js App Router should see (rewrite target). */
+  internalPathname: string;
+  /**
+   * Same-host clean URL for GET canonical redirects (strip panel prefix).
+   * Null when no redirect is needed (or would loop).
+   */
+  canonicalRedirectPathname: string | null;
+};
+
+/**
+ * Pure surface routing: given host surface + incoming pathname, decide
+ * internal rewrite target and optional canonical clean-URL redirect.
+ * Does not inspect method, auth, or query string.
+ */
+export function resolveSurfaceRouteDecision(
+  surface: HostSurface,
+  incomingPathname: string,
+): SurfaceRouteDecision {
+  const pathname = incomingPathname || "/";
+
+  if (surface === "public") {
+    return {
+      surface,
+      incomingPathname: pathname,
+      internalPathname: pathname,
+      canonicalRedirectPathname: null,
+    };
+  }
+
+  if (isPublicRootPassthroughPath(pathname)) {
+    return {
+      surface,
+      incomingPathname: pathname,
+      internalPathname: pathname,
+      canonicalRedirectPathname: null,
+    };
+  }
+
+  if (pathname === "/login" || pathname.startsWith("/login/")) {
+    return {
+      surface,
+      incomingPathname: pathname,
+      internalPathname: pathname,
+      canonicalRedirectPathname: null,
+    };
+  }
+
+  if (surface === "admin") {
+    const alreadyPrefixed = pathname === ADMIN_PREFIX || pathname.startsWith(`${ADMIN_PREFIX}/`);
+    const internalPathname = alreadyPrefixed ? pathname : prefixedPath(pathname, ADMIN_PREFIX);
+    const canonicalRedirectPathname = alreadyPrefixed
+      ? stripPathPrefix(pathname, ADMIN_PREFIX)
+      : null;
+    return {
+      surface,
+      incomingPathname: pathname,
+      internalPathname,
+      canonicalRedirectPathname:
+        canonicalRedirectPathname && canonicalRedirectPathname !== pathname
+          ? canonicalRedirectPathname
+          : null,
+    };
+  }
+
+  if (surface === "app") {
+    const alreadyPrefixed = pathname === APP_PREFIX || pathname.startsWith(`${APP_PREFIX}/`);
+    const internalPathname = alreadyPrefixed ? pathname : prefixedPath(pathname, APP_PREFIX);
+    const canonicalRedirectPathname = alreadyPrefixed
+      ? stripPathPrefix(pathname, APP_PREFIX)
+      : null;
+    return {
+      surface,
+      incomingPathname: pathname,
+      internalPathname,
+      canonicalRedirectPathname:
+        canonicalRedirectPathname && canonicalRedirectPathname !== pathname
+          ? canonicalRedirectPathname
+          : null,
+    };
+  }
+
+  // core
+  if (pathname === `${CORE_PREFIX}/login` || pathname.startsWith(`${CORE_PREFIX}/login/`)) {
+    return {
+      surface,
+      incomingPathname: pathname,
+      internalPathname: pathname,
+      canonicalRedirectPathname: null,
+    };
+  }
+
+  const alreadyPrefixed = pathname === CORE_PREFIX || pathname.startsWith(`${CORE_PREFIX}/`);
+  const internalPathname = alreadyPrefixed ? pathname : prefixedPath(pathname, CORE_PREFIX);
+  let canonicalRedirectPathname: string | null = null;
+  if (alreadyPrefixed) {
+    const stripped = stripPathPrefix(pathname, CORE_PREFIX);
+    if (stripped === "/login" || stripped.startsWith("/login/")) {
+      canonicalRedirectPathname = null;
+    } else if (stripped !== pathname) {
+      canonicalRedirectPathname = stripped;
+    }
+  }
+
+  return {
+    surface,
+    incomingPathname: pathname,
+    internalPathname,
+    canonicalRedirectPathname,
+  };
+}
+
 function normalizeCanonicalSubdomainPath(_subdomain: ProductionSubdomain, pathname: string) {
   return pathname;
 }
@@ -108,24 +241,7 @@ export function publicPanelCanonicalTarget(
 }
 
 export function subdomainPrefixedCanonicalPath(surface: HostSurface, pathname: string) {
-  if (surface === "public") return null;
-
-  const prefix =
-    surface === "admin" ? ADMIN_PREFIX : surface === "core" ? CORE_PREFIX : surface === "app" ? APP_PREFIX : null;
-  if (!prefix) return null;
-
-  const isPrefixed = pathname === prefix || pathname.startsWith(`${prefix}/`);
-  if (!isPrefixed) return null;
-
-  let stripped = stripPathPrefix(pathname, prefix);
-  if (surface === "admin") {
-    stripped = normalizeCanonicalSubdomainPath("admin", stripped);
-  }
-  if (surface === "core" && (stripped === "/login" || stripped.startsWith("/login/"))) {
-    return null;
-  }
-
-  return stripped === pathname ? null : stripped;
+  return resolveSurfaceRouteDecision(surface, pathname).canonicalRedirectPathname;
 }
 
 export function buildProductionSubdomainUrl(subdomain: ProductionSubdomain, pathname: string, search = "") {
