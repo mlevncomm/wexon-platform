@@ -73,6 +73,7 @@ async function runOnce(label) {
       "e2e/wexpay-activation-gate.spec.ts",
       "e2e/wexpay-activation-wizard.spec.ts",
       "e2e/wexpay-opaque-qr.spec.ts",
+      "e2e/core-canonical-routing.spec.ts",
       "--reporter=list",
     ],
     {
@@ -100,8 +101,8 @@ async function runOnce(label) {
   if (failed > 0) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
-  // Includes activation wizard flow (2) plus core WexPay isolated specs.
-  const MIN_ISOLATED_PASSES = 11;
+  // Includes activation wizard flow (2), core canonical routing (4), plus core WexPay isolated specs.
+  const MIN_ISOLATED_PASSES = 15;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,

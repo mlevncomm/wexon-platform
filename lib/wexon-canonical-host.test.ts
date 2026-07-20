@@ -4,10 +4,12 @@ import {
   buildProductionSubdomainUrl,
   isAdminHost,
   isMaintenanceExemptRoute,
+  isPublicRootPassthroughPath,
   publicPanelCanonicalTarget,
   publicWwwCanonicalRedirect,
   resolveUnauthenticatedLoginRedirect,
   resolvePostLoginDestination,
+  resolveSurfaceRouteDecision,
   sessionCookieClearOptions,
   sessionCookieOptions,
   subdomainPrefixedCanonicalPath,
@@ -32,10 +34,153 @@ function withEnv(snapshot: Record<string, string | undefined>, fn: () => void) {
   }
 }
 
+describe("resolveSurfaceRouteDecision", () => {
+  it("maps core clean /wexpay/activation to internal /dashboard/wexpay/activation", () => {
+    const d = resolveSurfaceRouteDecision("core", "/wexpay/activation");
+    assert.equal(d.internalPathname, "/dashboard/wexpay/activation");
+    assert.equal(d.canonicalRedirectPathname, null);
+  });
+
+  it("maps core /billing to /dashboard/billing", () => {
+    const d = resolveSurfaceRouteDecision("core", "/billing");
+    assert.equal(d.internalPathname, "/dashboard/billing");
+    assert.equal(d.canonicalRedirectPathname, null);
+  });
+
+  it("maps core /subscriptions to /dashboard/subscriptions", () => {
+    const d = resolveSurfaceRouteDecision("core", "/subscriptions");
+    assert.equal(d.internalPathname, "/dashboard/subscriptions");
+  });
+
+  it("canonicalizes core /dashboard/wexpay/activation to /wexpay/activation without loop", () => {
+    const d = resolveSurfaceRouteDecision("core", "/dashboard/wexpay/activation");
+    assert.equal(d.internalPathname, "/dashboard/wexpay/activation");
+    assert.equal(d.canonicalRedirectPathname, "/wexpay/activation");
+    const after = resolveSurfaceRouteDecision("core", d.canonicalRedirectPathname!);
+    assert.equal(after.canonicalRedirectPathname, null);
+    assert.equal(after.internalPathname, "/dashboard/wexpay/activation");
+  });
+
+  it("maps future core /wexpay/* pages under /dashboard/wexpay/*", () => {
+    const d = resolveSurfaceRouteDecision("core", "/wexpay/settings");
+    assert.equal(d.internalPathname, "/dashboard/wexpay/settings");
+  });
+
+  it("does not treat public /wexpay/t as a core bypass that skips dashboard", () => {
+    const core = resolveSurfaceRouteDecision("core", "/wexpay/t/QR-1");
+    assert.equal(core.internalPathname, "/wexpay/t/QR-1");
+    assert.equal(core.canonicalRedirectPathname, null);
+    assert.equal(isPublicRootPassthroughPath("/wexpay/t/QR-1"), true);
+    assert.equal(isPublicRootPassthroughPath("/wexpay/activation"), false);
+  });
+
+  it("keeps public opaque QR and invite paths unchanged on every surface", () => {
+    for (const surface of ["public", "core", "app", "admin"] as const) {
+      assert.equal(resolveSurfaceRouteDecision(surface, "/q/token").internalPathname, "/q/token");
+      assert.equal(resolveSurfaceRouteDecision(surface, "/invite/abc").internalPathname, "/invite/abc");
+    }
+  });
+
+  it("maps app /tables to /apps/wexpay/tables and canonicalizes prefixed paths", () => {
+    const clean = resolveSurfaceRouteDecision("app", "/tables");
+    assert.equal(clean.internalPathname, "/apps/wexpay/tables");
+    assert.equal(clean.canonicalRedirectPathname, null);
+
+    const prefixed = resolveSurfaceRouteDecision("app", "/apps/wexpay/tables");
+    assert.equal(prefixed.internalPathname, "/apps/wexpay/tables");
+    assert.equal(prefixed.canonicalRedirectPathname, "/tables");
+  });
+
+  it("maps app /menu to /apps/wexpay/menu", () => {
+    assert.equal(resolveSurfaceRouteDecision("app", "/menu").internalPathname, "/apps/wexpay/menu");
+  });
+
+  it("leaves public marketing and product paths alone", () => {
+    assert.equal(
+      resolveSurfaceRouteDecision("public", "/products/wexpay").internalPathname,
+      "/products/wexpay",
+    );
+    assert.equal(
+      resolveSurfaceRouteDecision("public", "/wexpay/t/LEGACY").internalPathname,
+      "/wexpay/t/LEGACY",
+    );
+    assert.equal(
+      resolveSurfaceRouteDecision("public", "/dashboard/wexpay/activation").internalPathname,
+      "/dashboard/wexpay/activation",
+    );
+  });
+
+  it("keeps admin login and workspace mappings", () => {
+    const login = resolveSurfaceRouteDecision("admin", "/login");
+    assert.equal(login.internalPathname, "/login");
+    assert.equal(login.canonicalRedirectPathname, null);
+
+    const apps = resolveSurfaceRouteDecision("admin", "/applications");
+    assert.equal(apps.internalPathname, "/admin/applications");
+
+    const prefixed = resolveSurfaceRouteDecision("admin", "/admin/applications");
+    assert.equal(prefixed.canonicalRedirectPathname, "/applications");
+  });
+
+  it("GET canonical and non-GET rewrite share the same internal path", () => {
+    const clean = resolveSurfaceRouteDecision("core", "/wexpay/activation");
+    const prefixed = resolveSurfaceRouteDecision("core", "/dashboard/wexpay/activation");
+    assert.equal(clean.internalPathname, prefixed.internalPathname);
+    assert.equal(clean.internalPathname, "/dashboard/wexpay/activation");
+  });
+});
+
+describe("resolveUnauthenticatedLoginRedirect core next path", () => {
+  it("preserves internal dashboard next + organizationId query for production core", () => {
+    withEnv(
+      {
+        NODE_ENV: "production",
+        NEXT_PUBLIC_APP_URL: "https://app.wexon.dev",
+      },
+      () => {
+        const target = resolveUnauthenticatedLoginRedirect(
+          "core.wexon.dev",
+          "core",
+          "/dashboard/wexpay/activation?organizationId=abc",
+          "",
+        );
+        assert.match(target, /login/);
+        const url = new URL(target, "https://www.wexon.dev");
+        assert.equal(url.pathname, "/login");
+        assert.equal(url.searchParams.get("next"), "/dashboard/wexpay/activation?organizationId=abc");
+      },
+    );
+  });
+
+  it("rejects open redirects via safe next handling at post-login", () => {
+    assert.equal(
+      resolvePostLoginDestination("https://evil.example", { isAdmin: false, productionWexon: true }),
+      "https://core.wexon.dev/",
+    );
+    assert.equal(
+      resolvePostLoginDestination("//evil.example", { isAdmin: false, productionWexon: true }),
+      "https://core.wexon.dev/",
+    );
+  });
+
+  it("returns to canonical core URL after login with activation next", () => {
+    assert.equal(
+      resolvePostLoginDestination("/dashboard/wexpay/activation?organizationId=abc", {
+        isAdmin: false,
+        productionWexon: true,
+      }),
+      "https://core.wexon.dev/wexpay/activation?organizationId=abc",
+    );
+  });
+});
+
 describe("publicWwwCanonicalRedirect", () => {
   it("redirects apex host to www", () => {
     assert.equal(publicWwwCanonicalRedirect("wexon.dev", "/contact", ""), "https://www.wexon.dev/contact");
-    assert.equal(publicWwwCanonicalRedirect("wexon.dev", "/products/wexpay", "?ref=ig"), "https://www.wexon.dev/products/wexpay?ref=ig");
+    assert.equal(
+      publicWwwCanonicalRedirect("wexon.dev", "/products/wexpay", "?ref=ig"),
+      "https://www.wexon.dev/products/wexpay?ref=ig",
+    );
   });
 
   it("does not redirect www or subdomains", () => {
@@ -67,6 +212,15 @@ describe("publicPanelCanonicalTarget", () => {
     assert.deepEqual(target, { kind: "subdomain", subdomain: "core", pathname: "/" });
   });
 
+  it("redirects public /dashboard/wexpay/activation to core clean path", () => {
+    const target = publicPanelCanonicalTarget("www.wexon.dev", "/dashboard/wexpay/activation");
+    assert.deepEqual(target, {
+      kind: "subdomain",
+      subdomain: "core",
+      pathname: "/wexpay/activation",
+    });
+  });
+
   it("redirects public /apps/wexpay to app host", () => {
     const target = publicPanelCanonicalTarget("www.wexon.dev", "/apps/wexpay/tables");
     assert.deepEqual(target, { kind: "subdomain", subdomain: "app", pathname: "/tables" });
@@ -77,7 +231,9 @@ describe("publicPanelCanonicalTarget", () => {
   });
 
   it("redirects public /dashboard/login to unified login", () => {
-    assert.deepEqual(publicPanelCanonicalTarget("www.wexon.dev", "/dashboard/login"), { kind: "unified-login" });
+    assert.deepEqual(publicPanelCanonicalTarget("www.wexon.dev", "/dashboard/login"), {
+      kind: "unified-login",
+    });
   });
 });
 
@@ -92,6 +248,13 @@ describe("subdomainPrefixedCanonicalPath", () => {
 
   it("redirects core host /dashboard to /", () => {
     assert.equal(subdomainPrefixedCanonicalPath("core", "/dashboard"), "/");
+  });
+
+  it("redirects core /dashboard/wexpay/activation to /wexpay/activation", () => {
+    assert.equal(
+      subdomainPrefixedCanonicalPath("core", "/dashboard/wexpay/activation"),
+      "/wexpay/activation",
+    );
   });
 
   it("redirects app host /apps/wexpay to /", () => {

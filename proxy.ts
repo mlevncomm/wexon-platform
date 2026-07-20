@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ACTIVE_ORGANIZATION_COOKIE, ACTIVE_ORGANIZATION_HEADER } from "@/lib/wexon-organization-context";
 import {
   ADMIN_PREFIX,
-  APP_PREFIX,
   CORE_PREFIX,
   buildProductionSubdomainUrl,
   buildProductionUnifiedLoginUrl,
@@ -15,16 +14,15 @@ import {
   publicPanelCanonicalTarget,
   publicWwwCanonicalRedirect,
   resolveHostSurface,
+  resolveSurfaceRouteDecision,
   resolveUnauthenticatedLoginRedirect,
   stripPathPrefix,
-  subdomainPrefixedCanonicalPath,
   type HostSurface,
 } from "@/lib/wexon-canonical-host";
 import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
 
 const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
-const INTERNAL_PREFIXES = [APP_PREFIX, CORE_PREFIX, ADMIN_PREFIX, "/wexpay", "/checkout", "/signup", "/start", "/contact"];
 const MAINTENANCE_MODE_ENABLED = process.env.MAINTENANCE_MODE === "true";
 
 function adminProxyDebug(label: string, data?: Record<string, unknown>) {
@@ -181,10 +179,10 @@ function productionCanonicalRedirect(request: NextRequest, host: string, surface
       return redirectTo(request, publicUrl(`${pathname}${search}`));
     }
 
-    const stripped = subdomainPrefixedCanonicalPath(surface, pathname);
-    if (stripped) {
+    const decision = resolveSurfaceRouteDecision(surface, pathname);
+    if (decision.canonicalRedirectPathname) {
       const targetUrl = request.nextUrl.clone();
-      targetUrl.pathname = stripped;
+      targetUrl.pathname = decision.canonicalRedirectPathname;
       targetUrl.search = search;
       return redirectTo(request, targetUrl);
     }
@@ -193,20 +191,8 @@ function productionCanonicalRedirect(request: NextRequest, host: string, surface
   return null;
 }
 
-function prefixedPath(pathname: string, prefix: string) {
-  if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return pathname;
-  if (pathname === "/") return prefix;
-  return `${prefix}${pathname}`;
-}
-
 function resolveSurfacePath(pathname: string, surface: HostSurface) {
-  if (INTERNAL_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-    return pathname;
-  }
-  if (surface === "admin") return prefixedPath(pathname, ADMIN_PREFIX);
-  if (surface === "app") return prefixedPath(pathname, APP_PREFIX);
-  if (surface === "core") return prefixedPath(pathname, CORE_PREFIX);
-  return pathname;
+  return resolveSurfaceRouteDecision(surface, pathname).internalPathname;
 }
 
 function maintenanceModeRedirect(request: NextRequest, surface: HostSurface) {
