@@ -18,6 +18,15 @@ import {
   revokeStaffInvite,
   StaffInviteError,
 } from "@/lib/wexpay-staff-invite";
+import {
+  uploadAndDryRunMenuImport,
+  applyMenuImportUntilDone,
+  cancelMenuImportJob,
+  skipMenuImportEmptyStart,
+  MenuImportError,
+  type MenuImportJobView,
+} from "@/lib/wexpay-menu-import";
+import { MenuImportParseError } from "@/lib/wexpay-menu-import-parse";
 import { ActivationJourneyError } from "@/lib/wexpay-activation-journey";
 import { assertCustomerOrganizationRole } from "@/lib/wexon-customer-auth";
 import {
@@ -34,6 +43,7 @@ export type WizardActionState = {
   oneTimeInviteUrl?: string | null;
   issuedQrs?: WizardIssuedQr[];
   journeyVersion?: number;
+  menuImportJob?: MenuImportJobView;
 };
 
 function readString(formData: FormData, key: string) {
@@ -42,7 +52,13 @@ function readString(formData: FormData, key: string) {
 }
 
 function mapError(error: unknown): WizardActionState {
-  if (error instanceof ActivationWizardError || error instanceof ActivationJourneyError || error instanceof StaffInviteError) {
+  if (
+    error instanceof ActivationWizardError ||
+    error instanceof ActivationJourneyError ||
+    error instanceof StaffInviteError ||
+    error instanceof MenuImportError ||
+    error instanceof MenuImportParseError
+  ) {
     return { ok: false, error: error.message, code: error.code };
   }
   console.error("[activation-wizard]", error instanceof Error ? error.name : "unknown");
@@ -257,6 +273,122 @@ export async function completeStaffInviteStepAction(
       actorUserId: user.id,
       expectedVersion,
       skip: readString(formData, "skip") === "1",
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function uploadMenuImportDryRunAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = Number(readString(formData, "expectedVersion") || "0");
+    const branchId = readString(formData, "branchId");
+    const { user } = await requireWizardActor(organizationId);
+    const ip = await getServerActionIpAddressSafe();
+    const rl = checkRateLimit(
+      buildRateLimitKey("menuImportUpload", `${organizationId}:${ip}`),
+      RATE_LIMITS.menuImportUpload,
+    );
+    if (!rl.ok) {
+      return { ok: false, error: "Çok fazla yükleme denemesi. Lütfen sonra tekrar deneyin.", code: "RATE_LIMIT" };
+    }
+
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size < 1) {
+      return { ok: false, error: "CSV veya XLSX dosyası seçin.", code: "FILE_REQUIRED" };
+    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const job = await uploadAndDryRunMenuImport({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+      branchId,
+      buffer,
+      originalFileName: file.name || "menu.csv",
+      forceReimport: readString(formData, "forceReimport") === "1",
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    return { ok: true, menuImportJob: job };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function applyMenuImportAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = Number(readString(formData, "expectedVersion") || "0");
+    const jobId = readString(formData, "jobId");
+    const jobExpectedVersion = Number(readString(formData, "jobExpectedVersion") || "0");
+    const { user } = await requireWizardActor(organizationId);
+    const result = await applyMenuImportUntilDone({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+      jobId,
+      jobExpectedVersion,
+      confirmApply: readString(formData, "confirmApply") === "1",
+      forceReimport: readString(formData, "forceReimport") === "1",
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    revalidatePath("/dashboard");
+    return {
+      ok: true,
+      menuImportJob: result.job,
+      journeyVersion: result.journeyVersion,
+    };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function cancelMenuImportAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = Number(readString(formData, "expectedVersion") || "0");
+    const jobId = readString(formData, "jobId");
+    const jobExpectedVersion = Number(readString(formData, "jobExpectedVersion") || "0");
+    const { user } = await requireWizardActor(organizationId);
+    const job = await cancelMenuImportJob({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+      jobId,
+      jobExpectedVersion,
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    return { ok: true, menuImportJob: job };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function skipMenuImportEmptyStartAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = Number(readString(formData, "expectedVersion") || "0");
+    const { user } = await requireWizardActor(organizationId);
+    await skipMenuImportEmptyStart({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+      confirmEmpty: readString(formData, "confirmEmpty") === "1",
     });
     revalidatePath("/dashboard/wexpay/activation");
     revalidatePath("/dashboard");

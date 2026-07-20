@@ -188,6 +188,15 @@ enum StaffInviteDeliveryStatus {
   FAILED
 }
 
+enum MenuImportJobStatus {
+  UPLOADED
+  DRY_RUN
+  APPLYING
+  APPLIED
+  FAILED
+  CANCELLED
+}
+
 enum AppInstallationStatus {
   ACTIVE
   DISABLED
@@ -232,6 +241,7 @@ model Organization {
   activationJourneys        ActivationJourney[]
   appInstallations          AppInstallation[]
   staffInvites              StaffInvite[]
+  menuImportJobs            MenuImportJob[]
   auditLogs                 AuditLog[]
   apiKeys                   ApiKey[]
   webhookEndpoints          WebhookEndpoint[]
@@ -256,11 +266,12 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  memberships          Membership[]
-  createdStaffInvites  StaffInvite[] @relation("StaffInviteCreator")
-  auditLogs            AuditLog[]
-  apiKeys              ApiKey[]
-  subscriptionPayments SubscriptionPayment[]
+  memberships            Membership[]
+  createdStaffInvites    StaffInvite[] @relation("StaffInviteCreator")
+  createdMenuImportJobs  MenuImportJob[] @relation("MenuImportJobCreator")
+  auditLogs              AuditLog[]
+  apiKeys                ApiKey[]
+  subscriptionPayments   SubscriptionPayment[]
 
   @@index([isActive])
 }
@@ -566,9 +577,10 @@ model ActivationJourney {
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
 
-  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  product      Product                 @relation(fields: [productId], references: [id])
-  steps        ActivationJourneyStep[]
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product                 @relation(fields: [productId], references: [id])
+  steps          ActivationJourneyStep[]
+  menuImportJobs MenuImportJob[]
 
   @@unique([organizationId, productId])
   @@index([status])
@@ -623,6 +635,76 @@ model StaffInvite {
   @@index([deliveryStatus])
   @@index([createdByUserId])
   @@index([tokenPrefix])
+}
+
+/// Menu CSV/XLSX import job — staging JSON only; raw file is never persisted.
+model MenuImportJob {
+  id                     String              @id @default(cuid())
+  organizationId         String
+  journeyId              String
+  branchId               String
+  createdByUserId        String
+  status                 MenuImportJobStatus @default(UPLOADED)
+  /// SHA-256 of normalized file bytes (after BOM strip).
+  checksum               String
+  originalFileName       String
+  contentType            String
+  byteSize               Int
+  /// Canonical normalized rows + warnings — never raw file bytes.
+  normalizedStagingJson  Json?
+  totalRows              Int                 @default(0)
+  validRows              Int                 @default(0)
+  errorRows              Int                 @default(0)
+  warningCount           Int                 @default(0)
+  appliedRows            Int                 @default(0)
+  /// Next staging row index to apply (0-based); resume cursor.
+  applyCursor            Int                 @default(0)
+  /// Categories/products/modifiers preview counts from dry-run.
+  previewJson            Json?
+  /// Safe error code only — never raw exception text.
+  lastErrorCode          String?
+  /// Optimistic concurrency for apply/cancel.
+  version                Int                 @default(1)
+  /// Explicit user opt-in to re-import same checksum.
+  forceReimport          Boolean             @default(false)
+  dryRunAt               DateTime?
+  applyStartedAt         DateTime?
+  completedAt            DateTime?
+  failedAt               DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  journey      ActivationJourney    @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  branch       Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy    User                 @relation("MenuImportJobCreator", fields: [createdByUserId], references: [id])
+  rowErrors    MenuImportRowError[]
+
+  @@index([organizationId])
+  @@index([journeyId])
+  @@index([branchId])
+  @@index([checksum])
+  @@index([status])
+  @@index([createdByUserId])
+  @@index([organizationId, checksum])
+}
+
+model MenuImportRowError {
+  id               String   @id @default(cuid())
+  jobId            String
+  rowNumber        Int
+  errorCode        String
+  /// Sanitized user-facing message — no secrets.
+  message          String
+  /// PII-minimal snippet of raw/normalized cell values for debugging.
+  safeContextJson  Json?
+  createdAt        DateTime @default(now())
+
+  job MenuImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([jobId, rowNumber])
 }
 
 model AppInstallation {
@@ -747,6 +829,7 @@ model Branch {
   orders         CustomerOrder[]
   payments       Payment[]
   notifications  BusinessNotification[]
+  menuImportJobs MenuImportJob[]
 
   @@unique([restaurantId, slug])
   @@index([restaurantId])

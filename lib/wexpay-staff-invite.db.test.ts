@@ -619,7 +619,7 @@ describe("staff invite security (db)", () => {
     );
   });
 
-  it("expects 38 public tables including StaffInvite", async () => {
+  it("expects 40 public tables including MenuImportJob", async () => {
     const tables = await prisma.$queryRaw<Array<{ c: bigint }>>`
       SELECT count(*)::bigint AS c
       FROM pg_class c
@@ -627,6 +627,6 @@ describe("staff invite security (db)", () => {
       WHERE n.nspname = 'public' AND c.relkind = 'r'
     `;
     assert.equal(Number(tables[0]!.c), EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 38);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 40);
   });
 });

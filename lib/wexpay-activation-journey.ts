@@ -729,16 +729,24 @@ export function computeWizardProgress(journey: ActivationJourneyWithSteps | null
   };
 }
 
-/** PR-2 wizard steps that are interactive. Later steps are upcoming/disabled. */
-export const PR2_WIZARD_STEPS: ActivationStepKey[] = [
+/** PR-3 wizard steps that are interactive. Later steps are upcoming/disabled. */
+export const PR3_WIZARD_STEPS: ActivationStepKey[] = [
   ActivationStepKey.BUSINESS_PROFILE,
   ActivationStepKey.BRANCH_SETUP,
   ActivationStepKey.TABLE_SETUP,
   ActivationStepKey.STAFF_INVITE,
+  ActivationStepKey.MENU_IMPORT,
 ];
+
+/** @deprecated Use PR3_WIZARD_STEPS — kept for older call sites. */
+export const PR2_WIZARD_STEPS: ActivationStepKey[] = PR3_WIZARD_STEPS.slice(0, 4);
 
 export function isPr2WizardStep(step: ActivationStepKey): boolean {
   return PR2_WIZARD_STEPS.includes(step);
+}
+
+export function isPr3WizardStep(step: ActivationStepKey): boolean {
+  return PR3_WIZARD_STEPS.includes(step);
 }
 
 export function maskTaxNoForAudit(taxNo: string | null | undefined): string | null {

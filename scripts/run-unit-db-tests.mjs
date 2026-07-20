@@ -40,6 +40,7 @@ const files = [
   "lib/wexpay-smart-activation.db.test.ts",
   "lib/wexpay-staff-invite.db.test.ts",
   "lib/wexpay-activation-wizard.db.test.ts",
+  "lib/wexpay-menu-import.db.test.ts",
 ];
 
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...files], {

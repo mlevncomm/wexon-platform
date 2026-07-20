@@ -4,6 +4,7 @@ import { DashboardEmptyState, DashboardSectionTitle } from "@/components/marketi
 import { dashboardHref, getCustomerDashboardData } from "@/lib/wexon-core-dashboard";
 import { loadOrStartActivationJourneyView } from "@/lib/wexpay-activation-journey";
 import { listOrganizationStaffInvites } from "@/lib/wexpay-staff-invite";
+import { getActiveMenuImportJobView } from "@/lib/wexpay-menu-import";
 import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import { prisma } from "@/lib/prisma";
 import { ActivationStepKey } from ".prisma/client";
@@ -65,6 +66,12 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
   const canSkipStaffInvite = true;
 
   const invites = await listOrganizationStaffInvites(organization.id);
+  const menuImportJob = view.journey
+    ? await getActiveMenuImportJobView({
+        organizationId: organization.id,
+        journeyId: view.journey.id,
+      })
+    : null;
   const continueHref = dashboardHref("/dashboard/wexpay/activation", organizationContext);
 
   const stepStatuses = Object.fromEntries(
@@ -110,6 +117,7 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
         isLegacyActive={Boolean(isLegacyActive) || view.uiStatus === "ACTIVE"}
         awaitingQrAck={Boolean(tableMeta.awaitingQrAck)}
         canSkipStaffInvite={canSkipStaffInvite}
+        menuImportJob={menuImportJob}
       />
     </div>
   );

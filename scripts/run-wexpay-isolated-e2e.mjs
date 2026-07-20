@@ -102,7 +102,7 @@ async function runOnce(label) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
   // Includes activation wizard flow (2), core canonical routing (4), plus core WexPay isolated specs.
-  const MIN_ISOLATED_PASSES = 15;
+  const MIN_ISOLATED_PASSES = 17;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
