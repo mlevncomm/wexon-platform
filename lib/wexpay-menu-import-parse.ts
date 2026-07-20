@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import { parse as parseCsv } from "csv-parse/sync";
-import ExcelJS from "exceljs";
+import {
+  assertSafeXlsxZip,
+  buildMinimalMenuImportXlsx,
+  parseXlsxWorksheetMatrix,
+} from "@/lib/wexpay-menu-import-xlsx";
 
 export const MENU_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 export const MENU_IMPORT_MAX_DATA_ROWS = 2000;
-/** Zip bomb guard: uncompressed worksheet cells / shared strings. */
+/** Declared uncompressed ZIP payload ceiling (checked before inflate). */
 export const MENU_IMPORT_MAX_XLSX_UNCOMPRESSED = 12 * 1024 * 1024;
 
 export const MENU_IMPORT_CANONICAL_COLUMNS = [
@@ -133,21 +137,35 @@ function normalizeHeaderKey(raw: string): string {
     .replace(/-+/g, "_");
 }
 
-/** Neutralize CSV/formula injection prefixes without destroying numeric negatives. */
+/** True when a cell looks like spreadsheet formula / CSV injection. */
+export function isFormulaInjection(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  const first = v[0]!;
+  if (first === "=" || first === "+" || first === "@") return true;
+  // Leading dash only when followed by a letter (not a numeric negative).
+  if (first === "-" && /[a-zA-Z]/.test(v[1] ?? "")) return true;
+  return false;
+}
+
+/**
+ * @deprecated Prefer isFormulaInjection + reject. Kept for unit coverage of detection.
+ * Does not strip the leading apostrophe on later reads — callers must not undo escaping.
+ */
 export function sanitizeCsvInjection(value: string): string {
   const v = value.trim();
   if (!v) return "";
-  const first = v[0]!;
-  if (first === "=" || first === "+" || first === "@" || (first === "-" && /[a-zA-Z]/.test(v[1] ?? ""))) {
-    return `'${v}`;
-  }
+  if (isFormulaInjection(v)) return `'${v}`;
   return v;
 }
 
 export function normalizeTryPrice(raw: string): { ok: true; value: string } | { ok: false; code: string; message: string } {
-  const cleaned = sanitizeCsvInjection(String(raw ?? ""))
-    .replace(/^'/, "")
-    .trim()
+  const trimmed = String(raw ?? "").trim();
+  if (isFormulaInjection(trimmed)) {
+    return { ok: false, code: "FORMULA_INJECTION", message: "Formül/CSV injection fiyat kabul edilmez." };
+  }
+
+  const cleaned = trimmed
     .replace(/\s/g, "")
     .replace(/₺/g, "")
     .replace(/TRY/gi, "")
@@ -275,38 +293,64 @@ function rowFromCells(
   rowNumber: number,
 ): { row?: NormalizedMenuImportRow; error?: MenuImportRowErrorDraft; warnings: MenuImportWarning[] } {
   const warnings: MenuImportWarning[] = [];
-  const get = (col: MenuImportCanonicalColumn) => {
+  const rawGet = (col: MenuImportCanonicalColumn) => {
     for (const [idx, name] of indexToCanonical) {
-      if (name === col) return sanitizeCsvInjection(cells[idx] ?? "").replace(/^'/, "").trim();
+      if (name === col) return String(cells[idx] ?? "").trim();
     }
     return "";
   };
 
-  const category = get("category");
-  const productName = get("product_name");
-  const descriptionRaw = get("description");
-  const priceRaw = get("price");
-  const currencyRaw = get("currency") || "TRY";
-  const activeRaw = get("active");
-  const inStockRaw = get("in_stock");
-  const modifierGroup = get("modifier_group") || null;
-  const modifierOption = get("modifier_option") || null;
-  const modifierPriceDeltaRaw = get("modifier_price_delta");
-  const selectionTypeRaw = get("selection_type").toUpperCase();
-  const minSelectRaw = get("min_select");
-  const maxSelectRaw = get("max_select");
+  const categoryRaw = rawGet("category");
+  const productNameRaw = rawGet("product_name");
+  const descriptionRaw = rawGet("description");
+  const priceRaw = rawGet("price");
+  const currencyRaw = rawGet("currency") || "TRY";
+  const activeRaw = rawGet("active");
+  const inStockRaw = rawGet("in_stock");
+  const modifierGroupRaw = rawGet("modifier_group");
+  const modifierOptionRaw = rawGet("modifier_option");
+  const modifierPriceDeltaRaw = rawGet("modifier_price_delta");
+  const selectionTypeRaw = rawGet("selection_type").toUpperCase();
+  const minSelectRaw = rawGet("min_select");
+  const maxSelectRaw = rawGet("max_select");
 
   // Skip fully empty rows
   if (
-    !category &&
-    !productName &&
+    !categoryRaw &&
+    !productNameRaw &&
     !priceRaw &&
-    !modifierGroup &&
-    !modifierOption &&
+    !modifierGroupRaw &&
+    !modifierOptionRaw &&
     !descriptionRaw
   ) {
     return { warnings };
   }
+
+  const textFields: Array<{ label: string; value: string }> = [
+    { label: "category", value: categoryRaw },
+    { label: "product_name", value: productNameRaw },
+    { label: "description", value: descriptionRaw },
+    { label: "modifier_group", value: modifierGroupRaw },
+    { label: "modifier_option", value: modifierOptionRaw },
+  ];
+  for (const field of textFields) {
+    if (field.value && isFormulaInjection(field.value)) {
+      return {
+        error: {
+          rowNumber,
+          errorCode: "FORMULA_INJECTION",
+          message: `Formül/CSV injection kabul edilmez (${field.label}).`,
+          safeContextJson: { field: field.label },
+        },
+        warnings,
+      };
+    }
+  }
+
+  const category = categoryRaw;
+  const productName = productNameRaw;
+  const modifierGroup = modifierGroupRaw || null;
+  const modifierOption = modifierOptionRaw || null;
 
   if (!category) {
     return {
@@ -326,6 +370,19 @@ function rowFromCells(
         errorCode: "PRODUCT_NAME_REQUIRED",
         message: "Ürün adı zorunludur.",
         safeContextJson: { category: category.slice(0, 80) },
+      },
+      warnings,
+    };
+  }
+
+  const currency = currencyRaw.toUpperCase().slice(0, 8) || "TRY";
+  if (currency !== "TRY") {
+    return {
+      error: {
+        rowNumber,
+        errorCode: "CURRENCY_UNSUPPORTED",
+        message: `Para birimi yalnızca TRY olabilir (gelen: ${currency.slice(0, 8)}).`,
+        safeContextJson: { currency: currency.slice(0, 8) },
       },
       warnings,
     };
@@ -402,15 +459,6 @@ function rowFromCells(
     };
   }
 
-  const currency = currencyRaw.toUpperCase().slice(0, 3) || "TRY";
-  if (currency !== "TRY") {
-    warnings.push({
-      code: "CURRENCY_NON_TRY",
-      message: `Satır ${rowNumber}: para birimi ${currency} — TRY olarak saklanacak.`,
-      rowNumber,
-    });
-  }
-
   return {
     row: {
       rowNumber,
@@ -454,50 +502,25 @@ function parseCsvBuffer(buffer: Buffer): string[][] {
 }
 
 async function parseXlsxBuffer(buffer: Buffer): Promise<string[][]> {
-  if (buffer.length > MENU_IMPORT_MAX_XLSX_UNCOMPRESSED) {
-    throw new MenuImportParseError("XLSX_TOO_LARGE", "XLSX dosyası güvenlik sınırını aşıyor.");
+  try {
+    // Declared uncompressed sizes / entry count / ratio — before any inflate.
+    assertSafeXlsxZip(buffer);
+    return await parseXlsxWorksheetMatrix(buffer);
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    const message = error instanceof Error ? error.message : "XLSX okunamadı.";
+    if (name === "XLSX_ZIP_BOMB" || message.startsWith("XLSX_ZIP_BOMB")) {
+      throw new MenuImportParseError("XLSX_ZIP_BOMB", "XLSX zip-bomb / sıkıştırma oranı reddedildi.");
+    }
+    if (name === "XLSX_TOO_LARGE" || message.startsWith("XLSX_TOO_LARGE")) {
+      throw new MenuImportParseError("XLSX_TOO_LARGE", "XLSX dosyası güvenlik sınırını aşıyor.");
+    }
+    if (name === "XLSX_FORMULA_REJECTED" || /formula/i.test(message)) {
+      throw new MenuImportParseError("XLSX_FORMULA_REJECTED", "Formül hücreleri kabul edilmez.");
+    }
+    if (error instanceof MenuImportParseError) throw error;
+    throw new MenuImportParseError("XLSX_INVALID", message.slice(0, 200));
   }
-
-  const workbook = new ExcelJS.Workbook();
-  // exceljs Buffer typings conflict with Node 22 Buffer generics — runtime accepts Node Buffer.
-  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
-
-  const sheet =
-    workbook.worksheets.find((ws) => {
-      const row = ws.getRow(1);
-      return Boolean(row && row.cellCount > 0);
-    }) ?? workbook.worksheets[0];
-
-  if (!sheet) {
-    throw new MenuImportParseError("XLSX_EMPTY", "Çalışma sayfası bulunamadı.");
-  }
-
-  if (sheet.rowCount > MENU_IMPORT_MAX_DATA_ROWS + 5) {
-    throw new MenuImportParseError(
-      "ROW_LIMIT",
-      `En fazla ${MENU_IMPORT_MAX_DATA_ROWS} veri satırı desteklenir.`,
-    );
-  }
-
-  const rows: string[][] = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    const cells: string[] = [];
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      while (cells.length < colNumber - 1) cells.push("");
-      // Reject live formulas — store literal display text only if no formula.
-      if (cell.formula || (cell as { sharedFormula?: string }).sharedFormula) {
-        throw new MenuImportParseError(
-          "XLSX_FORMULA_REJECTED",
-          `Formül hücreleri kabul edilmez (satır ${row.number}, sütun ${colNumber}).`,
-        );
-      }
-      const text = cell.text != null ? String(cell.text) : cell.value == null ? "" : String(cell.value);
-      cells.push(text);
-    });
-    rows.push(cells);
-  });
-
-  return rows;
 }
 
 function normalizeMatrix(
@@ -559,13 +582,24 @@ function normalizeMatrix(
     if (result.row) rows.push(result.row);
   });
 
+  for (const conflict of findModifierGroupRuleConflicts(rows)) {
+    errors.push(conflict);
+    errorRowNumbers.add(conflict.rowNumber);
+  }
+
+  // Drop rows that participate in modifier rule conflicts from valid staging.
+  const conflictRows = new Set(
+    errors.filter((e) => e.errorCode === "MODIFIER_RULE_CONFLICT").map((e) => e.rowNumber),
+  );
+  const validRows = rows.filter((r) => !conflictRows.has(r.rowNumber));
+
   return {
     ...fileMeta,
-    rows,
+    rows: validRows,
     errors,
     warnings,
     totalRows: dataRows.filter((r) => r.some((c) => String(c).trim())).length,
-    validRows: rows.length,
+    validRows: validRows.length,
     errorRows: errorRowNumbers.size,
   };
 }
@@ -605,6 +639,81 @@ export function buildSampleCsv(): string {
     "Ana Yemek,Adana Kebap,Acili,320.50,TRY,1,1,,,,,,",
   ];
   return `\uFEFF${header}\n${rows.join("\n")}\n`;
+}
+
+export function buildSampleXlsx(): Buffer {
+  const header = [...MENU_IMPORT_CANONICAL_COLUMNS];
+  return buildMinimalMenuImportXlsx([
+    header,
+    ["Icecekler", "Cay", "Demlik cay", "45.00", "TRY", "true", "true", "", "", "", "", "", ""],
+    [
+      "Icecekler",
+      "Kahve",
+      "Turk kahvesi",
+      "80.00",
+      "TRY",
+      "true",
+      "true",
+      "Boyut",
+      "Buyuk",
+      "10.00",
+      "SINGLE",
+      "0",
+      "1",
+    ],
+  ]);
+}
+
+/** Detect conflicting modifier group rules across staging rows (dry-run). */
+export function findModifierGroupRuleConflicts(
+  rows: NormalizedMenuImportRow[],
+): MenuImportRowErrorDraft[] {
+  type Rule = {
+    selectionType: "SINGLE" | "MULTI" | null;
+    minSelect: number | null;
+    maxSelect: number | null;
+    rowNumber: number;
+  };
+  const byGroup = new Map<string, Rule>();
+  const errors: MenuImportRowErrorDraft[] = [];
+
+  for (const row of rows) {
+    if (!row.modifierGroup) continue;
+    const key = row.modifierGroup.trim().toLocaleLowerCase("tr-TR");
+    const next: Rule = {
+      selectionType: row.selectionType,
+      minSelect: row.minSelect,
+      maxSelect: row.maxSelect,
+      rowNumber: row.rowNumber,
+    };
+    const prev = byGroup.get(key);
+    if (!prev) {
+      byGroup.set(key, next);
+      continue;
+    }
+    const conflict =
+      (next.selectionType != null &&
+        prev.selectionType != null &&
+        next.selectionType !== prev.selectionType) ||
+      (next.minSelect != null && prev.minSelect != null && next.minSelect !== prev.minSelect) ||
+      (next.maxSelect != null && prev.maxSelect != null && next.maxSelect !== prev.maxSelect);
+    if (conflict) {
+      errors.push({
+        rowNumber: row.rowNumber,
+        errorCode: "MODIFIER_RULE_CONFLICT",
+        message: `Seçenek grubu kuralları çelişiyor: ${row.modifierGroup.slice(0, 60)}`,
+        safeContextJson: { modifierGroup: row.modifierGroup.slice(0, 60) },
+      });
+    } else {
+      byGroup.set(key, {
+        selectionType: next.selectionType ?? prev.selectionType,
+        minSelect: next.minSelect ?? prev.minSelect,
+        maxSelect: next.maxSelect ?? prev.maxSelect,
+        rowNumber: prev.rowNumber,
+      });
+    }
+  }
+  return errors;
 }
 
 export function productKey(category: string, productName: string): string {

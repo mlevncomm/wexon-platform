@@ -376,7 +376,10 @@ async function loadExistingMenuMaps(tx: Prisma.TransactionClient, branchId: stri
       select: {
         id: true,
         name: true,
-        options: { select: { id: true, name: true } },
+        selectionType: true,
+        minSelect: true,
+        maxSelect: true,
+        options: { select: { id: true, name: true, priceDelta: true } },
       },
     }),
   ]);
@@ -388,10 +391,13 @@ async function loadExistingMenuMaps(tx: Prisma.TransactionClient, branchId: stri
   }
   const groupSet = new Set(groups.map((g) => g.name.trim().toLocaleLowerCase("tr-TR")));
   const optionSet = new Set<string>();
+  const optionByKey = new Map<string, { id: string; priceDelta: unknown }>();
   for (const g of groups) {
     const gk = g.name.trim().toLocaleLowerCase("tr-TR");
     for (const o of g.options) {
-      optionSet.add(`${gk}::${o.name.trim().toLocaleLowerCase("tr-TR")}`);
+      const ok = `${gk}::${o.name.trim().toLocaleLowerCase("tr-TR")}`;
+      optionSet.add(ok);
+      optionByKey.set(ok, o);
     }
   }
 
@@ -403,6 +409,7 @@ async function loadExistingMenuMaps(tx: Prisma.TransactionClient, branchId: stri
     modifierGroups: groupSet,
     groupByName: new Map(groups.map((g) => [g.name.trim().toLocaleLowerCase("tr-TR"), g])),
     modifierOptions: optionSet,
+    optionByKey,
   };
 }
 
@@ -774,26 +781,53 @@ export async function applyMenuImportChunk(input: {
           if (row.modifierGroup) {
             const gk = row.modifierGroup.trim().toLocaleLowerCase("tr-TR");
             let group = maps.groupByName.get(gk);
+            const selectionType =
+              row.selectionType === "MULTI"
+                ? MenuModifierSelectionType.MULTI
+                : row.selectionType === "SINGLE"
+                  ? MenuModifierSelectionType.SINGLE
+                  : null;
+            const minSelect = row.minSelect;
+            const maxSelect = row.maxSelect;
+
             if (!group) {
-              const selectionType =
-                row.selectionType === "MULTI"
-                  ? MenuModifierSelectionType.MULTI
-                  : MenuModifierSelectionType.SINGLE;
-              const minSelect = row.minSelect ?? 0;
-              const maxSelect =
-                row.maxSelect ?? (selectionType === MenuModifierSelectionType.SINGLE ? 1 : 1);
+              const createdType = selectionType ?? MenuModifierSelectionType.SINGLE;
+              const createdMin = minSelect ?? 0;
+              const createdMax =
+                maxSelect ?? (createdType === MenuModifierSelectionType.SINGLE ? 1 : 1);
               group = await tx.menuModifierGroup.create({
                 data: {
                   branchId: job.branchId,
                   name: row.modifierGroup,
-                  selectionType,
-                  minSelect,
-                  maxSelect,
+                  selectionType: createdType,
+                  minSelect: createdMin,
+                  maxSelect: createdMax,
                 },
-                include: { options: { select: { id: true, name: true } } },
+                include: {
+                  options: { select: { id: true, name: true, priceDelta: true } },
+                },
               });
               maps.groupByName.set(gk, group);
               maps.modifierGroups.add(gk);
+              modifierGroups += 1;
+            } else if (selectionType != null || minSelect != null || maxSelect != null) {
+              const nextType = selectionType ?? group.selectionType;
+              const nextMin = minSelect ?? group.minSelect;
+              const nextMax =
+                maxSelect ??
+                (nextType === MenuModifierSelectionType.SINGLE ? 1 : group.maxSelect);
+              group = await tx.menuModifierGroup.update({
+                where: { id: group.id },
+                data: {
+                  selectionType: nextType,
+                  minSelect: nextMin,
+                  maxSelect: nextMax,
+                },
+                include: {
+                  options: { select: { id: true, name: true, priceDelta: true } },
+                },
+              });
+              maps.groupByName.set(gk, group);
               modifierGroups += 1;
             }
 
@@ -813,15 +847,25 @@ export async function applyMenuImportChunk(input: {
 
             if (row.modifierOption) {
               const ok = `${gk}::${row.modifierOption.trim().toLocaleLowerCase("tr-TR")}`;
-              if (!maps.modifierOptions.has(ok)) {
-                await tx.menuModifierOption.create({
+              const existingOpt = maps.optionByKey.get(ok);
+              const priceDelta = row.modifierPriceDelta ?? "0.00";
+              if (!existingOpt) {
+                const created = await tx.menuModifierOption.create({
                   data: {
                     groupId: group.id,
                     name: row.modifierOption,
-                    priceDelta: row.modifierPriceDelta ?? "0.00",
+                    priceDelta,
                   },
                 });
                 maps.modifierOptions.add(ok);
+                maps.optionByKey.set(ok, created);
+                modifierOptions += 1;
+              } else {
+                await tx.menuModifierOption.update({
+                  where: { id: existingOpt.id },
+                  data: { priceDelta },
+                });
+                maps.optionByKey.set(ok, { ...existingOpt, priceDelta });
                 modifierOptions += 1;
               }
             }
@@ -1047,33 +1091,12 @@ async function finalizeApplied(
   };
 }
 
-/** Apply all remaining chunks until done or failure. */
-export async function applyMenuImportUntilDone(input: {
-  organizationId: string;
-  actorUserId: string;
-  expectedVersion: number;
-  jobId: string;
-  jobExpectedVersion: number;
-  confirmApply: boolean;
-  forceReimport?: boolean;
-}): Promise<{ job: MenuImportJobView; journeyVersion?: number }> {
-  let jobVersion = input.jobExpectedVersion;
-  let journeyVersion = input.expectedVersion;
-
-  for (let i = 0; i < 80; i += 1) {
-    const result = await applyMenuImportChunk({
-      ...input,
-      expectedVersion: journeyVersion,
-      jobExpectedVersion: jobVersion,
-    });
-    jobVersion = result.job.version;
-    if (result.journeyVersion) journeyVersion = result.journeyVersion;
-    if (result.done) {
-      return { job: result.job, journeyVersion: result.journeyVersion ?? journeyVersion };
-    }
-  }
-
-  throw new MenuImportError("APPLY_INCOMPLETE", "Uygulama tamamlanamadı; devam ettirin.");
+/** @deprecated Unbounded multi-chunk apply removed — use applyMenuImportChunk per request. */
+export async function applyMenuImportUntilDone(): Promise<never> {
+  throw new MenuImportError(
+    "APPLY_UNBOUNDED_REMOVED",
+    "Tek istekte tüm satırlar uygulanmaz; applyMenuImportChunk kullanın.",
+  );
 }
 
 export async function cancelMenuImportJob(input: {

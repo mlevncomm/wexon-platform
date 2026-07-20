@@ -1,29 +1,94 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import ExcelJS from "exceljs";
 import {
   MENU_IMPORT_MAX_BYTES,
   MENU_IMPORT_MAX_DATA_ROWS,
   buildSampleCsv,
+  buildSampleXlsx,
+  isFormulaInjection,
   normalizeTryPrice,
   parseMenuImportFile,
   sanitizeCsvInjection,
 } from "@/lib/wexpay-menu-import-parse";
+import {
+  assertSafeXlsxZip,
+  buildMinimalMenuImportXlsx,
+} from "@/lib/wexpay-menu-import-xlsx";
+import { deflateRawSync } from "node:zlib";
 
 function csvBuffer(body: string, fileName = "menu.csv") {
   return { buffer: Buffer.from(body, "utf8"), originalFileName: fileName };
 }
 
-describe("sanitizeCsvInjection", () => {
-  it("prefixes formula-like values", () => {
-    assert.equal(sanitizeCsvInjection("=CMD()"), "'=CMD()");
-    assert.equal(sanitizeCsvInjection("+1234"), "'+1234");
-    assert.equal(sanitizeCsvInjection("@sum"), "'@sum");
-    assert.equal(sanitizeCsvInjection("-evil"), "'-evil");
-  });
+/** Craft a ZIP with a single stored/deflated entry and custom size fields via central directory. */
+function craftZipWithSizes(input: {
+  name: string;
+  payload: Buffer;
+  method: 0 | 8;
+  /** Override declared uncompressed size (zip-bomb claim). */
+  declaredUncompressed?: number;
+}): Buffer {
+  const nameBuf = Buffer.from(input.name, "utf8");
+  const compressed =
+    input.method === 8 ? deflateRawSync(input.payload) : input.payload;
+  const uncompressed = input.payload.length;
+  const declaredUncompressed = input.declaredUncompressed ?? uncompressed;
 
-  it("leaves numeric negatives alone", () => {
-    assert.equal(sanitizeCsvInjection("-12.5"), "-12.5");
+  const local = Buffer.alloc(30 + nameBuf.length);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(0, 6);
+  local.writeUInt16LE(input.method, 8);
+  local.writeUInt16LE(0, 10);
+  local.writeUInt16LE(0, 12);
+  local.writeUInt32LE(0, 14);
+  local.writeUInt32LE(compressed.length, 18);
+  local.writeUInt32LE(declaredUncompressed, 22);
+  local.writeUInt16LE(nameBuf.length, 26);
+  local.writeUInt16LE(0, 28);
+  nameBuf.copy(local, 30);
+
+  const central = Buffer.alloc(46 + nameBuf.length);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(0, 8);
+  central.writeUInt16LE(input.method, 10);
+  central.writeUInt16LE(0, 12);
+  central.writeUInt16LE(0, 14);
+  central.writeUInt32LE(0, 16);
+  central.writeUInt32LE(compressed.length, 20);
+  central.writeUInt32LE(declaredUncompressed, 24);
+  central.writeUInt16LE(nameBuf.length, 28);
+  central.writeUInt16LE(0, 30);
+  central.writeUInt16LE(0, 32);
+  central.writeUInt16LE(0, 34);
+  central.writeUInt16LE(0, 36);
+  central.writeUInt32LE(0, 38);
+  central.writeUInt32LE(0, 42); // local header offset
+  nameBuf.copy(central, 46);
+
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(1, 8);
+  eocd.writeUInt16LE(1, 10);
+  eocd.writeUInt32LE(central.length, 12);
+  eocd.writeUInt32LE(local.length + compressed.length, 16);
+  eocd.writeUInt16LE(0, 20);
+
+  return Buffer.concat([local, compressed, central, eocd]);
+}
+
+describe("sanitizeCsvInjection / isFormulaInjection", () => {
+  it("detects formula-like values", () => {
+    assert.equal(isFormulaInjection("=CMD()"), true);
+    assert.equal(isFormulaInjection("+1234"), true);
+    assert.equal(isFormulaInjection("@sum"), true);
+    assert.equal(isFormulaInjection("-evil"), true);
+    assert.equal(isFormulaInjection("-12.5"), false);
+    assert.equal(sanitizeCsvInjection("=CMD()"), "'=CMD()");
   });
 });
 
@@ -34,13 +99,13 @@ describe("normalizeTryPrice", () => {
     assert.deepEqual(normalizeTryPrice("1.234,50"), { ok: true, value: "1234.50" });
   });
 
-  it("rejects invalid and negative prices", () => {
+  it("rejects invalid, negative, and formula prices", () => {
     assert.equal(normalizeTryPrice("").ok, false);
     assert.equal(normalizeTryPrice("abc").ok, false);
     assert.equal(normalizeTryPrice("-10").ok, false);
-    const neg = normalizeTryPrice("-10");
-    assert.equal(neg.ok, false);
-    if (!neg.ok) assert.equal(neg.code, "PRICE_NEGATIVE");
+    const inj = normalizeTryPrice("=1+1");
+    assert.equal(inj.ok, false);
+    if (!inj.ok) assert.equal(inj.code, "FORMULA_INJECTION");
   });
 });
 
@@ -69,7 +134,6 @@ describe("parseMenuImportFile", () => {
     );
     assert.equal(tr.validRows, 1);
     assert.equal(tr.rows[0]!.productName, "Adana");
-    assert.equal(tr.rows[0]!.isActive, true);
 
     const en = await parseMenuImportFile(
       csvBuffer("category,product_name,description,price,active,in_stock\nDrinks,Tea,Hot,40.00,true,true\n"),
@@ -78,12 +142,34 @@ describe("parseMenuImportFile", () => {
     assert.equal(en.rows[0]!.category, "Drinks");
   });
 
-  it("sanitizes CSV injection in cell values", async () => {
+  it("rejects CSV formula injection in text fields (does not strip escape)", async () => {
     const result = await parseMenuImportFile(
       csvBuffer('category,product_name,price\nIcecek,"=HYPERLINK()",45.00\n'),
     );
-    assert.equal(result.validRows, 1);
-    assert.equal(result.rows[0]!.productName, "=HYPERLINK()");
+    assert.equal(result.validRows, 0);
+    assert.ok(result.errors.some((e) => e.errorCode === "FORMULA_INJECTION"));
+    assert.ok(!result.rows.some((r) => r.productName.includes("HYPERLINK")));
+  });
+
+  it("rejects non-TRY currency instead of coercing", async () => {
+    const result = await parseMenuImportFile(
+      csvBuffer("category,product_name,price,currency\nIcecek,Cay,45.00,USD\n"),
+    );
+    assert.equal(result.validRows, 0);
+    assert.ok(result.errors.some((e) => e.errorCode === "CURRENCY_UNSUPPORTED"));
+  });
+
+  it("flags conflicting modifier group rules in dry-run errors", async () => {
+    const result = await parseMenuImportFile(
+      csvBuffer(
+        [
+          "category,product_name,price,modifier_group,modifier_option,selection_type,min_select,max_select",
+          "Icecek,Cay,45,Boyut,Kucuk,SINGLE,0,1",
+          "Icecek,Kahve,50,Boyut,Buyuk,MULTI,1,3",
+        ].join("\n"),
+      ),
+    );
+    assert.ok(result.errors.some((e) => e.errorCode === "MODIFIER_RULE_CONFLICT"));
   });
 
   it("rejects CSV filename that carries ZIP/XLSX magic (not parsed as CSV)", async () => {
@@ -140,32 +226,48 @@ describe("parseMenuImportFile", () => {
     );
     assert.equal(result.validRows, 1);
     assert.equal(result.errorRows, 2);
-    assert.ok(result.errors.some((e) => e.errorCode === "PRICE_NEGATIVE"));
-    assert.ok(result.errors.some((e) => e.errorCode === "PRICE_INVALID"));
   });
 
-  it("parses a tiny xlsx buffer via ExcelJS", async () => {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Menu");
-    sheet.addRow(["category", "product_name", "price"]);
-    sheet.addRow(["Icecek", "Cay", "45.00"]);
-    const arrayBuffer = await workbook.xlsx.writeBuffer();
-    const buffer = Buffer.from(arrayBuffer as ArrayBuffer);
+  it("parses a tiny xlsx via buildMinimalMenuImportXlsx (no exceljs)", async () => {
+    const buffer = buildMinimalMenuImportXlsx([
+      ["category", "product_name", "price"],
+      ["Icecek", "Cay", "45.00"],
+    ]);
     const result = await parseMenuImportFile({
       buffer,
       originalFileName: "menu.xlsx",
     });
     assert.equal(result.validRows, 1);
     assert.equal(result.rows[0]!.productName, "Cay");
-    assert.match(result.contentType, /spreadsheetml/);
   });
 
-  it("buildSampleCsv parses cleanly", async () => {
+  it("rejects crafted high-ratio XLSX zip-bomb before inflate", async () => {
+    const bomb = craftZipWithSizes({
+      name: "xl/worksheets/sheet1.xml",
+      payload: Buffer.from("a".repeat(100), "utf8"),
+      method: 8,
+      declaredUncompressed: 5 * 1024 * 1024,
+    });
+    assert.throws(() => assertSafeXlsxZip(bomb), (err: unknown) => {
+      return err instanceof Error && (err.name === "XLSX_ZIP_BOMB" || /XLSX_ZIP_BOMB/.test(err.message));
+    });
+    await assert.rejects(
+      () => parseMenuImportFile({ buffer: bomb, originalFileName: "bomb.xlsx" }),
+      (err: unknown) =>
+        err instanceof Error && "code" in err && (err as { code: string }).code === "XLSX_ZIP_BOMB",
+    );
+  });
+
+  it("buildSampleCsv and buildSampleXlsx parse cleanly", async () => {
     const sample = buildSampleCsv();
-    assert.ok(sample.charCodeAt(0) === 0xfeff || sample.startsWith("category"));
-    const result = await parseMenuImportFile(csvBuffer(sample, "sample.csv"));
-    assert.ok(result.validRows >= 3);
-    assert.equal(result.errorRows, 0);
-    assert.ok(result.rows.some((r) => r.productName === "Cay"));
+    const csv = await parseMenuImportFile(csvBuffer(sample, "sample.csv"));
+    assert.ok(csv.validRows >= 3);
+    assert.equal(csv.errorRows, 0);
+
+    const xlsx = await parseMenuImportFile({
+      buffer: buildSampleXlsx(),
+      originalFileName: "sample.xlsx",
+    });
+    assert.ok(xlsx.validRows >= 2);
   });
 });

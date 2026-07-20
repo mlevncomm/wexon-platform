@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { MembershipRole } from ".prisma/client";
 import {
   acknowledgeQrPackAction,
@@ -209,6 +209,7 @@ export function ActivationWizardClient(props: Props) {
   const [forceReimport, setForceReimport] = useState(false);
   const [confirmApply, setConfirmApply] = useState(false);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const menuApplyFormRef = useRef<HTMLFormElement>(null);
 
   const issuedQrs = useMemo(() => {
     if (tableState.ok && tableState.issuedQrs?.length) return tableState.issuedQrs;
@@ -241,6 +242,25 @@ export function ActivationWizardClient(props: Props) {
 
   const menuJourneyVersion =
     menuApplyState.journeyVersion ?? menuSkipState.journeyVersion ?? props.journeyVersion;
+
+  // Continue apply across request-bounded chunks (~50 rows each).
+  useEffect(() => {
+    if (!confirmApply || menuApplyPending) return;
+    if (!menuApplyState.ok) return;
+    if (menuApplyState.menuImportDone !== false) return;
+    if (menuJob?.status !== "APPLYING" && menuJob?.status !== "FAILED") return;
+    const timer = window.setTimeout(() => {
+      menuApplyFormRef.current?.requestSubmit();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [
+    confirmApply,
+    menuApplyPending,
+    menuApplyState.ok,
+    menuApplyState.menuImportDone,
+    menuApplyState.menuImportJob?.version,
+    menuJob?.status,
+  ]);
 
   if (props.isLegacyActive) {
     return (
@@ -752,7 +772,7 @@ export function ActivationWizardClient(props: Props) {
                     Önizlemeyi onaylıyorum; menüyü uygula
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    <form action={menuApplyAction}>
+                    <form ref={menuApplyFormRef} action={menuApplyAction}>
                       <input type="hidden" name="organizationId" value={props.organizationId} />
                       <input type="hidden" name="expectedVersion" value={String(menuJourneyVersion)} />
                       <input type="hidden" name="jobId" value={menuJob.id} />
@@ -771,8 +791,8 @@ export function ActivationWizardClient(props: Props) {
                         data-testid="menu-import-apply"
                       >
                         {menuApplyPending
-                          ? "Uygulanıyor…"
-                          : menuJob.status === "FAILED"
+                          ? `Uygulanıyor… (${menuJob.appliedRows}/${menuJob.validRows || menuJob.totalRows})`
+                          : menuJob.status === "FAILED" || menuJob.status === "APPLYING"
                             ? "Kaldığı yerden devam et"
                             : "Menüyü uygula"}
                       </button>

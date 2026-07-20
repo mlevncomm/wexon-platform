@@ -20,7 +20,7 @@ import {
 } from "@/lib/wexpay-staff-invite";
 import {
   uploadAndDryRunMenuImport,
-  applyMenuImportUntilDone,
+  applyMenuImportChunk,
   cancelMenuImportJob,
   skipMenuImportEmptyStart,
   MenuImportError,
@@ -44,6 +44,8 @@ export type WizardActionState = {
   issuedQrs?: WizardIssuedQr[];
   journeyVersion?: number;
   menuImportJob?: MenuImportJobView;
+  /** Menu import: false when more chunks remain — UI should continue. */
+  menuImportDone?: boolean;
 };
 
 function readString(formData: FormData, key: string) {
@@ -331,7 +333,8 @@ export async function applyMenuImportAction(
     const jobId = readString(formData, "jobId");
     const jobExpectedVersion = Number(readString(formData, "jobExpectedVersion") || "0");
     const { user } = await requireWizardActor(organizationId);
-    const result = await applyMenuImportUntilDone({
+    // One chunk (~50 rows) per request — UI continues until done.
+    const result = await applyMenuImportChunk({
       organizationId,
       actorUserId: user.id,
       expectedVersion,
@@ -341,11 +344,14 @@ export async function applyMenuImportAction(
       forceReimport: readString(formData, "forceReimport") === "1",
     });
     revalidatePath("/dashboard/wexpay/activation");
-    revalidatePath("/dashboard");
+    if (result.done) {
+      revalidatePath("/dashboard");
+    }
     return {
       ok: true,
       menuImportJob: result.job,
       journeyVersion: result.journeyVersion,
+      menuImportDone: result.done,
     };
   } catch (error) {
     return mapError(error);
