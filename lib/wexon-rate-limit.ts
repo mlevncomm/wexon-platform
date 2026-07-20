@@ -55,6 +55,9 @@ export const RATE_LIMITS = {
   wexpayApi: { limit: 120, windowMs: 60 * 1000 },
   /** Public probes — generous but bounded scrape resistance */
   healthProbe: { limit: 120, windowMs: 60 * 1000 },
+  staffInviteCreate: { limit: 20, windowMs: 15 * 60 * 1000 },
+  staffInviteResend: { limit: 10, windowMs: 15 * 60 * 1000 },
+  staffInviteAccept: { limit: 30, windowMs: 15 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 export function buildRateLimitKey(scope: string, identifier: string) {

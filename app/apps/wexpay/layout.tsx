@@ -68,8 +68,14 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-800/80">Akıllı Aktivasyon</p>
             <p className="mt-1 text-sm font-black">Kurulum Modu</p>
             <p className="mt-1 text-sm font-semibold text-amber-900/80">
-              Çalışma alanı kurulum için açık. Canlı QR, misafir sipariş ve ödeme Canlıya Geçiş sonrası açılır.
+              Çalışma alanı kurulum için açık. Canlı QR bağlantıları Canlıya Geçiş sonrası açılır.
             </p>
+            <a
+              href={`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(access.organization.id)}`}
+              className="mt-2 inline-flex text-sm font-bold text-amber-900 underline"
+            >
+              Kuruluma devam et
+            </a>
           </div>
         ) : null}
         <Suspense fallback={null}>

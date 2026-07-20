@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SetupModeBanner } from "@/components/wexpay/SetupModeBanner";
 import {
   DashboardAccountStatusNotice,
   DashboardCompactPanel,
@@ -7,7 +8,7 @@ import {
   DashboardKpiGrid,
   DashboardMetricList,
   DashboardMetricRow,
-  DashboardPageHeader,
+  DashboardSectionTitle,
   DashboardStatusBar,
   DashboardStatusItem,
   DashboardSummaryCard,
@@ -111,7 +112,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
 
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
-      <DashboardPageHeader
+      <DashboardSectionTitle
         badge="Genel bakış"
         title={displayOrganizationName}
         description="Hesap durumu, ürün erişimleri ve operasyon özetini tek yerden takip edin."
@@ -158,43 +159,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
         </div>
       )}
 
-      {activationView && (
-        <div
-          className={
-            activationView.setupMode
-              ? "rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 shadow-sm"
-              : "rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm"
-          }
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-current/70">Akıllı Aktivasyon</p>
-              <p className="mt-1 text-sm font-black">
-                {activationView.setupMode ? "Kurulum Modu" : "Canlı Kullanım"}
-              </p>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-current/80">
-                {activationView.setupMode
-                  ? "WexPay çalışma alanınız kurulum için açık. Canlı QR, misafir sipariş ve ödeme Canlıya Geçiş tamamlanana kadar kapalıdır."
-                  : "Akıllı Aktivasyon tamamlandı. Public QR ve sipariş akışları canlıdır."}
-              </p>
-            </div>
-            <div className="rounded-xl bg-white/70 px-3 py-2 text-xs font-bold text-slate-800">
-              {activationView.statusLabel}
-            </div>
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <DashboardInfoRow label="Durum" value={activationView.statusLabel} />
-            <DashboardInfoRow
-              label="Kaynak"
-              value={activationView.sourceLabel ?? "—"}
-            />
-            <DashboardInfoRow
-              label="Adım"
-              value={activationView.currentStepLabel ?? "—"}
-            />
-          </div>
+      {activationView ? (
+        <SetupModeBanner
+          view={activationView}
+          continueHref={dashboardHref("/dashboard/wexpay/activation", organizationContext)}
+        />
+      ) : null}
+
+      {!activationView?.setupMode && activationView?.uiStatus === "ACTIVE" ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-current/70">Akıllı Aktivasyon</p>
+          <p className="mt-1 text-sm font-black">Canlı Kullanım</p>
+          <p className="mt-2 text-sm font-semibold leading-relaxed text-current/80">
+            Akıllı Aktivasyon tamamlandı. Public QR ve sipariş akışları canlıdır.
+          </p>
         </div>
-      )}
+      ) : null}
 
       {!organization.isActive && <DashboardAccountStatusNotice />}
 

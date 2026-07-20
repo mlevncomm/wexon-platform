@@ -22,7 +22,7 @@ import {
 } from "@/lib/wexpay-tenant";
 import { type OrderItemInput, WexPayValidationError } from "@/lib/wexpay-validation";
 import { priceOrderLine, sumPricedLinesSubtotal } from "@/lib/wexpay-order-pricing";
-import { lockWexPayOrgTableLimit, lockWexPayTableAccount } from "@/lib/wexpay-locks";
+import { lockWexPayOrgBranchLimit, lockWexPayOrgTableLimit, lockWexPayTableAccount } from "@/lib/wexpay-locks";
 import { resolveWexPayPaymentProvider, type WexPayPaymentProviderKey } from "@/lib/wexpay-payment-provider";
 import { generatePaytrMerchantOid } from "@/lib/wexpay-paytr-adapter";
 
@@ -285,6 +285,7 @@ export async function createBranch(
 
   try {
     return await runInTransaction(async (tx) => {
+      await lockWexPayOrgBranchLimit(tx, context.organizationId);
       await assertRestaurantInOrg(tx, context.organizationId, input.restaurantId);
 
       const currentBranches = await countOrgBranches(tx, context.organizationId);

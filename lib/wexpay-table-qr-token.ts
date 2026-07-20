@@ -94,6 +94,129 @@ async function assertTableOwnedByOrganization(
 }
 
 /**
+ * Issue first ACTIVE token inside an existing transaction (material pre-generated in memory).
+ * Raw plaintext must never be written to DB/audit/logs.
+ */
+export async function issueTableQrTokenInTx(
+  tx: DbClient,
+  input: {
+    tableId: string;
+    organizationId: string;
+    actorUserId?: string | null;
+    material: GeneratedTableQrToken;
+  },
+): Promise<IssueTableQrTokenResult> {
+  await assertTableOwnedByOrganization(tx, input.tableId, input.organizationId);
+
+  const existingActive = await tx.tableQrToken.findFirst({
+    where: { tableId: input.tableId, status: TableQrTokenStatus.ACTIVE },
+    select: { id: true },
+  });
+  if (existingActive) {
+    throw new TableQrTokenError("ACTIVE_EXISTS", "Masada zaten aktif bir QR token var. Rotate kullanın.");
+  }
+
+  const token = await tx.tableQrToken.create({
+    data: {
+      tableId: input.tableId,
+      tokenHash: input.material.tokenHash,
+      tokenPrefix: input.material.tokenPrefix,
+      status: TableQrTokenStatus.ACTIVE,
+    },
+  });
+
+  await writeAuditLog(
+    {
+      action: "wexpay.qr.issued",
+      organizationId: input.organizationId,
+      userId: input.actorUserId ?? null,
+      entityType: "TableQrToken",
+      entityId: token.id,
+      source: "table_qr_token",
+      message: "Güvenli masa QR token oluşturuldu.",
+      metadata: sanitizeTableQrTokenAuditMetadata({
+        tableId: input.tableId,
+        tokenPrefix: input.material.tokenPrefix,
+        tokenId: token.id,
+      }),
+    },
+    tx,
+  );
+
+  return {
+    token,
+    plaintext: input.material.plaintext,
+    publicPath: buildOpaquePublicQrPath(input.material.plaintext),
+  };
+}
+
+/** Rotate (or issue if none) inside an existing transaction. */
+export async function rotateTableQrTokenInTx(
+  tx: DbClient,
+  input: {
+    tableId: string;
+    organizationId: string;
+    actorUserId?: string | null;
+    material?: GeneratedTableQrToken;
+  },
+): Promise<IssueTableQrTokenResult> {
+  await assertTableOwnedByOrganization(tx, input.tableId, input.organizationId);
+
+  const now = new Date();
+  const previous = await tx.tableQrToken.findFirst({
+    where: { tableId: input.tableId, status: TableQrTokenStatus.ACTIVE },
+  });
+
+  if (previous) {
+    await tx.tableQrToken.update({
+      where: { id: previous.id },
+      data: {
+        status: TableQrTokenStatus.REVOKED,
+        revokedAt: now,
+        rotatedAt: now,
+      },
+    });
+  }
+
+  const material = input.material ?? generateSecureTableQrTokenMaterial();
+  const token = await tx.tableQrToken.create({
+    data: {
+      tableId: input.tableId,
+      tokenHash: material.tokenHash,
+      tokenPrefix: material.tokenPrefix,
+      status: TableQrTokenStatus.ACTIVE,
+      rotatedAt: previous ? now : null,
+    },
+  });
+
+  await writeAuditLog(
+    {
+      action: previous ? "wexpay.qr.rotated" : "wexpay.qr.issued",
+      organizationId: input.organizationId,
+      userId: input.actorUserId ?? null,
+      entityType: "TableQrToken",
+      entityId: token.id,
+      source: "table_qr_token",
+      message: previous ? "Masa QR token döndürüldü." : "Güvenli masa QR token oluşturuldu.",
+      metadata: sanitizeTableQrTokenAuditMetadata({
+        tableId: input.tableId,
+        tokenPrefix: material.tokenPrefix,
+        tokenId: token.id,
+        previousTokenId: previous?.id ?? null,
+        previousTokenPrefix: previous?.tokenPrefix ?? null,
+      }),
+    },
+    tx,
+  );
+
+  return {
+    token,
+    plaintext: material.plaintext,
+    publicPath: buildOpaquePublicQrPath(material.plaintext),
+  };
+}
+
+/**
  * Create the first ACTIVE token for a table (fails if one already exists).
  * Prefer rotateTableQrToken when replacing.
  */
@@ -102,51 +225,15 @@ export async function issueTableQrToken(input: {
   organizationId: string;
   actorUserId?: string | null;
 }): Promise<IssueTableQrTokenResult> {
-  return prisma.$transaction(async (tx) => {
-    await assertTableOwnedByOrganization(tx, input.tableId, input.organizationId);
-
-    const existingActive = await tx.tableQrToken.findFirst({
-      where: { tableId: input.tableId, status: TableQrTokenStatus.ACTIVE },
-      select: { id: true },
-    });
-    if (existingActive) {
-      throw new TableQrTokenError("ACTIVE_EXISTS", "Masada zaten aktif bir QR token var. Rotate kullanın.");
-    }
-
-    const material = generateSecureTableQrTokenMaterial();
-    const token = await tx.tableQrToken.create({
-      data: {
-        tableId: input.tableId,
-        tokenHash: material.tokenHash,
-        tokenPrefix: material.tokenPrefix,
-        status: TableQrTokenStatus.ACTIVE,
-      },
-    });
-
-    await writeAuditLog(
-      {
-        action: "wexpay.qr.issued",
-        organizationId: input.organizationId,
-        userId: input.actorUserId ?? null,
-        entityType: "TableQrToken",
-        entityId: token.id,
-        source: "table_qr_token",
-        message: "Güvenli masa QR token oluşturuldu.",
-        metadata: sanitizeTableQrTokenAuditMetadata({
-          tableId: input.tableId,
-          tokenPrefix: material.tokenPrefix,
-          tokenId: token.id,
-        }),
-      },
-      tx,
-    );
-
-    return {
-      token,
-      plaintext: material.plaintext,
-      publicPath: buildOpaquePublicQrPath(material.plaintext),
-    };
-  });
+  const material = generateSecureTableQrTokenMaterial();
+  return prisma.$transaction(async (tx) =>
+    issueTableQrTokenInTx(tx, {
+      tableId: input.tableId,
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      material,
+    }),
+  );
 }
 
 /**

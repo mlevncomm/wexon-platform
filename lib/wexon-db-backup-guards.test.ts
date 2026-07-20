@@ -12,6 +12,7 @@ import {
   EXPECTED_PUBLIC_TABLE_COUNT,
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER,
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_SMART_ACTIVATION,
+  HISTORICAL_PUBLIC_TABLE_COUNT_PRE_STAFF_INVITE,
   parsePostgresMajorVersion,
   RECOVERY_STATUS,
   sanitizeBackupLog,
@@ -27,18 +28,31 @@ describe("parsePostgresMajorVersion", () => {
 });
 
 describe("current schema table count", () => {
-  it("expects 37 public tables after Smart Activation foundation", () => {
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 37);
+  it("expects 38 public tables after Smart Activation wizard (StaffInvite)", () => {
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 38);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER, 33);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_SMART_ACTIVATION, 34);
-    assert.equal(assertCurrentSchemaPublicTableCount(37).ok, true);
+    assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_STAFF_INVITE, 37);
+    assert.equal(assertCurrentSchemaPublicTableCount(38).ok, true);
+    assert.equal(assertCurrentSchemaPublicTableCount(37).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(34).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(33).ok, false);
   });
 
-  it("accepts a current 37-table manifest contract", () => {
+  it("accepts a current 38-table manifest contract", () => {
     const rowCounts = Object.fromEntries(
-      Array.from({ length: 37 }, (_, i) => [`T${i}`, i]),
+      Array.from({ length: 38 }, (_, i) => [`T${i}`, i]),
+    );
+    const ok = evaluateRestoreTableCountContract({
+      restoredTableCount: 38,
+      manifest: { tableCount: 38, rowCounts },
+    });
+    assert.equal(ok.ok, true);
+  });
+
+  it("accepts a historical 37-table (pre-staff-invite) manifest", () => {
+    const rowCounts = Object.fromEntries(
+      Array.from({ length: 37 }, (_, i) => [`S${i}`, i]),
     );
     const ok = evaluateRestoreTableCountContract({
       restoredTableCount: 37,
@@ -69,12 +83,12 @@ describe("current schema table count", () => {
     assert.equal(ok.ok, true);
   });
 
-  it("rejects manifest 33 vs restore 37", () => {
+  it("rejects manifest 33 vs restore 38", () => {
     const rowCounts = Object.fromEntries(
       Array.from({ length: 33 }, (_, i) => [`H${i}`, i]),
     );
     const bad = evaluateRestoreTableCountContract({
-      restoredTableCount: 37,
+      restoredTableCount: 38,
       manifest: { tableCount: 33, rowCounts },
     });
     assert.equal(bad.ok, false);
