@@ -1,21 +1,22 @@
 import { inflateRaw } from "node:zlib";
-import { promisify } from "node:util";
-
-const inflateRawAsync = promisify(inflateRaw);
 
 const SIG_EOCD = 0x06054b50;
 const SIG_CENTRAL = 0x02014b50;
 const SIG_LOCAL = 0x04034b50;
 
-const MAX_ENTRIES = 64;
-const MAX_UNCOMPRESSED_TOTAL = 12 * 1024 * 1024;
-const MAX_UNCOMPRESSED_ENTRY = 12 * 1024 * 1024;
+export const MENU_IMPORT_XLSX_MAX_ENTRIES = 64;
+export const MENU_IMPORT_XLSX_MAX_INFLATED_BYTES = 12 * 1024 * 1024;
+export const MENU_IMPORT_XLSX_MAX_MATRIX_ROWS = 2005;
+export const MENU_IMPORT_XLSX_MAX_MATRIX_COLS = 64;
+
 const MAX_RATIO = 100;
 const RATIO_MIN_UNCOMPRESSED = 64 * 1024;
-const MAX_MATRIX_ROWS = 2005;
 
 const COMPRESSION_STORE = 0;
 const COMPRESSION_DEFLATE = 8;
+
+const GPBF_ENCRYPTED = 0x0001;
+const GPBF_DATA_DESCRIPTOR = 0x0008;
 
 const textDecoder = new TextDecoder("utf-8", { fatal: false });
 
@@ -27,10 +28,50 @@ type ZipCentralEntry = {
   localHeaderOffset: number;
 };
 
-function zipError(code: "XLSX_ZIP_BOMB" | "XLSX_TOO_LARGE" | "XLSX_INVALID_ZIP", detail?: string): Error {
+type InflateBudget = {
+  used: number;
+  limit: number;
+};
+
+type ZipErrorCode =
+  | "XLSX_ZIP_BOMB"
+  | "XLSX_TOO_LARGE"
+  | "XLSX_INVALID_ZIP"
+  | "XLSX_CELL_LIMIT";
+
+function zipError(code: ZipErrorCode, detail?: string): Error {
   const err = new Error(detail ? `${code}: ${detail}` : code);
   err.name = code;
   return err;
+}
+
+/**
+ * Inflates raw deflate data with a hard output ceiling.
+ * Never use declared ZIP uncompressedSize as the sole output bound.
+ */
+export function inflateRawBounded(
+  compressed: Buffer,
+  maxOutputLength: number,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    inflateRaw(compressed, { maxOutputLength }, (err, result) => {
+      if (err) {
+        const msg = err.message ?? "";
+        if (
+          /maxOutputLength|too large|Maximum output length|ERR_BUFFER_TOO_LARGE/i.test(
+            msg,
+          ) ||
+          (err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE"
+        ) {
+          reject(zipError("XLSX_TOO_LARGE", "inflated output exceeds bound"));
+          return;
+        }
+        reject(zipError("XLSX_INVALID_ZIP", "deflate failed"));
+        return;
+      }
+      resolve(result as Buffer);
+    });
+  });
 }
 
 function readUInt16LE(buf: Buffer, offset: number): number {
@@ -66,8 +107,11 @@ function parseCentralDirectory(buffer: Buffer): ZipCentralEntry[] {
   const centralSize = readUInt32LE(buffer, eocdOffset + 12);
   const centralOffset = readUInt32LE(buffer, eocdOffset + 16);
 
-  if (totalEntries > MAX_ENTRIES) {
-    throw zipError("XLSX_ZIP_BOMB", `entry count ${totalEntries} exceeds ${MAX_ENTRIES}`);
+  if (totalEntries > MENU_IMPORT_XLSX_MAX_ENTRIES) {
+    throw zipError(
+      "XLSX_ZIP_BOMB",
+      `entry count ${totalEntries} exceeds ${MENU_IMPORT_XLSX_MAX_ENTRIES}`,
+    );
   }
 
   if (centralOffset + centralSize > buffer.length) {
@@ -107,12 +151,12 @@ function parseCentralDirectory(buffer: Buffer): ZipCentralEntry[] {
       throw zipError("XLSX_INVALID_ZIP", `unsupported compression method ${compressionMethod}`);
     }
 
-    if (uncompressedSize > MAX_UNCOMPRESSED_ENTRY) {
+    if (uncompressedSize > MENU_IMPORT_XLSX_MAX_INFLATED_BYTES) {
       throw zipError("XLSX_TOO_LARGE", `entry ${fileName} uncompressed size exceeds limit`);
     }
 
     uncompressedSum += uncompressedSize;
-    if (uncompressedSum > MAX_UNCOMPRESSED_TOTAL) {
+    if (uncompressedSum > MENU_IMPORT_XLSX_MAX_INFLATED_BYTES) {
       throw zipError("XLSX_TOO_LARGE", "total uncompressed size exceeds limit");
     }
 
@@ -144,7 +188,7 @@ function parseCentralDirectory(buffer: Buffer): ZipCentralEntry[] {
 
 /**
  * Validates ZIP structure and applies zip-bomb / size guards for XLSX uploads.
- * Throws Error whose message starts with XLSX_ZIP_BOMB | XLSX_TOO_LARGE | XLSX_INVALID_ZIP.
+ * Throws Error whose name/message uses XLSX_ZIP_BOMB | XLSX_TOO_LARGE | XLSX_INVALID_ZIP.
  */
 export function assertSafeXlsxZip(buffer: Buffer): void {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
@@ -153,41 +197,43 @@ export function assertSafeXlsxZip(buffer: Buffer): void {
   parseCentralDirectory(buffer);
 }
 
-async function inflateEntry(compressed: Buffer, method: number, expectedUncompressed: number): Promise<Buffer> {
-  if (method === COMPRESSION_STORE) {
-    if (compressed.length !== expectedUncompressed && expectedUncompressed > 0) {
-      // Some writers leave sizes inconsistent; still cap by declared size when larger.
-      if (compressed.length > MAX_UNCOMPRESSED_ENTRY) {
-        throw zipError("XLSX_TOO_LARGE", "stored entry too large");
-      }
-    }
-    return compressed;
-  }
-
-  if (method === COMPRESSION_DEFLATE) {
-    let inflated: Buffer;
-    try {
-      inflated = await inflateRawAsync(compressed) as Buffer;
-    } catch {
-      throw zipError("XLSX_INVALID_ZIP", "deflate failed");
-    }
-    if (inflated.length > MAX_UNCOMPRESSED_ENTRY) {
-      throw zipError("XLSX_TOO_LARGE", "inflated entry too large");
-    }
-    if (expectedUncompressed > 0 && inflated.length !== expectedUncompressed) {
-      // Allow mismatch but still enforce absolute cap already checked.
-    }
-    return inflated;
-  }
-
-  throw zipError("XLSX_INVALID_ZIP", `unsupported compression method ${method}`);
-}
-
-async function readZipEntry(buffer: Buffer, entry: ZipCentralEntry): Promise<Buffer> {
+async function readZipEntry(
+  buffer: Buffer,
+  entry: ZipCentralEntry,
+  budget: InflateBudget,
+): Promise<Buffer> {
   const { localHeaderOffset: off } = entry;
   if (off + 30 > buffer.length) throw zipError("XLSX_INVALID_ZIP", "local header out of bounds");
   if (readUInt32LE(buffer, off) !== SIG_LOCAL) {
     throw zipError("XLSX_INVALID_ZIP", "bad local header signature");
+  }
+
+  const gpbf = readUInt16LE(buffer, off + 6);
+  if (gpbf & GPBF_ENCRYPTED) {
+    throw zipError("XLSX_INVALID_ZIP", "encrypted entries are not allowed");
+  }
+
+  const localMethod = readUInt16LE(buffer, off + 8);
+  if (localMethod !== entry.compressionMethod) {
+    throw zipError("XLSX_INVALID_ZIP", "local compression method mismatch");
+  }
+
+  const localCompressedSize = readUInt32LE(buffer, off + 18);
+  const localUncompressedSize = readUInt32LE(buffer, off + 22);
+  const hasDataDescriptor = (gpbf & GPBF_DATA_DESCRIPTOR) !== 0;
+
+  if (hasDataDescriptor) {
+    if (localCompressedSize !== 0 || localUncompressedSize !== 0) {
+      throw zipError(
+        "XLSX_INVALID_ZIP",
+        "data descriptor flag set but local sizes are non-zero",
+      );
+    }
+  } else if (
+    localCompressedSize !== entry.compressedSize ||
+    localUncompressedSize !== entry.uncompressedSize
+  ) {
+    throw zipError("XLSX_INVALID_ZIP", "local sizes do not match central directory");
   }
 
   const nameLen = readUInt16LE(buffer, off + 26);
@@ -197,7 +243,27 @@ async function readZipEntry(buffer: Buffer, entry: ZipCentralEntry): Promise<Buf
   if (dataEnd > buffer.length) throw zipError("XLSX_INVALID_ZIP", "compressed data out of bounds");
 
   const compressed = buffer.subarray(dataStart, dataEnd);
-  return inflateEntry(compressed, entry.compressionMethod, entry.uncompressedSize);
+  const remaining = budget.limit - budget.used;
+  if (remaining <= 0) {
+    throw zipError("XLSX_TOO_LARGE", "inflate budget exhausted");
+  }
+
+  if (entry.compressionMethod === COMPRESSION_STORE) {
+    if (compressed.length > remaining) {
+      throw zipError("XLSX_TOO_LARGE", "stored entry exceeds inflate budget");
+    }
+    budget.used += compressed.length;
+    return compressed;
+  }
+
+  if (entry.compressionMethod === COMPRESSION_DEFLATE) {
+    const hardCap = Math.min(MENU_IMPORT_XLSX_MAX_INFLATED_BYTES, remaining);
+    const inflated = await inflateRawBounded(compressed, hardCap);
+    budget.used += inflated.length;
+    return inflated;
+  }
+
+  throw zipError("XLSX_INVALID_ZIP", `unsupported compression method ${entry.compressionMethod}`);
 }
 
 function normalizeZipPath(path: string): string {
@@ -251,20 +317,35 @@ function parseSharedStrings(xml: string): string[] {
   return strings;
 }
 
-function colLettersToIndex(col: string): number {
+export function colLettersToIndex(col: string): number {
+  if (col.length === 0 || col.length > 3) {
+    throw zipError("XLSX_CELL_LIMIT", "column letters length exceeds 3");
+  }
   let n = 0;
   for (let i = 0; i < col.length; i++) {
     const c = col.charCodeAt(i);
-    if (c < 65 || c > 90) throw new Error("XLSX_INVALID_ZIP: bad cell reference");
+    if (c < 65 || c > 90) throw zipError("XLSX_INVALID_ZIP", "bad cell reference");
     n = n * 26 + (c - 64);
   }
-  return n - 1;
+  const index = n - 1;
+  if (index >= MENU_IMPORT_XLSX_MAX_MATRIX_COLS) {
+    throw zipError("XLSX_CELL_LIMIT", `column ${col} exceeds matrix column limit`);
+  }
+  return index;
 }
 
-function parseCellRef(ref: string): { row: number; col: number } {
+export function parseCellRef(ref: string): { row: number; col: number } {
   const m = /^([A-Z]+)(\d+)$/.exec(ref.toUpperCase());
-  if (!m) throw new Error("XLSX_INVALID_ZIP: bad cell reference");
-  return { col: colLettersToIndex(m[1]!), row: Number(m[2]) - 1 };
+  if (!m) throw zipError("XLSX_INVALID_ZIP", "bad cell reference");
+  const col = colLettersToIndex(m[1]!);
+  const row = Number(m[2]) - 1;
+  if (!Number.isFinite(row) || row < 0) {
+    throw zipError("XLSX_INVALID_ZIP", "bad cell reference");
+  }
+  if (row >= MENU_IMPORT_XLSX_MAX_MATRIX_ROWS) {
+    throw zipError("XLSX_CELL_LIMIT", `row exceeds matrix row limit`);
+  }
+  return { col, row };
 }
 
 function indexToColLetters(index: number): string {
@@ -305,7 +386,7 @@ function cellValueFromXml(
   if (cellType === "s") {
     const idx = Number(raw);
     if (!Number.isInteger(idx) || idx < 0 || idx >= sharedStrings.length) {
-      throw new Error("XLSX_INVALID_ZIP: bad shared string index");
+      throw zipError("XLSX_INVALID_ZIP", "bad shared string index");
     }
     return sharedStrings[idx] ?? "";
   }
@@ -318,10 +399,30 @@ function cellValueFromXml(
   return raw;
 }
 
+function assertDimensionWithinLimits(sheetXml: string): void {
+  const dimMatch = /<dimension\b[^>]*\bref="([^"]+)"/i.exec(sheetXml);
+  if (!dimMatch) return;
+
+  const dimRef = dimMatch[1]!;
+  const parts = dimRef.split(":");
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    // Dimension refs are cell addresses like A1 or AA2005.
+    if (/^[A-Za-z]+\d+$/.test(trimmed)) {
+      parseCellRef(trimmed);
+    }
+  }
+}
+
 function parseWorksheetMatrix(sheetXml: string, sharedStrings: string[]): string[][] {
   if (/<f\b[\s/>]/i.test(sheetXml)) {
-    throw new Error("XLSX_FORMULA_REJECTED: formula cells are not allowed");
+    const err = new Error("XLSX_FORMULA_REJECTED: formula cells are not allowed");
+    err.name = "XLSX_FORMULA_REJECTED";
+    throw err;
   }
+
+  assertDimensionWithinLimits(sheetXml);
 
   const sheetDataMatch = /<sheetData\b[^>]*>([\s\S]*?)<\/sheetData>/i.exec(sheetXml);
   const sheetData = sheetDataMatch?.[1] ?? "";
@@ -349,9 +450,6 @@ function parseWorksheetMatrix(sheetXml: string, sharedStrings: string[]): string
       if (rowAttrNum != null && Number(rowAttrNum) - 1 !== row) {
         // Prefer explicit cell ref when present.
       }
-      if (row >= MAX_MATRIX_ROWS) {
-        throw new Error(`XLSX_TOO_LARGE: more than ${MAX_MATRIX_ROWS} rows`);
-      }
 
       const t = extractAttr(cellAttrs, "t");
       const value = cellValueFromXml(cellInner, t, sharedStrings);
@@ -363,10 +461,14 @@ function parseWorksheetMatrix(sheetXml: string, sharedStrings: string[]): string
 
   if (maxRow < 0) return [];
 
-  if (maxRow + 1 > MAX_MATRIX_ROWS) {
-    throw new Error(`XLSX_TOO_LARGE: more than ${MAX_MATRIX_ROWS} rows`);
+  if (maxRow + 1 > MENU_IMPORT_XLSX_MAX_MATRIX_ROWS) {
+    throw zipError("XLSX_CELL_LIMIT", `more than ${MENU_IMPORT_XLSX_MAX_MATRIX_ROWS} rows`);
+  }
+  if (maxCol + 1 > MENU_IMPORT_XLSX_MAX_MATRIX_COLS) {
+    throw zipError("XLSX_CELL_LIMIT", `more than ${MENU_IMPORT_XLSX_MAX_MATRIX_COLS} columns`);
   }
 
+  // Dense allocation only after dimension / cell-limit checks.
   const matrix: string[][] = [];
   for (let r = 0; r <= maxRow; r++) {
     const row: string[] = [];
@@ -382,12 +484,13 @@ async function resolveWorksheetEntry(
   buffer: Buffer,
   entries: ZipCentralEntry[],
   workbookXml: string,
+  budget: InflateBudget,
 ): Promise<ZipCentralEntry> {
   const sheetMatch = /<sheet\b[^>]*>/i.exec(workbookXml);
   if (!sheetMatch) {
     const fallback = findEntry(entries, "xl/worksheets/sheet1.xml");
     if (fallback) return fallback;
-    throw new Error("XLSX_INVALID_ZIP: no worksheet found");
+    throw zipError("XLSX_INVALID_ZIP", "no worksheet found");
   }
 
   const sheetTag = sheetMatch[0];
@@ -396,7 +499,7 @@ async function resolveWorksheetEntry(
   if (rid) {
     const relsEntry = findEntry(entries, "xl/_rels/workbook.xml.rels");
     if (relsEntry) {
-      const relsXml = decodeXml(await readZipEntry(buffer, relsEntry));
+      const relsXml = decodeXml(await readZipEntry(buffer, relsEntry, budget));
       const relRe = /<Relationship\b[^>]*>/gi;
       let relMatch: RegExpExecArray | null;
       while ((relMatch = relRe.exec(relsXml)) !== null) {
@@ -417,36 +520,40 @@ async function resolveWorksheetEntry(
 
   const fallback = findEntry(entries, "xl/worksheets/sheet1.xml");
   if (fallback) return fallback;
-  throw new Error("XLSX_INVALID_ZIP: worksheet target not found");
+  throw zipError("XLSX_INVALID_ZIP", "worksheet target not found");
 }
 
 /**
  * Parses the first worksheet of an XLSX into a dense string matrix (used range).
- * Rejects formula cells (`<f>`). Caps at 2005 rows.
+ * Rejects formula cells (`<f>`). Caps rows/cols via MENU_IMPORT_XLSX_MAX_MATRIX_*.
  */
 export async function parseXlsxWorksheetMatrix(buffer: Buffer): Promise<string[][]> {
   assertSafeXlsxZip(buffer);
   const entries = parseCentralDirectory(buffer);
+  const budget: InflateBudget = {
+    used: 0,
+    limit: MENU_IMPORT_XLSX_MAX_INFLATED_BYTES,
+  };
 
   const workbookEntry = findEntry(entries, "xl/workbook.xml");
-  if (!workbookEntry) throw new Error("XLSX_INVALID_ZIP: missing xl/workbook.xml");
+  if (!workbookEntry) throw zipError("XLSX_INVALID_ZIP", "missing xl/workbook.xml");
 
-  const workbookXml = decodeXml(await readZipEntry(buffer, workbookEntry));
+  const workbookXml = decodeXml(await readZipEntry(buffer, workbookEntry, budget));
 
   // Optional content types — presence only; ignore parse failures.
   const contentTypes = findEntry(entries, "[Content_Types].xml");
   if (contentTypes) {
-    await readZipEntry(buffer, contentTypes);
+    await readZipEntry(buffer, contentTypes, budget);
   }
 
   let sharedStrings: string[] = [];
   const sstEntry = findEntry(entries, "xl/sharedStrings.xml");
   if (sstEntry) {
-    sharedStrings = parseSharedStrings(decodeXml(await readZipEntry(buffer, sstEntry)));
+    sharedStrings = parseSharedStrings(decodeXml(await readZipEntry(buffer, sstEntry, budget)));
   }
 
-  const sheetEntry = await resolveWorksheetEntry(buffer, entries, workbookXml);
-  const sheetXml = decodeXml(await readZipEntry(buffer, sheetEntry));
+  const sheetEntry = await resolveWorksheetEntry(buffer, entries, workbookXml, budget);
+  const sheetXml = decodeXml(await readZipEntry(buffer, sheetEntry, budget));
   return parseWorksheetMatrix(sheetXml, sharedStrings);
 }
 

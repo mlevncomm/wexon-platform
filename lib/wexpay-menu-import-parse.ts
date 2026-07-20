@@ -512,6 +512,9 @@ async function parseXlsxBuffer(buffer: Buffer): Promise<string[][]> {
     if (name === "XLSX_ZIP_BOMB" || message.startsWith("XLSX_ZIP_BOMB")) {
       throw new MenuImportParseError("XLSX_ZIP_BOMB", "XLSX zip-bomb / sıkıştırma oranı reddedildi.");
     }
+    if (name === "XLSX_CELL_LIMIT" || message.startsWith("XLSX_CELL_LIMIT")) {
+      throw new MenuImportParseError("XLSX_CELL_LIMIT", "XLSX satır/sütun sınırı aşıldı.");
+    }
     if (name === "XLSX_TOO_LARGE" || message.startsWith("XLSX_TOO_LARGE")) {
       throw new MenuImportParseError("XLSX_TOO_LARGE", "XLSX dosyası güvenlik sınırını aşıyor.");
     }
