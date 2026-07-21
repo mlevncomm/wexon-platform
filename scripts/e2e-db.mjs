@@ -135,10 +135,38 @@ async function waitReady(timeoutMs = 90_000) {
   process.exit(1);
 }
 
+async function ensureIsolatedTestRoles() {
+  assertIsolatedWexPayDatabase("e2e:db:roles");
+  const { default: pg } = await import("pg");
+  const client = new pg.Client({ connectionString: isolatedE2eConnectionUrl() });
+  await client.connect();
+  try {
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+          CREATE ROLE anon NOLOGIN;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+          CREATE ROLE authenticated NOLOGIN;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wexon_app') THEN
+          CREATE ROLE wexon_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE INHERIT;
+        END IF;
+      END
+      $$;
+    `);
+  } finally {
+    await client.end();
+  }
+  console.log("[e2e-db] isolated RLS test roles ready");
+}
+
 async function prepare() {
   applyIsolatedE2eEnv();
   assertIsolatedWexPayDatabase("e2e:db:prepare");
   console.log("[e2e-db] isolated safety assertion passed");
+  await ensureIsolatedTestRoles();
 
   run("npx", ["prisma", "generate"], {
     env: {
@@ -153,6 +181,16 @@ async function prepare() {
       ...process.env,
       DATABASE_URL: process.env.DATABASE_URL,
       DIRECT_URL: process.env.DIRECT_URL,
+    },
+  });
+
+  run("node", ["prisma/seed.mjs"], {
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.DATABASE_URL,
+      DIRECT_URL: process.env.DIRECT_URL,
+      WEXON_E2E_TARGET: "isolated",
+      WEXON_E2E_CONFIRM_ISOLATED: "true",
     },
   });
 

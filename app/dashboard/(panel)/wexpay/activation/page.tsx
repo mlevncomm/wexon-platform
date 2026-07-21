@@ -80,6 +80,11 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
 
   const isLegacyActive =
     view.journey?.status === "ACTIVE" && view.journey.source === "LEGACY_BACKFILL";
+  const publicOrigin = (
+    process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000"
+  ).replace(/\/+$/, "");
 
   // Prefer IDs stored in journey step metadata — never invent "first restaurant/branch".
   const restaurantId = typeof meta.restaurantId === "string" ? meta.restaurantId : null;
@@ -118,6 +123,7 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
         awaitingQrAck={Boolean(tableMeta.awaitingQrAck)}
         canSkipStaffInvite={canSkipStaffInvite}
         menuImportJob={menuImportJob}
+        publicOrigin={publicOrigin}
       />
     </div>
   );

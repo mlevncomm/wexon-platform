@@ -7,7 +7,11 @@ import { writeAuditFailure } from "@/lib/wexon-audit";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
-import { getActivationJourneyViewForOrg } from "@/lib/wexpay-activation-journey";
+import {
+  ACTIVATION_STEP_LABELS,
+  getActivationJourneyViewForOrg,
+  isActivationStepActionable,
+} from "@/lib/wexpay-activation-journey";
 
 function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayAccess>>, { allowed: true }>) {
   return access.organization.restaurants.flatMap((restaurant) =>
@@ -44,6 +48,8 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
 
   const branches = buildBranchOptions(access);
   const activationView = await getActivationJourneyViewForOrg(access.organization.id);
+  const activationStep = activationView.journey?.currentStep;
+  const canContinueActivation = isActivationStepActionable(activationStep);
 
   return (
     <Suspense
@@ -68,14 +74,21 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-800/80">Akıllı Aktivasyon</p>
             <p className="mt-1 text-sm font-black">Kurulum Modu</p>
             <p className="mt-1 text-sm font-semibold text-amber-900/80">
-              Çalışma alanı kurulum için açık. Canlı QR bağlantıları Canlıya Geçiş sonrası açılır.
+              Çalışma alanı kurulum için açık. Canlı QR bağlantıları Yayına alma sonrası açılır.
             </p>
-            <a
-              href={`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(access.organization.id)}`}
-              className="mt-2 inline-flex text-sm font-bold text-amber-900 underline"
-            >
-              Kuruluma devam et
-            </a>
+            {canContinueActivation ? (
+              <a
+                href={`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(access.organization.id)}`}
+                className="mt-2 inline-flex text-sm font-bold text-amber-900 underline"
+              >
+                Kuruluma devam et
+              </a>
+            ) : activationStep ? (
+              <p className="mt-2 text-sm font-bold text-amber-900">
+                {ACTIVATION_STEP_LABELS[activationStep]} henüz kullanıma açılmadı. Kurulumunuz
+                kaydedildi; şu anda işlem yapmanız gerekmiyor.
+              </p>
+            ) : null}
           </div>
         ) : null}
         <Suspense fallback={null}>

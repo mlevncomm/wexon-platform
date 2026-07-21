@@ -18,6 +18,7 @@ import {
   uploadMenuImportDryRunAction,
   type WizardActionState,
 } from "@/lib/wexpay-activation-wizard-actions";
+import { ACTIVATION_STEP_LABELS } from "@/lib/wexpay-activation-step-ui";
 import {
   downloadTableQrPng,
   generateTableQrDataUrl,
@@ -69,11 +70,32 @@ type Props = {
   awaitingQrAck: boolean;
   canSkipStaffInvite: boolean;
   menuImportJob: MenuImportJobView | null;
+  publicOrigin: string;
 };
 
 const initial: WizardActionState = { ok: false };
 
 const UPCOMING: StepKey[] = ["PAYMENT_PROVIDER", "VALIDATION", "GO_LIVE"];
+const INVITE_ROLE_LABELS: Record<MembershipRole, string> = {
+  OWNER: "Sahip",
+  ADMIN: "Yönetici",
+  MANAGER: "Müdür",
+  STAFF: "Personel",
+  BILLING: "Faturalama",
+  VIEWER: "Görüntüleyici",
+};
+const INVITE_DELIVERY_LABELS: Record<string, string> = {
+  PENDING: "Gönderim bekliyor",
+  SENT: "Gönderildi",
+  FAILED: "Gönderilemedi",
+};
+const MENU_IMPORT_STATUS_LABELS: Record<string, string> = {
+  DRY_RUN: "Önizleme hazır",
+  APPLYING: "Uygulanıyor",
+  APPLIED: "Tamamlandı",
+  FAILED: "Yarım kaldı",
+  CANCELLED: "İptal edildi",
+};
 
 function ErrorBox({ state }: { state: WizardActionState }) {
   if (state.ok || !state.error) return null;
@@ -274,9 +296,7 @@ export function ActivationWizardClient(props: Props) {
   }
 
   const step = props.currentStep;
-  const originHint =
-    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN?.replace(/\/+$/, "")) ||
-    (typeof window !== "undefined" ? window.location.origin : "https://www.wexon.dev");
+  const originHint = props.publicOrigin;
 
   const showQrPack = Boolean(issuedQrs?.length) || props.awaitingQrAck;
 
@@ -287,7 +307,7 @@ export function ActivationWizardClient(props: Props) {
         <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">Kurulum sihirbazı</h1>
         <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-600">
           İşletme profili, şube, güvenli QR masaları ve personel davetlerini adım adım tamamlayın.
-          Canlı QR/order/payment bağlantıları Canlıya Geçiş sonrası açılır.
+          Canlı QR, sipariş ve ödeme bağlantıları Yayına alma sonrası açılır.
         </p>
       </div>
 
@@ -582,7 +602,8 @@ export function ActivationWizardClient(props: Props) {
                 <div>
                   <p className="font-bold">{invite.email}</p>
                   <p className="text-xs text-slate-500">
-                    {invite.role} · {invite.deliveryStatus}
+                    {INVITE_ROLE_LABELS[invite.role]} ·{" "}
+                    {INVITE_DELIVERY_LABELS[invite.deliveryStatus] ?? "Gönderim durumu bilinmiyor"}
                     {invite.acceptedAt ? " · kabul edildi" : ""}
                     {invite.revokedAt ? " · iptal" : ""}
                   </p>
@@ -659,7 +680,7 @@ export function ActivationWizardClient(props: Props) {
             </a>
           </div>
 
-          <form action={menuUploadAction} className="mt-4 space-y-3" encType="multipart/form-data">
+          <form action={menuUploadAction} className="mt-4 space-y-3">
             <input type="hidden" name="organizationId" value={props.organizationId} />
             <input type="hidden" name="expectedVersion" value={String(menuJourneyVersion)} />
             <input type="hidden" name="branchId" value={props.branchId ?? ""} />
@@ -700,7 +721,8 @@ export function ActivationWizardClient(props: Props) {
             <div className="mt-6 space-y-4" data-testid="menu-import-preview">
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
                 <p className="font-bold text-slate-900">
-                  {menuJob.originalFileName} · {menuJob.status}
+                  {menuJob.originalFileName} ·{" "}
+                  {MENU_IMPORT_STATUS_LABELS[menuJob.status] ?? "Durum bilinmiyor"}
                 </p>
                 <p className="mt-1 text-slate-600">
                   Satır: {menuJob.totalRows} · Geçerli: {menuJob.validRows} · Hatalı: {menuJob.errorRows} ·
@@ -853,13 +875,22 @@ export function ActivationWizardClient(props: Props) {
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:p-6">
-        <h2 className="text-base font-black text-slate-800">Sonraki adımlar</h2>
-        <p className="mt-1 text-sm text-slate-600">Bu adımlar sonraki PR’larda etkinleşir; şimdilik atlanamaz.</p>
+      <section
+        className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:p-6"
+        data-testid="activation-upcoming-steps"
+      >
+        <h2 className="text-base font-black text-slate-800">
+          {UPCOMING.includes(step) ? `${ACTIVATION_STEP_LABELS[step]} bekleniyor` : "Sonraki adımlar"}
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">
+          {UPCOMING.includes(step)
+            ? "Tamamladığınız kurulum kaydedildi. Bu adım henüz kullanıma açılmadığı için şu anda işlem yapmanız gerekmiyor."
+            : "Bu adımlar henüz kullanıma açık değildir; mevcut kurulum adımlarınızı tamamlayabilirsiniz."}
+        </p>
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
           {UPCOMING.map((key) => (
             <li key={key} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-400">
-              {key.replaceAll("_", " ")} · yakında
+              {ACTIVATION_STEP_LABELS[key]} · yakında
             </li>
           ))}
         </ul>

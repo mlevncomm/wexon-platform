@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { getCanonicalTaxPolicy } from "@/lib/wexpay-canonical-catalog";
 import { WEXPAY_PROCESSING_DISCLAIMER } from "@/lib/wexpay-tier-config";
 
 type DisclaimerVariant = "amber" | "muted" | "dark";
@@ -17,9 +18,13 @@ export default function WexPayPricingDisclaimer({
   variant?: DisclaimerVariant;
   className?: string;
 }) {
+  const taxPolicy = getCanonicalTaxPolicy();
   return (
     <p role="note" aria-label="İşlem oranları uyarısı" className={cn(variantClasses[variant], className)}>
       {WEXPAY_PROCESSING_DISCLAIMER}
+      {!taxPolicy.taxEnabled
+        ? " KDV hesaplaması şu anda kapalıdır; gösterilen lisans tutarlarına ayrıca KDV eklenmez."
+        : ""}
     </p>
   );
 }

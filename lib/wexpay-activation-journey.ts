@@ -11,6 +11,11 @@ import {
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { evaluateProductAccess, evaluateSubscriptionLifecycle } from "@/lib/wexon-core-access";
+import { ACTIVATION_STEP_LABELS } from "@/lib/wexpay-activation-step-ui";
+export {
+  ACTIVATION_STEP_LABELS,
+  isActivationStepActionable,
+} from "@/lib/wexpay-activation-step-ui";
 
 export const WEXPAY_PRODUCT_KEY = "wexpay";
 
@@ -61,17 +66,7 @@ export type ActivationJourneyView = {
 };
 
 function stepLabel(step: ActivationStepKey): string {
-  const labels: Record<ActivationStepKey, string> = {
-    BUSINESS_PROFILE: "İşletme profili",
-    BRANCH_SETUP: "Şube kurulumu",
-    TABLE_SETUP: "Masa kurulumu",
-    STAFF_INVITE: "Personel daveti",
-    MENU_IMPORT: "Menü aktarımı",
-    PAYMENT_PROVIDER: "Ödeme sağlayıcısı",
-    VALIDATION: "Doğrulama",
-    GO_LIVE: "Canlıya Geçiş",
-  };
-  return labels[step];
+  return ACTIVATION_STEP_LABELS[step];
 }
 
 function statusLabel(status: ActivationUiStatus): string {
@@ -83,7 +78,7 @@ function statusLabel(status: ActivationUiStatus): string {
     case "BLOCKED":
       return "Engellendi";
     case "READY":
-      return "Canlıya Geçişe hazır";
+      return "Yayına almaya hazır";
     case "ACTIVE":
       return "Canlı Kullanım";
     case "CANCELLED":

@@ -45,7 +45,11 @@ function isolatedEnv() {
     E2E_BASE_URL: `http://localhost:${port}`,
     SMOKE_BASE_URL: `http://localhost:${port}`,
     SMOKE_PORT: port,
+    SMOKE_SKIP_WEB_SERVER: "",
+    SMOKE_REUSE_SERVER: "",
     WEXPAY_PAYTR_ENABLE_API: "false",
+    WEXPAY_PAYTR_ENABLE: "false",
+    PAYTR_ENABLED: "false",
     WEXON_E2E_RELAX_RATE_LIMIT: "true",
     WEXON_EMAIL_PROVIDER: "fake",
     NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
@@ -73,6 +77,9 @@ async function runOnce(label) {
       "e2e/wexpay-activation-gate.spec.ts",
       "e2e/wexpay-activation-wizard.spec.ts",
       "e2e/wexpay-opaque-qr.spec.ts",
+      "e2e/wexpay-auth-tenant.spec.ts",
+      "e2e/wexpay-app-wide-workspace.spec.ts",
+      "e2e/wexpay-pricing-parity.spec.ts",
       "e2e/core-canonical-routing.spec.ts",
       "--reporter=list",
     ],
@@ -101,8 +108,8 @@ async function runOnce(label) {
   if (failed > 0) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
-  // Includes activation wizard flow (2), core canonical routing (4), plus core WexPay isolated specs.
-  const MIN_ISOLATED_PASSES = 18;
+  // Includes activation, auth/tenant, pricing, workspace, routing, and core WexPay isolated specs.
+  const MIN_ISOLATED_PASSES = 24;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,

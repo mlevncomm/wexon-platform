@@ -42,7 +42,7 @@ describe("activation journey pure helpers", () => {
     });
     assert.equal(view.setupMode, true);
     assert.equal(view.publicLive, false);
-    assert.match(view.statusLabel, /Canlıya Geçiş/);
+    assert.match(view.statusLabel, /Yayına alma/);
   });
 
   it("ACTIVE opens public live and exits setup mode", () => {

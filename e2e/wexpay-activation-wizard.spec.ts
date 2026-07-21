@@ -449,6 +449,12 @@ test.describe.serial("WexPay activation wizard flow", () => {
     });
 
     try {
+      const browserIssues: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error" || message.type() === "warning") {
+          browserIssues.push(message.text());
+        }
+      });
       await loginCustomer(page, fixtures.licensedCustomerEmail, customerPassword());
       await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
       await expect(page.getByTestId("wizard-menu-import")).toBeVisible({ timeout: 30_000 });
@@ -482,7 +488,13 @@ test.describe.serial("WexPay activation wizard flow", () => {
         "SKIPPED",
       );
       expect(await prisma.menuProduct.count({ where: { branchId: branch.id } })).toBe(0);
-      await expect(page.getByText(/PAYMENT PROVIDER/i)).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId("activation-waiting-status")).toContainText(
+        "Ödeme altyapısı henüz kullanıma açılmadı",
+        { timeout: 15_000 },
+      );
+      await expect(page.getByRole("link", { name: "Kuruluma devam et" })).toHaveCount(0);
+      await expect(page.getByText(/PAYMENT_PROVIDER|PAYMENT PROVIDER|VALIDATION|GO_LIVE|GO LIVE/)).toHaveCount(0);
+      expect(browserIssues.filter((issue) => /hydration|encType or method|unhandled/i.test(issue))).toEqual([]);
     } finally {
       await prisma.menuImportJob.deleteMany({ where: { organizationId: orgId } }).catch(() => undefined);
       await prisma.branch.deleteMany({ where: { restaurant: { organizationId: orgId } } });
@@ -651,6 +663,12 @@ test.describe.serial("WexPay activation wizard flow", () => {
     });
 
     try {
+      const browserIssues: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error" || message.type() === "warning") {
+          browserIssues.push(message.text());
+        }
+      });
       await loginCustomer(page, fixtures.licensedCustomerEmail, customerPassword());
       await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
       await expect(page.getByTestId("wizard-menu-import")).toBeVisible({ timeout: 30_000 });
@@ -660,6 +678,22 @@ test.describe.serial("WexPay activation wizard flow", () => {
         name: "e2e-menu.csv",
         mimeType: "text/csv",
         buffer: Buffer.from(csv, "utf8"),
+      });
+      const uploadForm = page.getByTestId("menu-import-file").locator("xpath=ancestor::form");
+      expect(
+        await uploadForm.evaluate((form) => {
+          const htmlForm = form as HTMLFormElement;
+          const file = new FormData(htmlForm).get("file");
+          return {
+            method: htmlForm.method,
+            enctype: htmlForm.enctype,
+            fileName: file instanceof File ? file.name : null,
+          };
+        }),
+      ).toEqual({
+        method: "post",
+        enctype: "multipart/form-data",
+        fileName: "e2e-menu.csv",
       });
       await page.getByTestId("menu-import-upload").click();
       await expect(page.getByTestId("menu-import-preview")).toBeVisible({ timeout: 30_000 });
@@ -686,6 +720,7 @@ test.describe.serial("WexPay activation wizard flow", () => {
       });
       expect(product).toBeTruthy();
       expect(Number(product!.price)).toBe(45);
+      expect(browserIssues.filter((issue) => /hydration|encType or method|unhandled/i.test(issue))).toEqual([]);
     } finally {
       await prisma.menuImportRowError
         .deleteMany({ where: { job: { organizationId: orgId } } })
@@ -942,7 +977,11 @@ test.describe.serial("WexPay activation wizard flow", () => {
         .toBe(ActivationStepKey.PAYMENT_PROVIDER);
 
       await page.reload();
-      await expect(page.getByText(/PAYMENT PROVIDER\s*·\s*yakında/i)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Ödeme altyapısı\s*·\s*yakında/i)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("activation-waiting-status")).toContainText(
+        "Ödeme altyapısı henüz kullanıma açılmadı",
+      );
+      await expect(page.getByRole("link", { name: "Kuruluma devam et" })).toHaveCount(0);
       await expect(page.getByTestId("wizard-menu-import")).toHaveCount(0);
       expect(await prisma.menuProduct.count({ where: { branchId: branch.id } })).toBe(PRODUCT_COUNT);
       const jobAfterRefresh = await prisma.menuImportJob.findFirstOrThrow({
