@@ -10,6 +10,7 @@
  * before `lib/prisma.ts`) is loaded.
  */
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,14 +44,29 @@ const files = [
   "lib/wexpay-menu-import.db.test.ts",
 ];
 
-const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...files], {
+const credentialEncryptionKey = randomBytes(32).toString("hex");
+const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "--test-reporter=spec", ...files], {
   cwd: root,
-  stdio: "inherit",
-  env: { ...process.env },
+  encoding: "utf8",
+  maxBuffer: 32 * 1024 * 1024,
+  env: {
+    ...process.env,
+    WEXPAY_CREDENTIAL_ENCRYPTION_KEY: credentialEncryptionKey,
+  },
 });
 
 if (result.error) {
   console.error(result.error);
+  process.exit(1);
+}
+
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
+
+const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+const skipped = Number((combined.match(/(?:ℹ|#)\s*skipped\s+(\d+)/i) || [])[1] || 0);
+if (skipped > 0) {
+  console.error(`[db-test-guard] fail-closed: ${skipped} skipped DB test(s)`);
   process.exit(1);
 }
 

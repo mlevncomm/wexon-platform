@@ -807,6 +807,7 @@ export function ActivationWizardClient(props: Props) {
                           menuApplyPending ||
                           !confirmApply ||
                           menuJob.validRows < 1 ||
+                          (menuJob.duplicateChecksumWarning && !forceReimport) ||
                           Boolean(menuJob.preview?.wouldExceedLimit)
                         }
                         className="rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"

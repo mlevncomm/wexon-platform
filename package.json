@@ -6,7 +6,9 @@
     "node": ">=20"
   },
   "overrides": {
-    "@hono/node-server": "1.19.13"
+    "next": {
+      "postcss": "8.5.21"
+    }
   },
   "scripts": {
     "dev": "next dev",

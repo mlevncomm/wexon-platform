@@ -80,6 +80,7 @@ async function runOnce(label) {
       "e2e/wexpay-auth-tenant.spec.ts",
       "e2e/wexpay-app-wide-workspace.spec.ts",
       "e2e/wexpay-pricing-parity.spec.ts",
+      "e2e/wexpay-final-closure.spec.ts",
       "e2e/core-canonical-routing.spec.ts",
       "--reporter=list",
     ],
@@ -108,8 +109,8 @@ async function runOnce(label) {
   if (failed > 0) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
-  // Includes activation, auth/tenant, pricing, workspace, routing, and core WexPay isolated specs.
-  const MIN_ISOLATED_PASSES = 24;
+  // Includes activation, auth/tenant, pricing, workspace, final closure, routing, and core specs.
+  const MIN_ISOLATED_PASSES = 28;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,

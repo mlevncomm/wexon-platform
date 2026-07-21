@@ -23,7 +23,6 @@ jobs:
       ADMIN_SESSION_SECRET: ci-admin-session-secret
       CUSTOMER_SESSION_SECRET: ci-customer-session-secret
       API_KEY_HASH_SECRET: ci-api-key-hash-secret
-      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       NODE_ENV: test
 
@@ -87,7 +86,6 @@ jobs:
       ADMIN_SESSION_SECRET: ci-admin-session-secret
       CUSTOMER_SESSION_SECRET: ci-customer-session-secret
       API_KEY_HASH_SECRET: ci-api-key-hash-secret
-      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
       NEXT_PUBLIC_APP_URL: http://localhost:3000
 
     steps:
@@ -150,8 +148,9 @@ jobs:
       ADMIN_SESSION_SECRET: ci-admin-session-secret
       CUSTOMER_SESSION_SECRET: ci-customer-session-secret
       API_KEY_HASH_SECRET: ci-api-key-hash-secret
-      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
       WEXPAY_PAYTR_ENABLE_API: "false"
+      WEXPAY_PAYTR_ENABLE: "false"
+      PAYTR_ENABLED: "false"
       NEXT_PUBLIC_APP_URL: http://localhost:3100
       SMOKE_PORT: "3100"
 

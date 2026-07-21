@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import { OrderStatus, PaymentStatus, WexPayProviderCredentialMode } from ".prisma/client";
 import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
@@ -142,6 +142,12 @@ async function ensureTestPaytrCredential(organizationId: string) {
   );
   return true;
 }
+
+after(async () => {
+  await prisma.wexPayProviderCredential.deleteMany({
+    where: { displayName: "Integration Test PayTR" },
+  });
+});
 
 describe("processPaytrWebhookRequest", () => {
   it("returns 400 for invalid payload without DB mutation", async () => {
@@ -488,6 +494,66 @@ describe("processPaytrWebhookRequest", () => {
         return;
       }
       throw error;
+    }
+  });
+
+  it("does not use another tenant's valid PayTR credential", async () => {
+    const table = await findSeedTable();
+    assert.ok(table?.branch.restaurant.organizationId, "seed table missing — run prisma:seed:real");
+    const organizationId = table.branch.restaurant.organizationId;
+    const foreignOrganization = await prisma.organization.create({
+      data: {
+        name: `Webhook Foreign ${Date.now()}`,
+        slug: `webhook-foreign-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        isActive: true,
+        isDemo: false,
+      },
+    });
+    const providerRef = `WXP-TEST-TENANT-${Date.now()}`;
+    const payment = await prisma.payment.create({
+      data: {
+        branchId: table.branchId,
+        tableId: table.id,
+        amount: "120.00",
+        currency: "TRY",
+        status: PaymentStatus.PENDING,
+        provider: "paytr",
+        providerRef,
+      },
+    });
+
+    try {
+      await prisma.wexPayProviderCredential.deleteMany({
+        where: {
+          organizationId,
+          provider: "paytr",
+          mode: WexPayProviderCredentialMode.TEST,
+        },
+      });
+      await ensureTestPaytrCredential(foreignOrganization.id);
+
+      const body = signedBody({
+        merchantOid: providerRef,
+        status: "success",
+        totalAmount: "12000",
+      });
+      const result = await processPaytrWebhookRequest(webhookRequest(body));
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.equal(result.status, 401);
+        assert.equal(result.body, "invalid_signature");
+      }
+      const unchanged = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      assert.equal(unchanged.status, PaymentStatus.PENDING);
+    } finally {
+      await prisma.payment.delete({ where: { id: payment.id } }).catch(() => undefined);
+      await prisma.wexPayWebhookEvent.deleteMany({
+        where: { providerEventId: { contains: providerRef } },
+      });
+      await prisma.wexPayProviderCredential.deleteMany({
+        where: { organizationId: foreignOrganization.id },
+      });
+      await prisma.organization.delete({ where: { id: foreignOrganization.id } });
     }
   });
 
