@@ -1,9 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { MembershipRole } from ".prisma/client";
 import {
   acknowledgeQrPackAction,
+  applyMenuImportAction,
+  cancelMenuImportAction,
   completeStaffInviteStepAction,
   createStaffInviteAction,
   createTablesWizardAction,
@@ -12,14 +14,18 @@ import {
   rotateTableQrWizardAction,
   saveBranchSetupAction,
   saveBusinessProfileAction,
+  skipMenuImportEmptyStartAction,
+  uploadMenuImportDryRunAction,
   type WizardActionState,
 } from "@/lib/wexpay-activation-wizard-actions";
+import { ACTIVATION_STEP_LABELS } from "@/lib/wexpay-activation-step-ui";
 import {
   downloadTableQrPng,
   generateTableQrDataUrl,
   buildTableQrPrintHtml,
 } from "@/lib/wexpay-table-qr";
 import type { WizardIssuedQr } from "@/lib/wexpay-activation-wizard";
+import type { MenuImportJobView } from "@/lib/wexpay-menu-import";
 
 type StepKey =
   | "BUSINESS_PROFILE"
@@ -63,11 +69,33 @@ type Props = {
   isLegacyActive: boolean;
   awaitingQrAck: boolean;
   canSkipStaffInvite: boolean;
+  menuImportJob: MenuImportJobView | null;
+  publicOrigin: string;
 };
 
 const initial: WizardActionState = { ok: false };
 
-const UPCOMING: StepKey[] = ["MENU_IMPORT", "PAYMENT_PROVIDER", "VALIDATION", "GO_LIVE"];
+const UPCOMING: StepKey[] = ["PAYMENT_PROVIDER", "VALIDATION", "GO_LIVE"];
+const INVITE_ROLE_LABELS: Record<MembershipRole, string> = {
+  OWNER: "Sahip",
+  ADMIN: "Yönetici",
+  MANAGER: "Müdür",
+  STAFF: "Personel",
+  BILLING: "Faturalama",
+  VIEWER: "Görüntüleyici",
+};
+const INVITE_DELIVERY_LABELS: Record<string, string> = {
+  PENDING: "Gönderim bekliyor",
+  SENT: "Gönderildi",
+  FAILED: "Gönderilemedi",
+};
+const MENU_IMPORT_STATUS_LABELS: Record<string, string> = {
+  DRY_RUN: "Önizleme hazır",
+  APPLYING: "Uygulanıyor",
+  APPLIED: "Tamamlandı",
+  FAILED: "Yarım kaldı",
+  CANCELLED: "İptal edildi",
+};
 
 function ErrorBox({ state }: { state: WizardActionState }) {
   if (state.ok || !state.error) return null;
@@ -187,6 +215,23 @@ export function ActivationWizardClient(props: Props) {
     completeStaffInviteStepAction,
     initial,
   );
+  const [menuUploadState, menuUploadAction, menuUploadPending] = useActionState(
+    uploadMenuImportDryRunAction,
+    initial,
+  );
+  const [menuApplyState, menuApplyAction, menuApplyPending] = useActionState(applyMenuImportAction, initial);
+  const [menuCancelState, menuCancelAction, menuCancelPending] = useActionState(
+    cancelMenuImportAction,
+    initial,
+  );
+  const [menuSkipState, menuSkipAction, menuSkipPending] = useActionState(
+    skipMenuImportEmptyStartAction,
+    initial,
+  );
+  const [forceReimport, setForceReimport] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const menuApplyFormRef = useRef<HTMLFormElement>(null);
 
   const issuedQrs = useMemo(() => {
     if (tableState.ok && tableState.issuedQrs?.length) return tableState.issuedQrs;
@@ -211,6 +256,34 @@ export function ActivationWizardClient(props: Props) {
 
   const oneTimeUrl = inviteState.ok && inviteState.oneTimeInviteUrl ? inviteState.oneTimeInviteUrl : null;
 
+  const menuJob: MenuImportJobView | null =
+    menuApplyState.menuImportJob ??
+    menuUploadState.menuImportJob ??
+    menuCancelState.menuImportJob ??
+    props.menuImportJob;
+
+  const menuJourneyVersion =
+    menuApplyState.journeyVersion ?? menuSkipState.journeyVersion ?? props.journeyVersion;
+
+  // Continue apply across request-bounded chunks (~50 rows each).
+  useEffect(() => {
+    if (!confirmApply || menuApplyPending) return;
+    if (!menuApplyState.ok) return;
+    if (menuApplyState.menuImportDone !== false) return;
+    if (menuJob?.status !== "APPLYING" && menuJob?.status !== "FAILED") return;
+    const timer = window.setTimeout(() => {
+      menuApplyFormRef.current?.requestSubmit();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [
+    confirmApply,
+    menuApplyPending,
+    menuApplyState.ok,
+    menuApplyState.menuImportDone,
+    menuApplyState.menuImportJob?.version,
+    menuJob?.status,
+  ]);
+
   if (props.isLegacyActive) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-950">
@@ -223,9 +296,7 @@ export function ActivationWizardClient(props: Props) {
   }
 
   const step = props.currentStep;
-  const originHint =
-    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN?.replace(/\/+$/, "")) ||
-    (typeof window !== "undefined" ? window.location.origin : "https://www.wexon.dev");
+  const originHint = props.publicOrigin;
 
   const showQrPack = Boolean(issuedQrs?.length) || props.awaitingQrAck;
 
@@ -236,7 +307,7 @@ export function ActivationWizardClient(props: Props) {
         <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">Kurulum sihirbazı</h1>
         <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-600">
           İşletme profili, şube, güvenli QR masaları ve personel davetlerini adım adım tamamlayın.
-          Canlı QR/order/payment bağlantıları Canlıya Geçiş sonrası açılır.
+          Canlı QR, sipariş ve ödeme bağlantıları Yayına alma sonrası açılır.
         </p>
       </div>
 
@@ -531,7 +602,8 @@ export function ActivationWizardClient(props: Props) {
                 <div>
                   <p className="font-bold">{invite.email}</p>
                   <p className="text-xs text-slate-500">
-                    {invite.role} · {invite.deliveryStatus}
+                    {INVITE_ROLE_LABELS[invite.role]} ·{" "}
+                    {INVITE_DELIVERY_LABELS[invite.deliveryStatus] ?? "Gönderim durumu bilinmiyor"}
                     {invite.acceptedAt ? " · kabul edildi" : ""}
                     {invite.revokedAt ? " · iptal" : ""}
                   </p>
@@ -584,13 +656,242 @@ export function ActivationWizardClient(props: Props) {
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:p-6">
-        <h2 className="text-base font-black text-slate-800">Sonraki adımlar</h2>
-        <p className="mt-1 text-sm text-slate-600">Bu adımlar sonraki PR’larda etkinleşir; şimdilik atlanamaz.</p>
+      {step === "MENU_IMPORT" ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6" data-testid="wizard-menu-import">
+          <h2 className="text-lg font-black text-slate-950">5. Menü içe aktarma</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            CSV/XLSX hızlı aktarım. PDF, fotoğraf veya yapay zeka aktarımı bu adımda yoktur.
+          </p>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href="/api/wexpay/menu-import/template?format=csv"
+              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-slate-800"
+              data-testid="menu-import-template-csv"
+            >
+              Örnek CSV indir
+            </a>
+            <a
+              href="/api/wexpay/menu-import/template?format=xlsx"
+              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-slate-800"
+              data-testid="menu-import-template-xlsx"
+            >
+              Örnek XLSX indir
+            </a>
+          </div>
+
+          <form action={menuUploadAction} className="mt-4 space-y-3">
+            <input type="hidden" name="organizationId" value={props.organizationId} />
+            <input type="hidden" name="expectedVersion" value={String(menuJourneyVersion)} />
+            <input type="hidden" name="branchId" value={props.branchId ?? ""} />
+            <input type="hidden" name="forceReimport" value={forceReimport ? "1" : "0"} />
+            <label className="block text-sm font-semibold text-slate-700">
+              Menü dosyası (.csv veya .xlsx, en fazla 2 MB / 2000 satır)
+              <input
+                name="file"
+                type="file"
+                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                required
+                className="mt-1 block w-full text-sm"
+                data-testid="menu-import-file"
+              />
+            </label>
+            <label className="flex items-start gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={forceReimport}
+                onChange={(e) => setForceReimport(e.target.checked)}
+                className="mt-1"
+                data-testid="menu-import-force-reimport"
+              />
+              Aynı dosyayı yeniden içe aktar (önceki uygulamanın üzerine yaz)
+            </label>
+            <button
+              type="submit"
+              disabled={menuUploadPending || !props.branchId}
+              className="rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              data-testid="menu-import-upload"
+            >
+              {menuUploadPending ? "Çözümleniyor…" : "Yükle ve önizle"}
+            </button>
+            <ErrorBox state={menuUploadState} />
+          </form>
+
+          {menuJob ? (
+            <div className="mt-6 space-y-4" data-testid="menu-import-preview">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                <p className="font-bold text-slate-900">
+                  {menuJob.originalFileName} ·{" "}
+                  {MENU_IMPORT_STATUS_LABELS[menuJob.status] ?? "Durum bilinmiyor"}
+                </p>
+                <p className="mt-1 text-slate-600">
+                  Satır: {menuJob.totalRows} · Geçerli: {menuJob.validRows} · Hatalı: {menuJob.errorRows} ·
+                  Uygulanan: {menuJob.appliedRows}
+                </p>
+                {menuJob.preview ? (
+                  <ul className="mt-2 grid gap-1 text-slate-700 sm:grid-cols-2">
+                    <li>Yeni kategori: {menuJob.preview.categoriesToCreate}</li>
+                    <li>Yeni ürün: {menuJob.preview.productsToCreate}</li>
+                    <li>Güncellenecek ürün: {menuJob.preview.productsToUpdate}</li>
+                    <li>
+                      Seçenek grubu / seçenek: {menuJob.preview.modifierGroups} /{" "}
+                      {menuJob.preview.modifierOptions}
+                    </li>
+                    <li>
+                      Plan limiti: {menuJob.preview.productLimit ?? "sınırsız"} · Kullanılan:{" "}
+                      {menuJob.preview.productsUsed} · Sonrası: {menuJob.preview.productsAfter}
+                    </li>
+                    {menuJob.preview.wouldExceedLimit ? (
+                      <li className="font-bold text-rose-700 sm:col-span-2" role="alert">
+                        Bu aktarım ürün limitini aşar.
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
+                {menuJob.duplicateChecksumWarning ? (
+                  <p className="mt-2 font-semibold text-amber-800" role="status" data-testid="menu-import-duplicate-warning">
+                    Aynı dosya daha önce uygulandı. Yeniden aktarmak için kutuyu işaretleyin.
+                  </p>
+                ) : null}
+                {menuJob.status === "FAILED" ? (
+                  <p className="mt-2 font-semibold text-rose-800" role="alert" data-testid="menu-import-failed">
+                    Uygulama yarım kaldı ({menuJob.lastErrorCode ?? "hata"}). Kaldığı yerden devam
+                    edebilirsiniz.
+                  </p>
+                ) : null}
+                {menuJob.status === "APPLIED" ? (
+                  <p className="mt-2 font-semibold text-emerald-800" data-testid="menu-import-applied">
+                    Menü başarıyla uygulandı.
+                  </p>
+                ) : null}
+              </div>
+
+              {menuJob.rowErrors.length > 0 ? (
+                <div data-testid="menu-import-errors">
+                  <h3 className="text-sm font-black text-slate-900">Satır hataları</h3>
+                  <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-rose-800">
+                    {menuJob.rowErrors.map((err) => (
+                      <li key={`${err.rowNumber}-${err.errorCode}`}>
+                        Satır {err.rowNumber}: {err.message} ({err.errorCode})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {menuJob.status === "DRY_RUN" ||
+              menuJob.status === "APPLYING" ||
+              menuJob.status === "FAILED" ? (
+                <div className="space-y-3">
+                  <label className="flex items-start gap-2 text-sm font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={confirmApply}
+                      onChange={(e) => setConfirmApply(e.target.checked)}
+                      className="mt-1"
+                      data-testid="menu-import-confirm-apply"
+                    />
+                    Önizlemeyi onaylıyorum; menüyü uygula
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <form ref={menuApplyFormRef} action={menuApplyAction}>
+                      <input type="hidden" name="organizationId" value={props.organizationId} />
+                      <input type="hidden" name="expectedVersion" value={String(menuJourneyVersion)} />
+                      <input type="hidden" name="jobId" value={menuJob.id} />
+                      <input type="hidden" name="jobExpectedVersion" value={String(menuJob.version)} />
+                      <input type="hidden" name="confirmApply" value={confirmApply ? "1" : "0"} />
+                      <input type="hidden" name="forceReimport" value={forceReimport ? "1" : "0"} />
+                      <button
+                        type="submit"
+                        disabled={
+                          menuApplyPending ||
+                          !confirmApply ||
+                          menuJob.validRows < 1 ||
+                          (menuJob.duplicateChecksumWarning && !forceReimport) ||
+                          Boolean(menuJob.preview?.wouldExceedLimit)
+                        }
+                        className="rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                        data-testid="menu-import-apply"
+                      >
+                        {menuApplyPending
+                          ? `Uygulanıyor… (${menuJob.appliedRows}/${menuJob.validRows || menuJob.totalRows})`
+                          : menuJob.status === "FAILED" || menuJob.status === "APPLYING"
+                            ? "Kaldığı yerden devam et"
+                            : "Menüyü uygula"}
+                      </button>
+                    </form>
+                    <form action={menuCancelAction}>
+                      <input type="hidden" name="organizationId" value={props.organizationId} />
+                      <input type="hidden" name="expectedVersion" value={String(menuJourneyVersion)} />
+                      <input type="hidden" name="jobId" value={menuJob.id} />
+                      <input type="hidden" name="jobExpectedVersion" value={String(menuJob.version)} />
+                      <button
+                        type="submit"
+                        disabled={menuCancelPending}
+                        className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60"
+                        data-testid="menu-import-cancel"
+                      >
+                        İptal et
+                      </button>
+                    </form>
+                  </div>
+                  <ErrorBox state={menuApplyState} />
+                  <ErrorBox state={menuCancelState} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mt-8 border-t border-slate-100 pt-4">
+            <h3 className="text-sm font-black text-slate-900">Menüyü daha sonra oluşturacağım</h3>
+            <p className="mt-1 text-xs text-slate-600">
+              Boş menüyle devam edebilirsiniz. Panelden sonradan menü eklemek engellenmez. Otomatik atlama
+              yoktur.
+            </p>
+            <label className="mt-3 flex items-start gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={confirmEmpty}
+                onChange={(e) => setConfirmEmpty(e.target.checked)}
+                className="mt-1"
+                data-testid="menu-import-confirm-empty"
+              />
+              Onaylıyorum: menüyü daha sonra panelden oluşturacağım
+            </label>
+            <form action={menuSkipAction} className="mt-3">
+              <input type="hidden" name="organizationId" value={props.organizationId} />
+              <input type="hidden" name="expectedVersion" value={String(menuJourneyVersion)} />
+              <input type="hidden" name="confirmEmpty" value={confirmEmpty ? "1" : "0"} />
+              <button
+                type="submit"
+                disabled={menuSkipPending || !confirmEmpty}
+                className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60"
+                data-testid="menu-import-empty-start"
+              >
+                Boş menüyle devam et
+              </button>
+            </form>
+            <ErrorBox state={menuSkipState} />
+          </div>
+        </section>
+      ) : null}
+
+      <section
+        className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:p-6"
+        data-testid="activation-upcoming-steps"
+      >
+        <h2 className="text-base font-black text-slate-800">
+          {UPCOMING.includes(step) ? `${ACTIVATION_STEP_LABELS[step]} bekleniyor` : "Sonraki adımlar"}
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">
+          {UPCOMING.includes(step)
+            ? "Tamamladığınız kurulum kaydedildi. Bu adım henüz kullanıma açılmadığı için şu anda işlem yapmanız gerekmiyor."
+            : "Bu adımlar henüz kullanıma açık değildir; mevcut kurulum adımlarınızı tamamlayabilirsiniz."}
+        </p>
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
           {UPCOMING.map((key) => (
             <li key={key} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-400">
-              {key.replaceAll("_", " ")} · yakında
+              {ACTIVATION_STEP_LABELS[key]} · yakında
             </li>
           ))}
         </ul>

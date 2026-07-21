@@ -23,7 +23,6 @@ jobs:
       ADMIN_SESSION_SECRET: ci-admin-session-secret
       CUSTOMER_SESSION_SECRET: ci-customer-session-secret
       API_KEY_HASH_SECRET: ci-api-key-hash-secret
-      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       NODE_ENV: test
 
@@ -65,20 +64,26 @@ jobs:
         env:
           POSTGRES_USER: wexon
           POSTGRES_PASSWORD: wexon
-          POSTGRES_DB: wexon_test
+          POSTGRES_DB: wexon_e2e
         ports:
-          - 5432:5432
+          - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U wexon -d wexon_test"
+          --health-cmd "pg_isready -U wexon -d wexon_e2e"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
 
     env:
       # Isolated CI Postgres only — never repository secrets / Supabase / production.
-      DATABASE_URL: postgresql://wexon:wexon@127.0.0.1:5432/wexon_test
-      DIRECT_URL: postgresql://wexon:wexon@127.0.0.1:5432/wexon_test
+      DATABASE_URL: postgresql://wexon:wexon@127.0.0.1:5433/wexon_e2e
+      DIRECT_URL: postgresql://wexon:wexon@127.0.0.1:5433/wexon_e2e
       WEXON_ALLOW_LOCAL_DB_TESTS: "1"
+      WEXON_E2E_TARGET: isolated
+      WEXON_E2E_CONFIRM_ISOLATED: "true"
+      WEXON_EMAIL_PROVIDER: fake
+      WEXPAY_PAYTR_ENABLE_API: "false"
+      WEXPAY_PAYTR_ENABLE: "false"
+      PAYTR_ENABLED: "false"
       NODE_ENV: test
       # Explicitly unset deployment env so the local DB guard stays permissive.
       VERCEL_ENV: ""
@@ -87,7 +92,6 @@ jobs:
       ADMIN_SESSION_SECRET: ci-admin-session-secret
       CUSTOMER_SESSION_SECRET: ci-customer-session-secret
       API_KEY_HASH_SECRET: ci-api-key-hash-secret
-      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
       NEXT_PUBLIC_APP_URL: http://localhost:3000
 
     steps:
@@ -110,7 +114,7 @@ jobs:
         # Migration REVOKE/GRANT blocks are conditional on these roles.
         # Creating them here lets CI measure real migration revoke state (no test-time REVOKE).
         run: |
-          PGPASSWORD=wexon psql -h 127.0.0.1 -U wexon -d wexon_test -v ON_ERROR_STOP=1 <<'SQL'
+          PGPASSWORD=wexon psql -h 127.0.0.1 -p 5433 -U wexon -d wexon_e2e -v ON_ERROR_STOP=1 <<'SQL'
           DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
               CREATE ROLE anon NOLOGIN;
@@ -150,8 +154,9 @@ jobs:
       ADMIN_SESSION_SECRET: ci-admin-session-secret
       CUSTOMER_SESSION_SECRET: ci-customer-session-secret
       API_KEY_HASH_SECRET: ci-api-key-hash-secret
-      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
       WEXPAY_PAYTR_ENABLE_API: "false"
+      WEXPAY_PAYTR_ENABLE: "false"
+      PAYTR_ENABLED: "false"
       NEXT_PUBLIC_APP_URL: http://localhost:3100
       SMOKE_PORT: "3100"
 

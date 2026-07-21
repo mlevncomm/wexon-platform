@@ -11,6 +11,11 @@ import {
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { evaluateProductAccess, evaluateSubscriptionLifecycle } from "@/lib/wexon-core-access";
+import { ACTIVATION_STEP_LABELS } from "@/lib/wexpay-activation-step-ui";
+export {
+  ACTIVATION_STEP_LABELS,
+  isActivationStepActionable,
+} from "@/lib/wexpay-activation-step-ui";
 
 export const WEXPAY_PRODUCT_KEY = "wexpay";
 
@@ -61,17 +66,7 @@ export type ActivationJourneyView = {
 };
 
 function stepLabel(step: ActivationStepKey): string {
-  const labels: Record<ActivationStepKey, string> = {
-    BUSINESS_PROFILE: "İşletme profili",
-    BRANCH_SETUP: "Şube kurulumu",
-    TABLE_SETUP: "Masa kurulumu",
-    STAFF_INVITE: "Personel daveti",
-    MENU_IMPORT: "Menü aktarımı",
-    PAYMENT_PROVIDER: "Ödeme sağlayıcısı",
-    VALIDATION: "Doğrulama",
-    GO_LIVE: "Canlıya Geçiş",
-  };
-  return labels[step];
+  return ACTIVATION_STEP_LABELS[step];
 }
 
 function statusLabel(status: ActivationUiStatus): string {
@@ -83,7 +78,7 @@ function statusLabel(status: ActivationUiStatus): string {
     case "BLOCKED":
       return "Engellendi";
     case "READY":
-      return "Canlıya Geçişe hazır";
+      return "Yayına almaya hazır";
     case "ACTIVE":
       return "Canlı Kullanım";
     case "CANCELLED":
@@ -729,16 +724,24 @@ export function computeWizardProgress(journey: ActivationJourneyWithSteps | null
   };
 }
 
-/** PR-2 wizard steps that are interactive. Later steps are upcoming/disabled. */
-export const PR2_WIZARD_STEPS: ActivationStepKey[] = [
+/** PR-3 wizard steps that are interactive. Later steps are upcoming/disabled. */
+export const PR3_WIZARD_STEPS: ActivationStepKey[] = [
   ActivationStepKey.BUSINESS_PROFILE,
   ActivationStepKey.BRANCH_SETUP,
   ActivationStepKey.TABLE_SETUP,
   ActivationStepKey.STAFF_INVITE,
+  ActivationStepKey.MENU_IMPORT,
 ];
+
+/** @deprecated Use PR3_WIZARD_STEPS — kept for older call sites. */
+export const PR2_WIZARD_STEPS: ActivationStepKey[] = PR3_WIZARD_STEPS.slice(0, 4);
 
 export function isPr2WizardStep(step: ActivationStepKey): boolean {
   return PR2_WIZARD_STEPS.includes(step);
+}
+
+export function isPr3WizardStep(step: ActivationStepKey): boolean {
+  return PR3_WIZARD_STEPS.includes(step);
 }
 
 export function maskTaxNoForAudit(taxNo: string | null | undefined): string | null {

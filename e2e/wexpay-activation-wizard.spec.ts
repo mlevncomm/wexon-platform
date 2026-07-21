@@ -204,15 +204,19 @@ test.describe.serial("WexPay activation wizard flow", () => {
         where: { branch: { restaurant: { organizationId: orgId } } },
       });
 
-      // Owner returns — MENU_IMPORT upcoming, resume preserves state.
+      // Owner returns — MENU_IMPORT is active (not "yakında").
       await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
       await expect(page.getByRole("heading", { name: "Kurulum sihirbazı" })).toBeVisible();
-      await expect(page.getByText(/yakında/i).first()).toBeVisible();
-      await expect(page.getByText(/MENU IMPORT/i)).toBeVisible();
+      await expect(page.getByTestId("wizard-menu-import")).toBeVisible();
+      await expect(page.getByRole("heading", { name: "5. Menü içe aktarma" })).toBeVisible();
+      await expect(page.getByTestId("menu-import-template-csv")).toBeVisible();
+      await expect(page.getByTestId("menu-import-template-xlsx")).toBeVisible();
+      await expect(page.getByTestId("menu-import-empty-start")).toBeVisible();
 
       await page.reload();
       await expect(page.getByRole("heading", { name: "Kurulum sihirbazı" })).toBeVisible();
-      await expect(page.getByText(/MENU IMPORT/i)).toBeVisible();
+      await expect(page.getByTestId("wizard-menu-import")).toBeVisible();
+      await expect(page.getByRole("heading", { name: "5. Menü içe aktarma" })).toBeVisible();
 
       expect(await prisma.restaurant.count({ where: { organizationId: orgId } })).toBe(
         restaurantsAfterAccept,
@@ -266,10 +270,33 @@ test.describe.serial("WexPay activation wizard flow", () => {
 
       await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
       await expect(page.getByRole("heading", { name: "Kurulum sihirbazı" })).toBeVisible();
-      await expect(page.getByText(/MENU IMPORT/i)).toBeVisible();
+      await expect(page.getByTestId("wizard-menu-import")).toBeVisible();
 
       await prisma.user.delete({ where: { id: existingUser.id } }).catch(() => undefined);
     } finally {
+      await prisma.menuImportRowError.deleteMany({
+        where: { job: { organizationId: orgId } },
+      }).catch(() => undefined);
+      await prisma.menuImportJob.deleteMany({ where: { organizationId: orgId } }).catch(() => undefined);
+      await prisma.menuProductModifierGroup
+        .deleteMany({
+          where: { product: { branch: { restaurant: { organizationId: orgId } } } },
+        })
+        .catch(() => undefined);
+      await prisma.menuModifierOption
+        .deleteMany({
+          where: { group: { branch: { restaurant: { organizationId: orgId } } } },
+        })
+        .catch(() => undefined);
+      await prisma.menuModifierGroup
+        .deleteMany({ where: { branch: { restaurant: { organizationId: orgId } } } })
+        .catch(() => undefined);
+      await prisma.menuProduct
+        .deleteMany({ where: { branch: { restaurant: { organizationId: orgId } } } })
+        .catch(() => undefined);
+      await prisma.menuCategory
+        .deleteMany({ where: { branch: { restaurant: { organizationId: orgId } } } })
+        .catch(() => undefined);
       await prisma.tableQrToken.deleteMany({
         where: { table: { branch: { restaurant: { organizationId: orgId } } } },
       });
@@ -281,6 +308,709 @@ test.describe.serial("WexPay activation wizard flow", () => {
       await prisma.staffInvite.deleteMany({ where: { organizationId: orgId } });
       await prisma.activationJourneyStep.deleteMany({ where: { journeyId } });
       await prisma.activationJourney.deleteMany({ where: { id: journeyId } });
+      await prisma.activationFeeLedger.deleteMany({ where: { organizationId: orgId } });
+      await prisma.appInstallation.deleteMany({ where: { organizationId: orgId } });
+      await prisma.license.deleteMany({ where: { organizationId: orgId } });
+      await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+      await prisma.auditLog.deleteMany({ where: { organizationId: orgId } });
+      await prisma.organization.deleteMany({ where: { id: orgId } });
+      await prisma.$disconnect();
+    }
+  });
+
+  test("MENU_IMPORT: template link + empty-start with confirmation", async ({ page }) => {
+    test.setTimeout(120_000);
+    const fixtures = loadFixtures();
+    expect(fixtures.dbAvailable).toBe(true);
+    expect(fixtures.fixturesReady).toBe(true);
+    expect(fixtures.licensedCustomerEmail).toBeTruthy();
+
+    const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+    expect(databaseUrl).toBeTruthy();
+    const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl!) });
+
+    const product = await prisma.product.findFirst({ where: { key: "wexpay" }, select: { id: true } });
+    expect(product).toBeTruthy();
+    const plan = await prisma.plan.findFirst({
+      where: { productId: product!.id, isActive: true },
+      select: { id: true },
+    });
+    expect(plan).toBeTruthy();
+    const owner = await prisma.user.findUnique({
+      where: { email: fixtures.licensedCustomerEmail },
+      select: { id: true },
+    });
+    expect(owner).toBeTruthy();
+
+    const stamp = Date.now().toString(36);
+    const org = await prisma.organization.create({
+      data: {
+        name: `Wizard Menu Empty ${stamp}`,
+        slug: `wizard-menu-empty-${stamp}`,
+        isActive: true,
+        isDemo: false,
+      },
+    });
+    const orgId = org.id;
+
+    await prisma.membership.create({
+      data: {
+        organizationId: orgId,
+        userId: owner!.id,
+        role: "OWNER",
+        status: "ACTIVE",
+        acceptedAt: new Date(),
+      },
+    });
+    const license = await prisma.license.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        planId: plan!.id,
+        status: "ACTIVE",
+        licenseType: "MONTHLY",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+    await prisma.appInstallation.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        licenseId: license.id,
+        status: "ACTIVE",
+      },
+    });
+    await prisma.activationFeeLedger.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        planId: plan!.id,
+        status: "WAIVED",
+        currency: "TRY",
+        activationFeeMinor: 0,
+        grossAmountMinor: 0,
+      },
+    });
+
+    const restaurant = await prisma.restaurant.create({
+      data: {
+        organizationId: orgId,
+        name: `Empty Rest ${stamp}`,
+        slug: `empty-rest-${stamp}`,
+        isActive: true,
+      },
+    });
+    const branch = await prisma.branch.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: `Empty Branch ${stamp}`,
+        slug: `empty-branch-${stamp}`,
+        address: "E2E Addr",
+        isActive: true,
+      },
+    });
+
+    const stepKeys = [
+      ActivationStepKey.BUSINESS_PROFILE,
+      ActivationStepKey.BRANCH_SETUP,
+      ActivationStepKey.TABLE_SETUP,
+      ActivationStepKey.STAFF_INVITE,
+      ActivationStepKey.MENU_IMPORT,
+      ActivationStepKey.PAYMENT_PROVIDER,
+      ActivationStepKey.VALIDATION,
+      ActivationStepKey.GO_LIVE,
+    ];
+    const journey = await prisma.activationJourney.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        status: "IN_PROGRESS",
+        source: "SELF_SERVE",
+        currentStep: ActivationStepKey.MENU_IMPORT,
+        version: 1,
+        steps: {
+          create: stepKeys.map((stepKey) => ({
+            stepKey,
+            status:
+              stepKey === ActivationStepKey.MENU_IMPORT ||
+              stepKey === ActivationStepKey.PAYMENT_PROVIDER ||
+              stepKey === ActivationStepKey.VALIDATION ||
+              stepKey === ActivationStepKey.GO_LIVE
+                ? "PENDING"
+                : "COMPLETED",
+            safeMetadataJson:
+              stepKey === ActivationStepKey.BRANCH_SETUP
+                ? { branchId: branch.id, restaurantId: restaurant.id }
+                : undefined,
+          })),
+        },
+      },
+    });
+
+    try {
+      const browserIssues: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error" || message.type() === "warning") {
+          browserIssues.push(message.text());
+        }
+      });
+      await loginCustomer(page, fixtures.licensedCustomerEmail, customerPassword());
+      await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
+      await expect(page.getByTestId("wizard-menu-import")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("menu-import-template-csv")).toBeVisible();
+      await expect(page.getByTestId("menu-import-template-xlsx")).toBeVisible();
+
+      const emptyBtn = page.getByTestId("menu-import-empty-start");
+      await expect(emptyBtn).toBeDisabled();
+      await page.getByTestId("menu-import-confirm-empty").check();
+      await expect(emptyBtn).toBeEnabled();
+      await emptyBtn.click();
+
+      await expect
+        .poll(
+          async () => {
+            const row = await prisma.activationJourney.findUniqueOrThrow({
+              where: { id: journey.id },
+              include: { steps: true },
+            });
+            return row.currentStep;
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(ActivationStepKey.PAYMENT_PROVIDER);
+
+      const after = await prisma.activationJourney.findUniqueOrThrow({
+        where: { id: journey.id },
+        include: { steps: true },
+      });
+      expect(after.steps.find((s) => s.stepKey === ActivationStepKey.MENU_IMPORT)?.status).toBe(
+        "SKIPPED",
+      );
+      expect(await prisma.menuProduct.count({ where: { branchId: branch.id } })).toBe(0);
+      await expect(page.getByTestId("activation-waiting-status")).toContainText(
+        "Ödeme altyapısı henüz kullanıma açılmadı",
+        { timeout: 15_000 },
+      );
+      await expect(page.getByRole("link", { name: "Kuruluma devam et" })).toHaveCount(0);
+      await expect(page.getByText(/PAYMENT_PROVIDER|PAYMENT PROVIDER|VALIDATION|GO_LIVE|GO LIVE/)).toHaveCount(0);
+      expect(browserIssues.filter((issue) => /hydration|encType or method|unhandled/i.test(issue))).toEqual([]);
+    } finally {
+      await prisma.menuImportJob.deleteMany({ where: { organizationId: orgId } }).catch(() => undefined);
+      await prisma.branch.deleteMany({ where: { restaurant: { organizationId: orgId } } });
+      await prisma.restaurant.deleteMany({ where: { organizationId: orgId } });
+      await prisma.activationJourneyStep.deleteMany({ where: { journeyId: journey.id } });
+      await prisma.activationJourney.deleteMany({ where: { id: journey.id } });
+      await prisma.activationFeeLedger.deleteMany({ where: { organizationId: orgId } });
+      await prisma.appInstallation.deleteMany({ where: { organizationId: orgId } });
+      await prisma.license.deleteMany({ where: { organizationId: orgId } });
+      await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+      await prisma.auditLog.deleteMany({ where: { organizationId: orgId } });
+      await prisma.organization.deleteMany({ where: { id: orgId } });
+      await prisma.$disconnect();
+    }
+  });
+
+  test("MENU_IMPORT: upload tiny CSV and apply", async ({ page }) => {
+    test.setTimeout(120_000);
+    const fixtures = loadFixtures();
+    expect(fixtures.dbAvailable).toBe(true);
+    expect(fixtures.fixturesReady).toBe(true);
+    expect(fixtures.licensedCustomerEmail).toBeTruthy();
+
+    const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+    expect(databaseUrl).toBeTruthy();
+    const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl!) });
+
+    const product = await prisma.product.findFirst({ where: { key: "wexpay" }, select: { id: true } });
+    expect(product).toBeTruthy();
+    const plan = await prisma.plan.findFirst({
+      where: { productId: product!.id, isActive: true },
+      select: { id: true },
+    });
+    expect(plan).toBeTruthy();
+    const owner = await prisma.user.findUnique({
+      where: { email: fixtures.licensedCustomerEmail },
+      select: { id: true },
+    });
+    expect(owner).toBeTruthy();
+
+    const stamp = Date.now().toString(36);
+    const org = await prisma.organization.create({
+      data: {
+        name: `Wizard Menu Apply ${stamp}`,
+        slug: `wizard-menu-apply-${stamp}`,
+        isActive: true,
+        isDemo: false,
+      },
+    });
+    const orgId = org.id;
+
+    await prisma.membership.create({
+      data: {
+        organizationId: orgId,
+        userId: owner!.id,
+        role: "OWNER",
+        status: "ACTIVE",
+        acceptedAt: new Date(),
+      },
+    });
+    const license = await prisma.license.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        planId: plan!.id,
+        status: "ACTIVE",
+        licenseType: "MONTHLY",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+    await prisma.appInstallation.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        licenseId: license.id,
+        status: "ACTIVE",
+      },
+    });
+    await prisma.activationFeeLedger.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        planId: plan!.id,
+        status: "WAIVED",
+        currency: "TRY",
+        activationFeeMinor: 0,
+        grossAmountMinor: 0,
+      },
+    });
+
+    // Ensure product_limit allows at least one create.
+    const productEnt = await prisma.entitlement.findFirst({
+      where: { planId: plan!.id, key: "product_limit" },
+    });
+    if (!productEnt) {
+      await prisma.entitlement.create({
+        data: {
+          planId: plan!.id,
+          key: "product_limit",
+          valueType: "INTEGER",
+          valueInt: 50,
+          isActive: true,
+        },
+      });
+    } else if (productEnt.valueInt !== null && productEnt.valueInt >= 0 && productEnt.valueInt < 1) {
+      await prisma.entitlement.update({
+        where: { id: productEnt.id },
+        data: { valueInt: 50 },
+      });
+    }
+
+    const restaurant = await prisma.restaurant.create({
+      data: {
+        organizationId: orgId,
+        name: `Apply Rest ${stamp}`,
+        slug: `apply-rest-${stamp}`,
+        isActive: true,
+      },
+    });
+    const branch = await prisma.branch.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: `Apply Branch ${stamp}`,
+        slug: `apply-branch-${stamp}`,
+        address: "E2E Addr",
+        isActive: true,
+      },
+    });
+
+    const stepKeys = [
+      ActivationStepKey.BUSINESS_PROFILE,
+      ActivationStepKey.BRANCH_SETUP,
+      ActivationStepKey.TABLE_SETUP,
+      ActivationStepKey.STAFF_INVITE,
+      ActivationStepKey.MENU_IMPORT,
+      ActivationStepKey.PAYMENT_PROVIDER,
+      ActivationStepKey.VALIDATION,
+      ActivationStepKey.GO_LIVE,
+    ];
+    const journey = await prisma.activationJourney.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        status: "IN_PROGRESS",
+        source: "SELF_SERVE",
+        currentStep: ActivationStepKey.MENU_IMPORT,
+        version: 1,
+        steps: {
+          create: stepKeys.map((stepKey) => ({
+            stepKey,
+            status:
+              stepKey === ActivationStepKey.MENU_IMPORT ||
+              stepKey === ActivationStepKey.PAYMENT_PROVIDER ||
+              stepKey === ActivationStepKey.VALIDATION ||
+              stepKey === ActivationStepKey.GO_LIVE
+                ? "PENDING"
+                : "COMPLETED",
+            safeMetadataJson:
+              stepKey === ActivationStepKey.BRANCH_SETUP
+                ? { branchId: branch.id, restaurantId: restaurant.id }
+                : undefined,
+          })),
+        },
+      },
+    });
+
+    try {
+      const browserIssues: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error" || message.type() === "warning") {
+          browserIssues.push(message.text());
+        }
+      });
+      await loginCustomer(page, fixtures.licensedCustomerEmail, customerPassword());
+      await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
+      await expect(page.getByTestId("wizard-menu-import")).toBeVisible({ timeout: 30_000 });
+
+      const csv = "category,product_name,price\nIcecek,E2E Cay,45.00\n";
+      await page.getByTestId("menu-import-file").setInputFiles({
+        name: "e2e-menu.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(csv, "utf8"),
+      });
+      const uploadForm = page.getByTestId("menu-import-file").locator("xpath=ancestor::form");
+      expect(
+        await uploadForm.evaluate((form) => {
+          const htmlForm = form as HTMLFormElement;
+          const file = new FormData(htmlForm).get("file");
+          return {
+            method: htmlForm.method,
+            enctype: htmlForm.enctype,
+            fileName: file instanceof File ? file.name : null,
+          };
+        }),
+      ).toEqual({
+        method: "post",
+        enctype: "multipart/form-data",
+        fileName: "e2e-menu.csv",
+      });
+      await page.getByTestId("menu-import-upload").click();
+      await expect(page.getByTestId("menu-import-preview")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Geçerli: 1/)).toBeVisible();
+
+      await page.getByTestId("menu-import-confirm-apply").check();
+      await page.getByTestId("menu-import-apply").click();
+
+      await expect
+        .poll(
+          async () => {
+            const row = await prisma.activationJourney.findUniqueOrThrow({
+              where: { id: journey.id },
+            });
+            return row.currentStep;
+          },
+          { timeout: 45_000 },
+        )
+        .toBe(ActivationStepKey.PAYMENT_PROVIDER);
+
+      expect(await prisma.menuProduct.count({ where: { branchId: branch.id } })).toBe(1);
+      const product = await prisma.menuProduct.findFirst({
+        where: { branchId: branch.id, name: "E2E Cay" },
+      });
+      expect(product).toBeTruthy();
+      expect(Number(product!.price)).toBe(45);
+      expect(browserIssues.filter((issue) => /hydration|encType or method|unhandled/i.test(issue))).toEqual([]);
+    } finally {
+      await prisma.menuImportRowError
+        .deleteMany({ where: { job: { organizationId: orgId } } })
+        .catch(() => undefined);
+      await prisma.menuImportJob.deleteMany({ where: { organizationId: orgId } }).catch(() => undefined);
+      await prisma.menuProduct
+        .deleteMany({ where: { branch: { restaurant: { organizationId: orgId } } } })
+        .catch(() => undefined);
+      await prisma.menuCategory
+        .deleteMany({ where: { branch: { restaurant: { organizationId: orgId } } } })
+        .catch(() => undefined);
+      await prisma.branch.deleteMany({ where: { restaurant: { organizationId: orgId } } });
+      await prisma.restaurant.deleteMany({ where: { organizationId: orgId } });
+      await prisma.activationJourneyStep.deleteMany({ where: { journeyId: journey.id } });
+      await prisma.activationJourney.deleteMany({ where: { id: journey.id } });
+      await prisma.activationFeeLedger.deleteMany({ where: { organizationId: orgId } });
+      await prisma.appInstallation.deleteMany({ where: { organizationId: orgId } });
+      await prisma.license.deleteMany({ where: { organizationId: orgId } });
+      await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+      await prisma.auditLog.deleteMany({ where: { organizationId: orgId } });
+      await prisma.organization.deleteMany({ where: { id: orgId } });
+      await prisma.$disconnect();
+    }
+  });
+
+  test("MENU_IMPORT: multi-request apply for 101 products", async ({ page }) => {
+    test.setTimeout(180_000);
+    const fixtures = loadFixtures();
+    expect(fixtures.dbAvailable).toBe(true);
+    expect(fixtures.fixturesReady).toBe(true);
+    expect(fixtures.licensedCustomerEmail).toBeTruthy();
+
+    const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+    expect(databaseUrl).toBeTruthy();
+    const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl!) });
+
+    const product = await prisma.product.findFirst({ where: { key: "wexpay" }, select: { id: true } });
+    expect(product).toBeTruthy();
+    const plan = await prisma.plan.findFirst({
+      where: { productId: product!.id, isActive: true },
+      select: { id: true },
+    });
+    expect(plan).toBeTruthy();
+    const owner = await prisma.user.findUnique({
+      where: { email: fixtures.licensedCustomerEmail },
+      select: { id: true },
+    });
+    expect(owner).toBeTruthy();
+
+    const stamp = Date.now().toString(36);
+    const org = await prisma.organization.create({
+      data: {
+        name: `Wizard Menu Chunk ${stamp}`,
+        slug: `wizard-menu-chunk-${stamp}`,
+        isActive: true,
+        isDemo: false,
+      },
+    });
+    const orgId = org.id;
+
+    await prisma.membership.create({
+      data: {
+        organizationId: orgId,
+        userId: owner!.id,
+        role: "OWNER",
+        status: "ACTIVE",
+        acceptedAt: new Date(),
+      },
+    });
+    const license = await prisma.license.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        planId: plan!.id,
+        status: "ACTIVE",
+        licenseType: "MONTHLY",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+    await prisma.appInstallation.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        licenseId: license.id,
+        status: "ACTIVE",
+      },
+    });
+    await prisma.activationFeeLedger.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        planId: plan!.id,
+        status: "WAIVED",
+        currency: "TRY",
+        activationFeeMinor: 0,
+        grossAmountMinor: 0,
+      },
+    });
+
+    const productEnt = await prisma.entitlement.findFirst({
+      where: { planId: plan!.id, key: "product_limit" },
+    });
+    if (!productEnt) {
+      await prisma.entitlement.create({
+        data: {
+          planId: plan!.id,
+          key: "product_limit",
+          valueType: "INTEGER",
+          valueInt: 500,
+          isActive: true,
+        },
+      });
+    } else if (
+      productEnt.valueInt !== null &&
+      productEnt.valueInt >= 0 &&
+      productEnt.valueInt < 101
+    ) {
+      await prisma.entitlement.update({
+        where: { id: productEnt.id },
+        data: { valueInt: 500 },
+      });
+    }
+
+    const restaurant = await prisma.restaurant.create({
+      data: {
+        organizationId: orgId,
+        name: `Chunk Rest ${stamp}`,
+        slug: `chunk-rest-${stamp}`,
+        isActive: true,
+      },
+    });
+    const branch = await prisma.branch.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: `Chunk Branch ${stamp}`,
+        slug: `chunk-branch-${stamp}`,
+        address: "E2E Chunk Addr",
+        isActive: true,
+      },
+    });
+
+    const stepKeys = [
+      ActivationStepKey.BUSINESS_PROFILE,
+      ActivationStepKey.BRANCH_SETUP,
+      ActivationStepKey.TABLE_SETUP,
+      ActivationStepKey.STAFF_INVITE,
+      ActivationStepKey.MENU_IMPORT,
+      ActivationStepKey.PAYMENT_PROVIDER,
+      ActivationStepKey.VALIDATION,
+      ActivationStepKey.GO_LIVE,
+    ];
+    const journey = await prisma.activationJourney.create({
+      data: {
+        organizationId: orgId,
+        productId: product!.id,
+        status: "IN_PROGRESS",
+        source: "SELF_SERVE",
+        currentStep: ActivationStepKey.MENU_IMPORT,
+        version: 1,
+        steps: {
+          create: stepKeys.map((stepKey) => ({
+            stepKey,
+            status:
+              stepKey === ActivationStepKey.MENU_IMPORT ||
+              stepKey === ActivationStepKey.PAYMENT_PROVIDER ||
+              stepKey === ActivationStepKey.VALIDATION ||
+              stepKey === ActivationStepKey.GO_LIVE
+                ? "PENDING"
+                : "COMPLETED",
+            safeMetadataJson:
+              stepKey === ActivationStepKey.BRANCH_SETUP
+                ? { branchId: branch.id, restaurantId: restaurant.id }
+                : undefined,
+          })),
+        },
+      },
+    });
+
+    const PRODUCT_COUNT = 101;
+    const lines = ["category,product_name,price"];
+    for (let i = 1; i <= PRODUCT_COUNT; i += 1) {
+      lines.push(`Cat${Math.ceil(i / 20)},Prod${String(i).padStart(3, "0")},${(10 + (i % 50)).toFixed(2)}`);
+    }
+    const csv = `${lines.join("\n")}\n`;
+
+    try {
+      await loginCustomer(page, fixtures.licensedCustomerEmail, customerPassword());
+      await page.goto(`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(orgId)}`);
+      await expect(page.getByTestId("wizard-menu-import")).toBeVisible({ timeout: 30_000 });
+
+      await page.getByTestId("menu-import-file").setInputFiles({
+        name: "e2e-menu-101.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(csv, "utf8"),
+      });
+      await page.getByTestId("menu-import-upload").click();
+      await expect(page.getByTestId("menu-import-preview")).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByText(new RegExp(`Geçerli:\\s*${PRODUCT_COUNT}`))).toBeVisible();
+
+      let applyPosts = 0;
+      const onRequest = (req: { method: () => string; url: () => string }) => {
+        if (req.method() === "POST" && req.url().includes("/dashboard/wexpay/activation")) {
+          applyPosts += 1;
+        }
+      };
+      page.on("request", onRequest);
+
+      await page.getByTestId("menu-import-confirm-apply").check();
+      // Single user click — UI auto-continues remaining chunks.
+      await page.getByTestId("menu-import-apply").click();
+
+      await expect
+        .poll(
+          async () => {
+            const job = await prisma.menuImportJob.findFirst({
+              where: { organizationId: orgId },
+              orderBy: { createdAt: "desc" },
+            });
+            return job?.status ?? null;
+          },
+          { timeout: 120_000 },
+        )
+        .toBe("APPLIED");
+
+      page.off("request", onRequest);
+      expect(applyPosts).toBeGreaterThanOrEqual(3);
+
+      const products = await prisma.menuProduct.findMany({
+        where: { branchId: branch.id },
+        select: { name: true },
+      });
+      expect(products).toHaveLength(PRODUCT_COUNT);
+      const names = products.map((p) => p.name);
+      expect(new Set(names).size).toBe(PRODUCT_COUNT);
+
+      const job = await prisma.menuImportJob.findFirstOrThrow({
+        where: { organizationId: orgId },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(job.status).toBe("APPLIED");
+      expect(job.appliedRows).toBe(PRODUCT_COUNT);
+
+      await expect
+        .poll(
+          async () => {
+            const row = await prisma.activationJourney.findUniqueOrThrow({
+              where: { id: journey.id },
+            });
+            return row.currentStep;
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(ActivationStepKey.PAYMENT_PROVIDER);
+
+      await page.reload();
+      await expect(page.getByText(/Ödeme altyapısı\s*·\s*yakında/i)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("activation-waiting-status")).toContainText(
+        "Ödeme altyapısı henüz kullanıma açılmadı",
+      );
+      await expect(page.getByRole("link", { name: "Kuruluma devam et" })).toHaveCount(0);
+      await expect(page.getByTestId("wizard-menu-import")).toHaveCount(0);
+      expect(await prisma.menuProduct.count({ where: { branchId: branch.id } })).toBe(PRODUCT_COUNT);
+      const jobAfterRefresh = await prisma.menuImportJob.findFirstOrThrow({
+        where: { organizationId: orgId },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(jobAfterRefresh.status).toBe("APPLIED");
+    } finally {
+      await prisma.menuProductModifierGroup
+        .deleteMany({ where: { branchId: branch.id } })
+        .catch(() => undefined);
+      await prisma.menuModifierOption
+        .deleteMany({ where: { group: { branchId: branch.id } } })
+        .catch(() => undefined);
+      await prisma.menuModifierGroup.deleteMany({ where: { branchId: branch.id } }).catch(() => undefined);
+      await prisma.menuImportRowError
+        .deleteMany({ where: { job: { organizationId: orgId } } })
+        .catch(() => undefined);
+      await prisma.menuImportJob.deleteMany({ where: { organizationId: orgId } }).catch(() => undefined);
+      await prisma.menuProduct
+        .deleteMany({ where: { branch: { restaurant: { organizationId: orgId } } } })
+        .catch(() => undefined);
+      await prisma.menuCategory
+        .deleteMany({ where: { branch: { restaurant: { organizationId: orgId } } } })
+        .catch(() => undefined);
+      await prisma.branch.deleteMany({ where: { restaurant: { organizationId: orgId } } });
+      await prisma.restaurant.deleteMany({ where: { organizationId: orgId } });
+      await prisma.activationJourneyStep.deleteMany({ where: { journeyId: journey.id } });
+      await prisma.activationJourney.deleteMany({ where: { id: journey.id } });
       await prisma.activationFeeLedger.deleteMany({ where: { organizationId: orgId } });
       await prisma.appInstallation.deleteMany({ where: { organizationId: orgId } });
       await prisma.license.deleteMany({ where: { organizationId: orgId } });

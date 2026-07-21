@@ -1,18 +1,11 @@
 import Link from "next/link";
 import type { ActivationJourneyView } from "@/lib/wexpay-activation-journey";
-import { computeWizardProgress, ACTIVATION_STEP_ORDER } from "@/lib/wexpay-activation-journey";
-import { ActivationStepKey } from ".prisma/client";
-
-const STEP_LABELS: Record<ActivationStepKey, string> = {
-  BUSINESS_PROFILE: "İşletme profili",
-  BRANCH_SETUP: "Şube kurulumu",
-  TABLE_SETUP: "Masa kurulumu",
-  STAFF_INVITE: "Personel daveti",
-  MENU_IMPORT: "Menü aktarımı",
-  PAYMENT_PROVIDER: "Ödeme sağlayıcısı",
-  VALIDATION: "Doğrulama",
-  GO_LIVE: "Canlıya Geçiş",
-};
+import {
+  ACTIVATION_STEP_LABELS,
+  ACTIVATION_STEP_ORDER,
+  computeWizardProgress,
+  isActivationStepActionable,
+} from "@/lib/wexpay-activation-journey";
 
 export function SetupModeBanner({
   view,
@@ -24,6 +17,7 @@ export function SetupModeBanner({
   if (!view.setupMode || view.uiStatus === "ACTIVE") return null;
   const progress = computeWizardProgress(view.journey);
   const blocked = view.uiStatus === "BLOCKED";
+  const canContinue = isActivationStepActionable(progress.activeStep);
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-950 sm:px-5">
@@ -32,9 +26,15 @@ export function SetupModeBanner({
           <p className="text-[11px] font-black uppercase tracking-[0.14em] text-amber-700">Kurulum Modu</p>
           <p className="mt-1 text-sm font-semibold leading-relaxed">
             Akıllı Aktivasyon devam ediyor
-            {progress.activeStep ? ` · ${STEP_LABELS[progress.activeStep]}` : ""}.
-            Canlı QR bağlantıları Canlıya Geçiş sonrası açılır.
+            {progress.activeStep ? ` · ${ACTIVATION_STEP_LABELS[progress.activeStep]}` : ""}.
+            Canlı QR bağlantıları Yayına alma sonrası açılır.
           </p>
+          {!canContinue && progress.activeStep ? (
+            <p className="mt-2 text-sm font-semibold text-amber-900" data-testid="activation-waiting-status">
+              Kurulumunuz kaydedildi. {ACTIVATION_STEP_LABELS[progress.activeStep]} henüz kullanıma
+              açılmadı; hazır olduğunda bu ekrandan devam edebileceksiniz.
+            </p>
+          ) : null}
           {blocked && view.journey?.blockedReasonCode ? (
             <p className="mt-1 text-xs font-medium text-amber-800">
               Bloke: {view.journey.blockedReasonCode}
@@ -50,12 +50,21 @@ export function SetupModeBanner({
             {progress.completed}/{progress.total} adım · %{progress.percent}
           </p>
         </div>
-        <Link
-          href={continueHref}
-          className="inline-flex shrink-0 items-center justify-center rounded-full bg-amber-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-800"
-        >
-          Kuruluma devam et
-        </Link>
+        {canContinue ? (
+          <Link
+            href={continueHref}
+            className="inline-flex shrink-0 items-center justify-center rounded-full bg-amber-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-800"
+          >
+            Kuruluma devam et
+          </Link>
+        ) : (
+          <span
+            className="inline-flex shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-amber-300 bg-amber-100 px-4 py-2.5 text-sm font-bold text-amber-700"
+            aria-disabled="true"
+          >
+            Kullanıma hazırlanıyor
+          </span>
+        )}
       </div>
       <ol className="mt-4 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
         {ACTIVATION_STEP_ORDER.map((step) => {
@@ -73,7 +82,7 @@ export function SetupModeBanner({
                     : "bg-amber-100/70 text-amber-700"
               }`}
             >
-              {STEP_LABELS[step]}
+              {ACTIVATION_STEP_LABELS[step]}
               {done ? " ✓" : current ? " · şimdi" : ""}
             </li>
           );

@@ -4,6 +4,7 @@ import { DashboardEmptyState, DashboardSectionTitle } from "@/components/marketi
 import { dashboardHref, getCustomerDashboardData } from "@/lib/wexon-core-dashboard";
 import { loadOrStartActivationJourneyView } from "@/lib/wexpay-activation-journey";
 import { listOrganizationStaffInvites } from "@/lib/wexpay-staff-invite";
+import { getActiveMenuImportJobView } from "@/lib/wexpay-menu-import";
 import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import { prisma } from "@/lib/prisma";
 import { ActivationStepKey } from ".prisma/client";
@@ -65,6 +66,12 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
   const canSkipStaffInvite = true;
 
   const invites = await listOrganizationStaffInvites(organization.id);
+  const menuImportJob = view.journey
+    ? await getActiveMenuImportJobView({
+        organizationId: organization.id,
+        journeyId: view.journey.id,
+      })
+    : null;
   const continueHref = dashboardHref("/dashboard/wexpay/activation", organizationContext);
 
   const stepStatuses = Object.fromEntries(
@@ -73,6 +80,11 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
 
   const isLegacyActive =
     view.journey?.status === "ACTIVE" && view.journey.source === "LEGACY_BACKFILL";
+  const publicOrigin = (
+    process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000"
+  ).replace(/\/+$/, "");
 
   // Prefer IDs stored in journey step metadata — never invent "first restaurant/branch".
   const restaurantId = typeof meta.restaurantId === "string" ? meta.restaurantId : null;
@@ -110,6 +122,8 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
         isLegacyActive={Boolean(isLegacyActive) || view.uiStatus === "ACTIVE"}
         awaitingQrAck={Boolean(tableMeta.awaitingQrAck)}
         canSkipStaffInvite={canSkipStaffInvite}
+        menuImportJob={menuImportJob}
+        publicOrigin={publicOrigin}
       />
     </div>
   );

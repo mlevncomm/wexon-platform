@@ -17,7 +17,13 @@ import {
   STAFF_INVITE_TTL_MS,
   isInviteOpen,
 } from "./wexpay-staff-invite";
-import { maskTaxNoForAudit, computeWizardProgress, PR2_WIZARD_STEPS } from "./wexpay-activation-journey";
+import {
+  ACTIVATION_STEP_LABELS,
+  computeWizardProgress,
+  isActivationStepActionable,
+  maskTaxNoForAudit,
+  PR2_WIZARD_STEPS,
+} from "./wexpay-activation-journey";
 import { ActivationJourneyStepStatus, ActivationStepKey } from ".prisma/client";
 
 describe("staff invite tokens", () => {
@@ -203,5 +209,15 @@ describe("wizard helpers", () => {
     });
     assert.equal(progress.completed, 1);
     assert.equal(progress.activeStep, ActivationStepKey.BRANCH_SETUP);
+  });
+
+  it("uses customer-facing Turkish labels and blocks unavailable continuation steps", () => {
+    assert.equal(ACTIVATION_STEP_LABELS[ActivationStepKey.PAYMENT_PROVIDER], "Ödeme altyapısı");
+    assert.equal(ACTIVATION_STEP_LABELS[ActivationStepKey.VALIDATION], "Son kontroller");
+    assert.equal(ACTIVATION_STEP_LABELS[ActivationStepKey.GO_LIVE], "Yayına alma");
+    assert.equal(isActivationStepActionable(ActivationStepKey.MENU_IMPORT), true);
+    assert.equal(isActivationStepActionable(ActivationStepKey.PAYMENT_PROVIDER), false);
+    assert.equal(isActivationStepActionable(ActivationStepKey.VALIDATION), false);
+    assert.equal(isActivationStepActionable(ActivationStepKey.GO_LIVE), false);
   });
 });

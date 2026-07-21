@@ -44,3 +44,13 @@ export async function lockWexPayOrgBranchLimit(tx: LockClient, organizationId: s
 export async function lockWexPayOrgStaffLimit(tx: LockClient, organizationId: string) {
   await advisoryXactLock(tx, "wexpay:org-staff", organizationId);
 }
+
+/** Serializes org-level product entitlement checks (menu import / bulk create). */
+export async function lockWexPayOrgProductLimit(tx: LockClient, organizationId: string) {
+  await advisoryXactLock(tx, "wexpay:org-products", organizationId);
+}
+
+/** Serializes a single MenuImportJob apply/cancel path. */
+export async function lockWexPayMenuImportJob(tx: LockClient, jobId: string) {
+  await advisoryXactLock(tx, "wexpay:menu-import-job", jobId);
+}
