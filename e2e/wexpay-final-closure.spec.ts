@@ -568,6 +568,14 @@ test.describe.serial("WexPay final closure browser regressions", () => {
       expect(foreignResponse.status()).toBe(403);
       const foreignBody = await foreignResponse.text();
       expect(foreignBody).not.toContain("Foreign Report Secret");
+
+      const mismatchedBranchUrl = new URL(href!, page.url());
+      mismatchedBranchUrl.searchParams.set("organizationId", tenant.organizationId);
+      mismatchedBranchUrl.searchParams.set("branchId", foreignTenant.branchId);
+      const mismatchedBranchResponse = await page.request.get(mismatchedBranchUrl.toString());
+      expect(mismatchedBranchResponse.status()).toBe(404);
+      expect(await mismatchedBranchResponse.json()).toMatchObject({ reason: "not_found" });
+
       expect(csv).not.toContain("Foreign Report Secret");
       expect(csv).not.toContain(orderNo);
       expect(csv).not.toContain(paymentRef);

@@ -1,4 +1,5 @@
 import { requireWexPayApiContext } from "@/lib/wexpay-api-guard";
+import { prisma } from "@/lib/prisma";
 import {
   getBranchDailyReport,
   getOpenTablesSummary,
@@ -28,6 +29,17 @@ export async function GET(request: Request) {
 
   const context = await requireWexPayApiContext(request, { organizationId, requiredScope: "wexpay:read" });
   if (!context.ok) return context.response;
+
+  const ownedBranch = await prisma.branch.findFirst({
+    where: {
+      id: branchId,
+      restaurant: { organizationId: context.organizationId },
+    },
+    select: { id: true },
+  });
+  if (!ownedBranch) {
+    return Response.json({ error: "Şube bulunamadı.", reason: "not_found" }, { status: 404 });
+  }
 
   const [daily, providers, products, openTables] = await Promise.all([
     getBranchDailyReport(context.organizationId, branchId),

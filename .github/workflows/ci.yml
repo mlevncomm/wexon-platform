@@ -132,9 +132,7 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Seed ephemeral CI database
-        run: |
-          npx prisma db seed
-          npm run prisma:seed:real
+        run: npx prisma db seed
 
       - name: Run DB-backed unit tests
         run: npm run test:unit:db
