@@ -164,6 +164,27 @@ async function getManageContext(): Promise<WexPayMutationContext> {
   };
 }
 
+async function getCapabilityContext(
+  options: { kitchen?: boolean; cashier?: boolean; settings?: boolean },
+): Promise<WexPayMutationContext> {
+  const resolved = await resolveWexPaySessionContext(options);
+  if (!resolved.ok) {
+    throw new WexPayAccessError(resolved.message, resolved.reason);
+  }
+
+  const headerList = await headers();
+  const forwardedFor = headerList.get("x-forwarded-for");
+  const ipAddress = forwardedFor ? forwardedFor.split(",")[0]?.trim() || null : headerList.get("x-real-ip");
+
+  return {
+    organizationId: resolved.organizationId,
+    actor: resolved.actor,
+    entitlementMap: resolved.entitlementMap,
+    canManage: resolved.canManage,
+    ipAddress,
+  };
+}
+
 // --- Restaurant ------------------------------------------------------------
 
 export async function createRestaurantAction(formData: FormData) {
@@ -280,7 +301,7 @@ export async function closeTableAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parseTableClose(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ cashier: true });
     await closeTable(context, input);
     revalidateWexPayOperations();
   } catch (error) {
@@ -295,7 +316,7 @@ export async function markReceiptPrintedAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parseTableReceiptPrinted(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ cashier: true });
     await markReceiptPrinted(context, input);
     revalidateWexPayOperations();
   } catch (error) {
@@ -451,7 +472,7 @@ export async function createOrderAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parseOrderCreate(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ cashier: true });
     await createOrder(context, input);
     revalidatePath(ORDERS_PATH);
     revalidatePath(TABLES_PATH);
@@ -467,7 +488,7 @@ export async function updateOrderStatusAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parseOrderStatusUpdate(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ kitchen: true });
     await updateOrderStatus(context, input);
     revalidateWexPayOperations();
   } catch (error) {
@@ -484,7 +505,7 @@ export async function createPaymentAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parsePaymentCreate(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ cashier: true });
     const result = await createPayment(context, input);
     revalidatePath(PAYMENTS_PATH);
     revalidatePath(TABLES_PATH);
@@ -509,7 +530,7 @@ export async function regeneratePaytrCheckoutAction(formData: FormData) {
     if (typeof paymentId !== "string" || !paymentId.trim()) {
       throw new WexPayValidationError("Ödeme zorunludur.");
     }
-    context = await getManageContext();
+    context = await getCapabilityContext({ cashier: true });
     const result = await regeneratePaytrCheckout(context, { paymentId: paymentId.trim() });
     revalidatePath(PAYMENTS_PATH);
     revalidatePath(TABLES_PATH);
@@ -529,7 +550,7 @@ export async function updatePaymentAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parsePaymentUpdate(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ cashier: true });
     await updatePayment(context, input);
     revalidatePath(PAYMENTS_PATH);
   } catch (error) {
@@ -554,7 +575,7 @@ export async function upsertProviderCredentialAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parseProviderCredentialUpsert(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ settings: true });
     const prepared = await prepareProviderCredentialUpsert(context.organizationId, input);
     await upsertWexPayProviderCredential(credentialAuditContext(context), {
       provider: input.provider,
@@ -577,7 +598,7 @@ export async function deactivateProviderCredentialAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parseProviderCredentialDeactivate(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ settings: true });
     await deactivateWexPayProviderCredential(credentialAuditContext(context), input);
     revalidatePath(SETTINGS_PATH);
   } catch (error) {
@@ -592,7 +613,7 @@ export async function testProviderCredentialAction(formData: FormData) {
   let context: WexPayMutationContext | undefined;
   try {
     const input = parseProviderCredentialTest(formData);
-    context = await getManageContext();
+    context = await getCapabilityContext({ settings: true });
     const result = await testProviderCredential(credentialAuditContext(context), input);
     revalidatePath(SETTINGS_PATH);
     const separator = redirectTo.includes("?") ? "&" : "?";

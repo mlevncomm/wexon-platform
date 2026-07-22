@@ -12,9 +12,11 @@ import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
 import { calculateTableAccount } from "@/lib/wexpay-account";
 import {
+  createBranch,
   createModifierGroup,
   createModifierOption,
   createPayment,
+  createProduct,
   createTable,
   createTablesBulk,
   setProductModifierGroups,
@@ -51,6 +53,7 @@ function manageContext(organizationId: string, tableLimit = 50): WexPayMutationC
       table_limit: tableLimit,
       branch_limit: 10,
       product_limit: 500,
+      feature_multi_location: true,
     },
     actor: { type: "admin_session", email: `lock-test-${suffix}@wexon.test`, role: "ADMIN" },
     ipAddress: "127.0.0.1",
@@ -60,9 +63,11 @@ function manageContext(organizationId: string, tableLimit = 50): WexPayMutationC
 type Fixture = {
   orgId: string;
   foreignOrgId: string;
+  restaurantId: string;
   branchId: string;
   foreignBranchId: string;
   tableId: string;
+  categoryId: string;
   productId: string;
 };
 
@@ -114,9 +119,11 @@ async function seedFixture(): Promise<Fixture> {
   return {
     orgId: org.id,
     foreignOrgId: foreign.id,
+    restaurantId: restaurant.id,
     branchId: branch.id,
     foreignBranchId: foreignBranch.id,
     tableId: table.id,
+    categoryId: category.id,
     productId: product.id,
   };
 }
@@ -646,5 +653,74 @@ describe("wexpay payment concurrency + modifiers (db)", () => {
         }),
       (error: unknown) => error instanceof Error,
     );
+  });
+
+  it("denies second active branch when feature_multi_location is off", async () => {
+    const ctx: WexPayMutationContext = {
+      ...manageContext(fixture.orgId),
+      entitlementMap: {
+        branch_limit: 5,
+        table_limit: 50,
+        product_limit: 500,
+        feature_multi_location: false,
+      },
+    };
+
+    await assert.rejects(
+      () =>
+        createBranch(ctx, {
+          restaurantId: fixture.restaurantId,
+          name: `Denied ${suffix}`,
+          slug: `denied-${suffix}`,
+          address: null,
+        }),
+      (error: unknown) =>
+        error instanceof WexPayValidationError && error.message.includes("feature_multi_location"),
+    );
+  });
+
+  it("enforces product_limit under concurrent createProduct with lock", async () => {
+    const current = await prisma.menuProduct.count({
+      where: { branch: { restaurant: { organizationId: fixture.orgId } } },
+    });
+    const limit = current + 1;
+    const ctx: WexPayMutationContext = {
+      ...manageContext(fixture.orgId),
+      entitlementMap: {
+        branch_limit: 10,
+        table_limit: 50,
+        product_limit: limit,
+        feature_multi_location: true,
+      },
+    };
+
+    const attempts = Array.from({ length: 4 }, (_, index) =>
+      createProduct(ctx, {
+        branchId: fixture.branchId,
+        categoryId: fixture.categoryId,
+        name: `LockProd ${suffix}-${index}`,
+        description: null,
+        price: 10,
+        imageUrl: null,
+        isPopular: false,
+      }).then(
+        () => ({ ok: true as const }),
+        (error: unknown) => ({ ok: false as const, error }),
+      ),
+    );
+
+    const results = await Promise.all(attempts);
+    const successes = results.filter((row) => row.ok).length;
+    const failures = results.filter((row) => !row.ok);
+    assert.equal(successes, 1);
+    assert.ok(failures.length >= 3);
+    for (const failure of failures) {
+      assert.ok(failure.error instanceof WexPayValidationError);
+    }
+
+    const after = await prisma.menuProduct.count({
+      where: { branch: { restaurant: { organizationId: fixture.orgId } } },
+    });
+    assert.equal(after, limit);
   });
 });

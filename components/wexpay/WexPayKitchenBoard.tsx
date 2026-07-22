@@ -96,7 +96,7 @@ function KitchenOrderCard({
             data-kitchen-advance={order.id}
             data-kitchen-next={nextStatus}
             disabled={!selected}
-            className="w-full rounded-2xl bg-[#10b981] px-5 py-2.5 text-xs font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="min-h-12 w-full rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {orderStatusLabels[nextStatus] ?? nextStatus} olarak işaretle
             {selected ? "" : " (önce seçin)"}
@@ -111,14 +111,22 @@ export default function WexPayKitchenBoard({
   orders,
   canManage,
   redirectTo,
+  organizationId,
+  branchId,
 }: {
   orders: KitchenOrderRow[];
   canManage: boolean;
   redirectTo: string;
+  organizationId?: string;
+  branchId?: string;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(orders[0]?.id ?? null);
   const [mobileTab, setMobileTab] = useState<"NEW" | "PREPARING" | "SERVED">("NEW");
-  const lastUpdated = useWexPayLiveRefresh(true);
+  const lastUpdated = useWexPayLiveRefresh({
+    enabled: true,
+    organizationId,
+    branchId,
+  });
 
   const effectiveSelectedId =
     orders.length === 0

@@ -1,5 +1,6 @@
 import { requireWexPayApiContext } from "@/lib/wexpay-api-guard";
 import { prisma } from "@/lib/prisma";
+import { assertWexPayFeatureEnabled } from "@/lib/wexpay-entitlements";
 import {
   getBranchDailyReport,
   getOpenTablesSummary,
@@ -29,6 +30,14 @@ export async function GET(request: Request) {
 
   const context = await requireWexPayApiContext(request, { organizationId, requiredScope: "wexpay:read" });
   if (!context.ok) return context.response;
+
+  const csvFeature = assertWexPayFeatureEnabled(context.entitlementMap, "feature_csv_export");
+  if (!csvFeature.ok) {
+    return Response.json(
+      { error: csvFeature.message, reason: "entitlement", key: csvFeature.key },
+      { status: 403 },
+    );
+  }
 
   const ownedBranch = await prisma.branch.findFirst({
     where: {

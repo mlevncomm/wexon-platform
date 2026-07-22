@@ -87,6 +87,7 @@ type Props = {
   latestValidationSummary: ActivationValidationSafeMetadata | null;
   paytrApiEnabled: boolean;
   isProductionEnvironment: boolean;
+  advancedRolesEnabled?: boolean;
 };
 
 const initial: WizardActionState = { ok: false };
@@ -645,11 +646,20 @@ export function ActivationWizardClient(props: Props) {
             <label className="block text-sm font-semibold text-slate-700">
               Rol
               <select name="role" defaultValue="STAFF" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2">
-                <option value="ADMIN">Yönetici</option>
-                <option value="MANAGER">Müdür</option>
-                <option value="STAFF">Personel</option>
-                <option value="BILLING">Faturalama</option>
-                <option value="VIEWER">Görüntüleyici</option>
+                {props.advancedRolesEnabled ? (
+                  <>
+                    <option value="ADMIN">Yönetici</option>
+                    <option value="MANAGER">Müdür</option>
+                    <option value="STAFF">Personel</option>
+                    <option value="BILLING">Faturalama</option>
+                    <option value="VIEWER">Görüntüleyici</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="STAFF">Personel</option>
+                    <option value="VIEWER">Görüntüleyici</option>
+                  </>
+                )}
               </select>
             </label>
             <button

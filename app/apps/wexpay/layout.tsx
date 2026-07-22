@@ -12,6 +12,7 @@ import {
   getActivationJourneyViewForOrg,
   isActivationStepActionable,
 } from "@/lib/wexpay-activation-journey";
+import { isWexPayFeatureEnabled } from "@/lib/wexpay-entitlements";
 
 function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayAccess>>, { allowed: true }>) {
   return access.organization.restaurants.flatMap((restaurant) =>
@@ -67,6 +68,13 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
         packageInfo={{
           planName: access.license.plan.name,
           licenseStatus: formatCoreStatus(access.license.status),
+        }}
+        features={{
+          multiLocation: isWexPayFeatureEnabled(access.entitlementMap, "feature_multi_location"),
+          csvExport: isWexPayFeatureEnabled(access.entitlementMap, "feature_csv_export"),
+          advancedReports:
+            isWexPayFeatureEnabled(access.entitlementMap, "feature_advanced_reports") ||
+            isWexPayFeatureEnabled(access.entitlementMap, "feature_reporting_advanced"),
         }}
       >
         {activationView.setupMode ? (

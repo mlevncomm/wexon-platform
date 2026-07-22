@@ -22,14 +22,28 @@ import {
 } from "@/lib/wexpay-tenant";
 import { type OrderItemInput, WexPayValidationError } from "@/lib/wexpay-validation";
 import { priceOrderLine, sumPricedLinesSubtotal } from "@/lib/wexpay-order-pricing";
-import { lockWexPayOrgBranchLimit, lockWexPayOrgTableLimit, lockWexPayTableAccount } from "@/lib/wexpay-locks";
+import {
+  lockWexPayOrgBranchLimit,
+  lockWexPayOrgProductLimit,
+  lockWexPayOrgTableLimit,
+  lockWexPayTableAccount,
+} from "@/lib/wexpay-locks";
+import {
+  canManageWexPay,
+  canOperateCashierWexPay,
+  canOperateKitchenWexPay,
+} from "@/lib/wexpay-auth";
+import {
+  assertWexPayFeatureEnabled,
+  isWexPayFeatureEnabled,
+} from "@/lib/wexpay-entitlements";
 import { resolveWexPayPaymentProvider, type WexPayPaymentProviderKey } from "@/lib/wexpay-payment-provider";
 import { generatePaytrMerchantOid } from "@/lib/wexpay-paytr-adapter";
 
 /**
  * Pure tenant-aware mutation service for the real WexPay operator app. Every
  * function:
- *  1. requires management capability,
+ *  1. requires the matching capability (manage / kitchen / cashier / settings),
  *  2. asserts tenant ownership through the organizationId chain,
  *  3. enforces entitlement limits where applicable,
  *  4. writes the domain record and its audit log inside one transaction.
@@ -51,10 +65,37 @@ export type WexPayMutationContext = {
   ipAddress?: string | null;
 };
 
-function assertManage(context: WexPayMutationContext) {
-  if (!context.canManage) {
-    throw new WexPayAccessError("Bu işlem için yetkiniz yok.", "role");
+function actorRole(context: WexPayMutationContext): string | null {
+  if (context.actor.type === "customer_session" || context.actor.type === "admin_session") {
+    return context.actor.role;
   }
+  return null;
+}
+
+function assertManage(context: WexPayMutationContext) {
+  if (context.canManage) return;
+  const role = actorRole(context);
+  if (role && canManageWexPay(role)) return;
+  throw new WexPayAccessError("Bu işlem için yetkiniz yok.", "role");
+}
+
+function assertKitchenOperate(context: WexPayMutationContext) {
+  if (context.canManage) return;
+  const role = actorRole(context);
+  if (role && canOperateKitchenWexPay(role)) return;
+  throw new WexPayAccessError("Mutfak işlemi için yetkiniz yok.", "role");
+}
+
+function assertCashierOperate(context: WexPayMutationContext) {
+  if (context.canManage) return;
+  const role = actorRole(context);
+  if (role && canOperateCashierWexPay(role)) return;
+  throw new WexPayAccessError("Kasa işlemi için yetkiniz yok.", "role");
+}
+
+/** STAFF cashier allowlist is limited — not full financial admin. */
+function isStaffLimitedCashier(context: WexPayMutationContext) {
+  return !context.canManage && actorRole(context) === "STAFF";
 }
 
 function auditUserId(context: WexPayMutationContext) {
@@ -118,6 +159,24 @@ async function enforceEntitlementLimit(
     throw new WexPayValidationError(limit.message);
   }
   return limit;
+}
+
+async function enforceFeatureEnabled(
+  tx: TenantDb,
+  context: WexPayMutationContext,
+  key: string,
+) {
+  const feature = assertWexPayFeatureEnabled(context.entitlementMap, key);
+  if (!feature.ok) {
+    await writeWexPayAudit(tx, context, {
+      action: "entitlement.feature_denied",
+      entityType: "Entitlement",
+      entityId: key,
+      metadata: { key: feature.key },
+    });
+    throw new WexPayValidationError(feature.message);
+  }
+  return feature;
 }
 
 function isUniqueConflict(error: unknown): error is { code: "P2002" } {
@@ -290,6 +349,13 @@ export async function createBranch(
 
       const currentBranches = await countOrgBranches(tx, context.organizationId);
       await enforceEntitlementLimit(tx, context, "branch_limit", currentBranches);
+
+      const activeBranchCount = await tx.branch.count({
+        where: { restaurant: { organizationId: context.organizationId }, isActive: true },
+      });
+      if (activeBranchCount >= 1 && !isWexPayFeatureEnabled(context.entitlementMap, "feature_multi_location")) {
+        await enforceFeatureEnabled(tx, context, "feature_multi_location");
+      }
 
       const branch = await tx.branch.create({
         data: {
@@ -488,7 +554,7 @@ export async function updateTable(
 }
 
 export async function closeTable(context: WexPayMutationContext, input: { tableId: string }) {
-  assertManage(context);
+  assertCashierOperate(context);
 
   return runInTransaction(async (tx) => {
     const existing = await assertTableInOrg(tx, context.organizationId, input.tableId);
@@ -547,7 +613,7 @@ export async function closeTable(context: WexPayMutationContext, input: { tableI
 }
 
 export async function markReceiptPrinted(context: WexPayMutationContext, input: { tableId: string }) {
-  assertManage(context);
+  assertCashierOperate(context);
 
   return runInTransaction(async (tx) => {
     const existing = await assertTableInOrg(tx, context.organizationId, input.tableId);
@@ -698,6 +764,7 @@ export async function createProduct(
   assertManage(context);
 
   return runInTransaction(async (tx) => {
+    await lockWexPayOrgProductLimit(tx, context.organizationId);
     await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
     const category = await tx.menuCategory.findFirst({
@@ -1196,7 +1263,7 @@ export async function createOrder(
   context: WexPayMutationContext,
   input: { branchId: string; tableId: string; note: string | null; items: OrderItemInput[] },
 ) {
-  assertManage(context);
+  assertCashierOperate(context);
 
   try {
     return await runInTransaction(async (tx) => {
@@ -1261,7 +1328,7 @@ export async function updateOrderStatus(
   context: WexPayMutationContext,
   input: { orderId: string; status: OrderStatus },
 ) {
-  assertManage(context);
+  assertKitchenOperate(context);
 
   return runInTransaction(async (tx) => {
     const existing = await assertOrderInOrg(tx, context.organizationId, input.orderId);
@@ -1338,7 +1405,7 @@ export async function createPayment(
     receiptRequested?: boolean;
   },
 ): Promise<CreatePaymentResult> {
-  assertManage(context);
+  assertCashierOperate(context);
 
   const { key: providerKey, adapter } = await resolveWexPayPaymentProvider(input.provider);
   const receiptRequested = Boolean(input.receiptRequested);
@@ -1660,7 +1727,7 @@ export async function regeneratePaytrCheckout(
   context: WexPayMutationContext,
   input: { paymentId: string },
 ): Promise<{ paymentId: string; externalCheckoutUrl: string; providerRef: string }> {
-  assertManage(context);
+  assertCashierOperate(context);
 
   const existing = await assertPaymentInOrg(prisma, context.organizationId, input.paymentId);
   if (existing.provider !== "paytr" || existing.status !== PaymentStatus.PENDING) {
@@ -1709,7 +1776,7 @@ export async function updatePayment(
   context: WexPayMutationContext,
   input: { paymentId: string; status: PaymentStatus },
 ) {
-  assertManage(context);
+  assertCashierOperate(context);
 
   return runInTransaction(async (tx) => {
     const existing = await assertPaymentInOrg(tx, context.organizationId, input.paymentId);
@@ -1717,6 +1784,18 @@ export async function updatePayment(
     // Lock order: table account only (see lib/wexpay-locks.ts).
     await lockWexPayTableAccount(tx, existing.tableId);
     const locked = await assertPaymentInOrg(tx, context.organizationId, input.paymentId);
+
+    if (isStaffLimitedCashier(context)) {
+      if (locked.status === PaymentStatus.PAID || locked.status === PaymentStatus.REFUNDED) {
+        throw new WexPayAccessError(
+          "Personel, tahsil edilmiş veya iade edilmiş ödemeleri değiştiremez.",
+          "role",
+        );
+      }
+      if (input.status === PaymentStatus.REFUNDED) {
+        throw new WexPayAccessError("Personel iade işlemi yapamaz.", "role");
+      }
+    }
 
     if (
       locked.provider === "paytr" &&

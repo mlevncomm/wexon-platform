@@ -90,7 +90,7 @@ export default async function WexPaySettingsPage({ searchParams }: { searchParam
       >
         <WexPayProviderCredentialsPanel
           credentials={providerCredentials}
-          canManage={access.canManage}
+          canManage={access.canConfigureSettings}
           encryptionAvailable={encryptionAvailable}
           paytrApiEnabled={process.env.WEXPAY_PAYTR_ENABLE_API === "true"}
           redirectTo={SETTINGS_PATH}

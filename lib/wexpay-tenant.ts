@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
 import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
-import { canAccessWexPay, canManageWexPay } from "@/lib/wexpay-auth";
+import { canAccessWexPay, canManageWexPay, canOperateCashierWexPay, canOperateKitchenWexPay, canConfigureWexPaySettings } from "@/lib/wexpay-auth";
 import {
   type CoreEntitlementMap,
   type ProductAccessDenialReason,
@@ -42,6 +42,9 @@ export type WexPaySessionContext = {
   actor: WexPaySessionActor;
   role: string;
   canManage: boolean;
+  canOperateKitchen: boolean;
+  canOperateCashier: boolean;
+  canConfigureSettings: boolean;
   entitlementMap: CoreEntitlementMap;
 };
 
@@ -76,7 +79,13 @@ export class WexPayAccessError extends Error {
  * the MVP) and then defers the access decision to Core.
  */
 export async function resolveWexPaySessionContext(
-  options: { manage?: boolean; organizationId?: string } = {},
+  options: {
+    manage?: boolean;
+    kitchen?: boolean;
+    cashier?: boolean;
+    settings?: boolean;
+    organizationId?: string;
+  } = {},
 ): Promise<ResolveWexPaySessionResult> {
   const selector = await resolvePlatformOrganizationSelector(
     options.organizationId ? { organizationId: options.organizationId } : undefined,
@@ -93,7 +102,7 @@ export async function resolveWexPaySessionContext(
       return { ok: false, reason: decision.reason, message: decision.message };
     }
 
-    if (decision.organization.isDemo && options.manage) {
+    if (decision.organization.isDemo && (options.manage || options.kitchen || options.cashier || options.settings)) {
       return {
         ok: false,
         reason: "role",
@@ -107,6 +116,9 @@ export async function resolveWexPaySessionContext(
       actor: { type: "admin_session", email: adminSession.email, role: "ADMIN" },
       role: "ADMIN",
       canManage: true,
+      canOperateKitchen: true,
+      canOperateCashier: true,
+      canConfigureSettings: true,
       entitlementMap: decision.entitlementMap,
     };
   }
@@ -142,8 +154,22 @@ export async function resolveWexPaySessionContext(
     return { ok: false, reason: "role", message: "WexPay erişim yetkiniz yok." };
   }
 
-  if (options.manage && !canManageWexPay(membership.role)) {
+  const canManage = canManageWexPay(membership.role);
+  const canOperateKitchen = canOperateKitchenWexPay(membership.role);
+  const canOperateCashier = canOperateCashierWexPay(membership.role);
+  const canConfigureSettings = canConfigureWexPaySettings(membership.role);
+
+  if (options.manage && !canManage) {
     return { ok: false, reason: "role", message: "Bu işlem için yetkiniz yok." };
+  }
+  if (options.kitchen && !canOperateKitchen) {
+    return { ok: false, reason: "role", message: "Mutfak işlemi için yetkiniz yok." };
+  }
+  if (options.cashier && !canOperateCashier) {
+    return { ok: false, reason: "role", message: "Kasa işlemi için yetkiniz yok." };
+  }
+  if (options.settings && !canConfigureSettings) {
+    return { ok: false, reason: "role", message: "Ayarları yalnızca sahip veya yönetici değiştirebilir." };
   }
 
   const decision = await requireProductAccess({
@@ -173,7 +199,10 @@ export async function resolveWexPaySessionContext(
       role: membership.role,
     },
     role: membership.role,
-    canManage: canManageWexPay(membership.role),
+    canManage,
+    canOperateKitchen,
+    canOperateCashier,
+    canConfigureSettings,
     entitlementMap: decision.entitlementMap,
   };
 }

@@ -35,7 +35,13 @@ export default async function WexPayKitchenPage({ searchParams }: { searchParams
   return (
     <>
       {wexpayError ? <WexPayErrorNotice message={wexpayError} /> : null}
-      <WexPayKitchenBoard orders={orders} canManage={context.canManage} redirectTo={redirectTo} />
+      <WexPayKitchenBoard
+        orders={orders}
+        canManage={context.canOperateKitchen}
+        redirectTo={redirectTo}
+        organizationId={context.organizationId}
+        branchId={activeBranch.id}
+      />
     </>
   );
 }

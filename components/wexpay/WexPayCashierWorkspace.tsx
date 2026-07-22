@@ -55,6 +55,7 @@ export function WexPayCashierWorkspace({
   canManage,
   activeBranchId,
   activeBranchName,
+  organizationId,
   redirectTo,
   products,
   notifications,
@@ -63,6 +64,7 @@ export function WexPayCashierWorkspace({
   canManage: boolean;
   activeBranchId: string;
   activeBranchName?: string;
+  organizationId?: string;
   redirectTo: string;
   products: ProductOption[];
   notifications: OperationsNotification[];
@@ -79,7 +81,11 @@ export function WexPayCashierWorkspace({
   const [tableSearch, setTableSearch] = useState("");
   const [showComposer, setShowComposer] = useState(() => openComposerFromUrl);
   const [confirmClose, setConfirmClose] = useState(false);
-  const lastUpdated = useWexPayLiveRefresh(true);
+  const lastUpdated = useWexPayLiveRefresh({
+    enabled: true,
+    organizationId,
+    branchId: activeBranchId,
+  });
   const [qrTableId, setQrTableId] = useState<string | null>(null);
 
   const filteredTables = useMemo(() => {

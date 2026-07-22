@@ -34,6 +34,12 @@ const tabs: TabItem[] = [
   { label: "Paket / Lisans", path: "/apps/wexpay/settings" },
 ];
 
+type ShellFeatures = {
+  multiLocation: boolean;
+  csvExport: boolean;
+  advancedReports: boolean;
+};
+
 function buildHref(
   path: string,
   branchId: string | null,
@@ -113,18 +119,26 @@ function NavLinks({
   activeBranchId,
   branchId,
   organizationId,
+  features,
   onNavigate,
 }: {
   pathname: string;
   activeBranchId: string | null;
   branchId: string | null;
   organizationId: string | null;
+  features: ShellFeatures;
   onNavigate?: () => void;
 }) {
   return (
     <nav className="flex flex-col gap-0.5" aria-label="WexPay navigasyon">
       {tabs.map((tab) => {
         const active = isActiveTab(pathname, tab.path);
+        const lockedHint =
+          tab.path === "/apps/wexpay/reports" && !features.advancedReports && !features.csvExport
+            ? " · Temel"
+            : tab.path === "/apps/wexpay/branches" && !features.multiLocation
+              ? " · Tek şube"
+              : "";
         return (
           <Link
             key={tab.path}
@@ -135,6 +149,11 @@ function NavLinks({
             }`}
           >
             {tab.label}
+            {lockedHint ? (
+              <span className={`ml-1 text-[10px] font-bold ${active ? "text-white/70" : "text-slate-400"}`}>
+                {lockedHint}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -152,6 +171,7 @@ function MobileNavDrawer({
   branches,
   packageInfo,
   dashboardHref,
+  features,
 }: {
   open: boolean;
   onClose: () => void;
@@ -162,6 +182,7 @@ function MobileNavDrawer({
   branches: BranchOption[];
   packageInfo: { planName: string; licenseStatus: string };
   dashboardHref: string;
+  features: ShellFeatures;
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -239,6 +260,7 @@ function MobileNavDrawer({
             activeBranchId={activeBranch?.id ?? null}
             branchId={branchId}
             organizationId={organizationId}
+            features={features}
             onNavigate={onClose}
           />
           {branches.length > 1 ? (
@@ -287,6 +309,7 @@ export default function WexPayBusinessShell({
   isAdminPreview = false,
   branches,
   packageInfo,
+  features = { multiLocation: true, csvExport: true, advancedReports: true },
   children,
 }: {
   organizationName: string;
@@ -294,6 +317,7 @@ export default function WexPayBusinessShell({
   isAdminPreview?: boolean;
   branches: BranchOption[];
   packageInfo: { planName: string; licenseStatus: string };
+  features?: ShellFeatures;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -410,6 +434,7 @@ export default function WexPayBusinessShell({
                 activeBranchId={activeBranch?.id ?? null}
                 branchId={branchId}
                 organizationId={activeOrganizationId}
+                features={features}
               />
             </div>
             <ShellPackageCard
@@ -440,6 +465,7 @@ export default function WexPayBusinessShell({
         branches={branches}
         packageInfo={packageInfo}
         dashboardHref={dashboardHref}
+        features={features}
       />
     </div>
   );

@@ -5,6 +5,7 @@ import type { ProviderPaymentBreakdownRow } from "@/lib/wexpay-read";
 import { appNavigationUrl } from "@/lib/wexon/urls";
 import {
   formatLira,
+  TableStatusBadge,
   WexPayEmptyNotice,
   WexPayMetricCard,
   WexPayMetricStrip,
@@ -54,6 +55,8 @@ export default function WexPayReportsBoard({
   topProducts,
   openTables,
   tableStatusRows,
+  canExportCsv = false,
+  hasAdvancedReports = false,
 }: {
   branchId: string;
   organizationId: string;
@@ -63,6 +66,8 @@ export default function WexPayReportsBoard({
   topProducts: ReportProduct[];
   openTables: OpenTableRow[];
   tableStatusRows: Array<{ label: string; count: number }>;
+  canExportCsv?: boolean;
+  hasAdvancedReports?: boolean;
 }) {
   const exportHref = `/api/wexpay/reports/export?organizationId=${encodeURIComponent(organizationId)}&branchId=${encodeURIComponent(branchId)}`;
 
@@ -71,14 +76,21 @@ export default function WexPayReportsBoard({
       <WexPayPanel
         eyebrow="Operasyon raporu"
         title="Raporlar"
+        description={
+          hasAdvancedReports
+            ? undefined
+            : "Temel günlük özet. Gelişmiş raporlama Growth ve üzeri paketlerde açılır."
+        }
         headerAction={
           <div className="flex flex-wrap gap-2">
-            <a
-              href={exportHref}
-              className="inline-flex rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-black text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-            >
-              CSV indir
-            </a>
+            {canExportCsv ? (
+              <a
+                href={exportHref}
+                className="inline-flex rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-black text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+              >
+                CSV indir
+              </a>
+            ) : null}
             <Link
               href={appNavigationUrl("/apps/wexpay/reports", `branchId=${encodeURIComponent(branchId)}`)}
               className="inline-flex rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:-translate-y-0.5 hover:bg-emerald-700"
@@ -152,7 +164,9 @@ export default function WexPayReportsBoard({
               <WexPaySurface key={table.id} className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-black text-slate-950">{table.label}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">{table.status}</p>
+                  <div className="mt-1.5">
+                    <TableStatusBadge status={table.status} />
+                  </div>
                 </div>
                 <p className="shrink-0 text-sm font-black text-amber-800">{formatLira(table.remainingAmount)}</p>
               </WexPaySurface>

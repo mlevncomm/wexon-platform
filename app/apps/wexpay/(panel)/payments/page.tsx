@@ -135,7 +135,7 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
 
       <WexPayPaymentsBoard payments={paymentRows} />
 
-      {context.canManage && payments.length > 0 && (
+      {context.canOperateCashier && payments.length > 0 && (
         <WexPayPanel title="Ödeme durumu güncelle">
           <div className="grid min-w-0 gap-3">
             {payments.slice(0, 10).map((payment) => (
@@ -176,7 +176,7 @@ export default async function WexPayPaymentsPage({ searchParams }: { searchParam
         </WexPayPanel>
       )}
 
-      {context.canManage &&
+      {context.canOperateCashier &&
         (tables.length === 0 ? (
           <WexPayPanel title="Ödeme kaydet">
             <WexPayEmptyNotice>Ödeme kaydı için bu şubede en az bir aktif masa gereklidir.</WexPayEmptyNotice>
