@@ -223,6 +223,20 @@ async function loginAs(page: Page, email: string) {
   await loginCustomer(page, email, customerPassword());
 }
 
+/** Server actions resolve org from cookie/header; query alone is not enough. */
+async function setActiveOrganizationCookie(page: Page, organizationId: string) {
+  const base = new URL(page.url() || "http://localhost:3100");
+  await page.context().addCookies([
+    {
+      name: "wexon_active_organization_id",
+      value: organizationId,
+      domain: base.hostname,
+      path: "/",
+      sameSite: "Lax",
+    },
+  ]);
+}
+
 test.describe("wexpay package + role gates (authenticated)", () => {
   const fixtures = loadFixtures();
 
@@ -286,17 +300,30 @@ test.describe("wexpay package + role gates (authenticated)", () => {
       await expect(page.getByRole("heading", { name: "Yeni şube oluştur" })).toHaveCount(0);
 
       await page.goto(`/apps/wexpay/branches?organizationId=${encodeURIComponent(growth.organizationId)}`);
+      await setActiveOrganizationCookie(page, growth.organizationId);
+      await page.goto(`/apps/wexpay/branches?organizationId=${encodeURIComponent(growth.organizationId)}`);
       await expect(page.getByRole("heading", { name: "Yeni şube oluştur" })).toBeVisible();
       const stamp = Date.now().toString(36);
-      const createPanel = page.locator("form").filter({ has: page.locator('input[name="slug"]') });
+      const branchName = `Growth Branch ${stamp}`;
+      const createPanel = page
+        .locator("form")
+        .filter({ has: page.getByRole("button", { name: "Şube oluştur" }) });
       await createPanel.locator('select[name="restaurantId"]').selectOption(growth.restaurantId);
-      await createPanel.locator('input[name="name"]').fill(`Growth Branch ${stamp}`);
+      await createPanel.locator('input[name="name"]').fill(branchName);
       await createPanel.locator('input[name="slug"]').fill(`growth-b-${stamp}`);
+      await createPanel.evaluate((form, orgId) => {
+        const redirect = form.querySelector<HTMLInputElement>('input[name="redirectTo"]');
+        if (redirect) {
+          const url = new URL(redirect.value, window.location.origin);
+          url.searchParams.set("organizationId", orgId);
+          redirect.value = `${url.pathname}?${url.searchParams.toString()}`;
+        }
+      }, growth.organizationId);
       await Promise.all([
-        page.waitForLoadState("networkidle"),
+        page.waitForURL(new RegExp(`organizationId=${growth.organizationId}`)),
         createPanel.getByRole("button", { name: "Şube oluştur" }).click(),
       ]);
-      await expect(page.getByText(`Growth Branch ${stamp}`)).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText(branchName)).toBeVisible({ timeout: 15_000 });
       const activeCount = await prisma.branch.count({
         where: { restaurantId: growth.restaurantId, isActive: true },
       });
@@ -390,7 +417,7 @@ test.describe("wexpay package + role gates (authenticated)", () => {
 
       await loginAs(page, billing.email);
       await page.goto(`/apps/wexpay?organizationId=${encodeURIComponent(tenant.organizationId)}`);
-      await expect(page.getByText(/Erişim gerekli|erişiminiz aktif değil|yetkiniz yok/i)).toBeVisible();
+      await expect(page.getByRole("heading", { name: /erişiminiz aktif değil/i })).toBeVisible();
       await expect(page.locator(".wexpay-shell")).toHaveCount(0);
 
       await loginAs(page, admin.email);
