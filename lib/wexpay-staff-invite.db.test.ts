@@ -29,13 +29,16 @@ const suffix = randomUUID().slice(0, 8);
 describe("staff invite security (db)", () => {
   let orgId = "";
   let orgBId = "";
+  let growthOrgId = "";
   let ownerId = "";
   let productId = "";
-  let planId = "";
+  let essentialPlanId = "";
+  let growthPlanId = "";
   let journeyId = "";
   const createdUserIds: string[] = [];
+  const createdOrgIds: string[] = [];
 
-  async function seedAccess(organizationId: string) {
+  async function seedAccess(organizationId: string, planId: string) {
     const license = await prisma.license.create({
       data: {
         organizationId,
@@ -77,25 +80,38 @@ describe("staff invite security (db)", () => {
     assert.ok(product, "wexpay product must exist");
     productId = product!.id;
 
-    const plan = await prisma.plan.findFirst({ where: { productId, isActive: true } });
-    assert.ok(plan, "active plan must exist");
-    planId = plan!.id;
-
-    // Ensure staff_limit is present and finite for seat tests.
-    const staffEnt = await prisma.entitlement.findFirst({
-      where: { planId, key: "staff_limit" },
+    // Canonical tier selection — never mutate seeded entitlements globally.
+    const essentialPlan = await prisma.plan.findFirst({
+      where: {
+        productId,
+        isActive: true,
+        OR: [{ tierKey: "essential" }, { key: "wexpay_essential" }],
+      },
+      orderBy: { sortOrder: "asc" },
     });
-    if (!staffEnt) {
-      await prisma.entitlement.create({
-        data: {
-          planId,
-          key: "staff_limit",
-          valueType: "INTEGER",
-          valueInt: 10,
-          isActive: true,
-        },
-      });
-    }
+    assert.ok(essentialPlan, "canonical Essential plan must exist");
+    essentialPlanId = essentialPlan!.id;
+
+    const growthPlan = await prisma.plan.findFirst({
+      where: {
+        productId,
+        isActive: true,
+        OR: [{ tierKey: "growth" }, { key: "wexpay_growth" }],
+      },
+      orderBy: { sortOrder: "asc" },
+    });
+    assert.ok(growthPlan, "canonical Growth plan must exist");
+    growthPlanId = growthPlan!.id;
+
+    // Read-only sanity: Essential denies advanced roles; Growth allows (seed SoT).
+    const essentialAdvanced = await prisma.entitlement.findFirst({
+      where: { planId: essentialPlanId, key: "feature_advanced_roles", isActive: true },
+    });
+    assert.equal(essentialAdvanced?.valueBool ?? false, false);
+    const growthAdvanced = await prisma.entitlement.findFirst({
+      where: { planId: growthPlanId, key: "feature_advanced_roles", isActive: true },
+    });
+    assert.equal(growthAdvanced?.valueBool, true);
 
     const owner = await prisma.user.create({
       data: {
@@ -129,7 +145,7 @@ describe("staff invite security (db)", () => {
       },
     });
 
-    await seedAccess(orgId);
+    await seedAccess(orgId, essentialPlanId);
 
     const orgB = await prisma.organization.create({
       data: {
@@ -140,7 +156,29 @@ describe("staff invite security (db)", () => {
       },
     });
     orgBId = orgB.id;
-    await seedAccess(orgBId);
+    createdOrgIds.push(orgB.id);
+    await seedAccess(orgBId, essentialPlanId);
+
+    const growthOrg = await prisma.organization.create({
+      data: {
+        name: `Invite Growth ${suffix}`,
+        slug: `invite-growth-${suffix}`,
+        isActive: true,
+        isDemo: false,
+      },
+    });
+    growthOrgId = growthOrg.id;
+    createdOrgIds.push(growthOrg.id);
+    await prisma.membership.create({
+      data: {
+        organizationId: growthOrgId,
+        userId: ownerId,
+        role: MembershipRole.OWNER,
+        status: MembershipStatus.ACTIVE,
+        acceptedAt: new Date(),
+      },
+    });
+    await seedAccess(growthOrgId, growthPlanId);
 
     const journey = await prisma.activationJourney.create({
       data: {
@@ -170,17 +208,18 @@ describe("staff invite security (db)", () => {
   });
 
   after(async () => {
-    if (orgId) {
-      await prisma.staffInvite.deleteMany({ where: { organizationId: { in: [orgId, orgBId].filter(Boolean) } } });
+    const orgIds = [orgId, orgBId, growthOrgId, ...createdOrgIds].filter(Boolean);
+    if (orgIds.length) {
+      await prisma.staffInvite.deleteMany({ where: { organizationId: { in: orgIds } } });
       await prisma.activationJourneyStep.deleteMany({
-        where: { journey: { organizationId: { in: [orgId, orgBId].filter(Boolean) } } },
+        where: { journey: { organizationId: { in: orgIds } } },
       });
-      await prisma.activationJourney.deleteMany({ where: { organizationId: { in: [orgId, orgBId].filter(Boolean) } } });
-      await prisma.activationFeeLedger.deleteMany({ where: { organizationId: { in: [orgId, orgBId].filter(Boolean) } } });
-      await prisma.appInstallation.deleteMany({ where: { organizationId: { in: [orgId, orgBId].filter(Boolean) } } });
-      await prisma.license.deleteMany({ where: { organizationId: { in: [orgId, orgBId].filter(Boolean) } } });
-      await prisma.membership.deleteMany({ where: { organizationId: { in: [orgId, orgBId].filter(Boolean) } } });
-      await prisma.organization.deleteMany({ where: { id: { in: [orgId, orgBId].filter(Boolean) } } });
+      await prisma.activationJourney.deleteMany({ where: { organizationId: { in: orgIds } } });
+      await prisma.activationFeeLedger.deleteMany({ where: { organizationId: { in: orgIds } } });
+      await prisma.appInstallation.deleteMany({ where: { organizationId: { in: orgIds } } });
+      await prisma.license.deleteMany({ where: { organizationId: { in: orgIds } } });
+      await prisma.membership.deleteMany({ where: { organizationId: { in: orgIds } } });
+      await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
     }
     if (createdUserIds.length) {
       await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
@@ -279,6 +318,7 @@ describe("staff invite security (db)", () => {
   });
 
   it("passworded user with matching session can accept (no shouldCreateSession)", async () => {
+    // Session behavior under Essential — use STAFF (not MANAGER) so advanced-roles gate is not in scope.
     const email = `session-ok-${suffix}@example.com`;
     const existing = await prisma.user.create({
       data: {
@@ -295,7 +335,7 @@ describe("staff invite security (db)", () => {
       organizationId: orgId,
       actorUserId: ownerId,
       email,
-      role: MembershipRole.MANAGER,
+      role: MembershipRole.STAFF,
     });
     const token = decodeURIComponent(created.oneTimeInviteUrl!.split("/invite/")[1]!);
 
@@ -310,10 +350,57 @@ describe("staff invite security (db)", () => {
     const membership = await prisma.membership.findUniqueOrThrow({
       where: { organizationId_userId: { organizationId: orgId, userId: existing.id } },
     });
-    assert.equal(membership.role, MembershipRole.MANAGER);
+    assert.equal(membership.role, MembershipRole.STAFF);
 
     const unchanged = await prisma.user.findUniqueOrThrow({ where: { id: existing.id } });
     assert.equal(unchanged.passwordHash, existing.passwordHash);
+  });
+
+  it("Essential denies MANAGER/ADMIN invite with ADVANCED_ROLES_REQUIRED", async () => {
+    for (const role of [MembershipRole.MANAGER, MembershipRole.ADMIN] as const) {
+      await assert.rejects(
+        () =>
+          createStaffInvite({
+            organizationId: orgId,
+            actorUserId: ownerId,
+            email: `adv-deny-${role.toLowerCase()}-${suffix}@example.com`,
+            role,
+          }),
+        (err: unknown) => err instanceof StaffInviteError && err.code === "ADVANCED_ROLES_REQUIRED",
+      );
+    }
+  });
+
+  it("Essential allows STAFF and VIEWER invites", async () => {
+    for (const role of [MembershipRole.STAFF, MembershipRole.VIEWER] as const) {
+      const email = `adv-ok-${role.toLowerCase()}-${suffix}@example.com`;
+      const created = await createStaffInvite({
+        organizationId: orgId,
+        actorUserId: ownerId,
+        email,
+        role,
+      });
+      assert.equal(created.invite.role, role);
+      await prisma.staffInvite.update({
+        where: { id: created.invite.id },
+        data: { revokedAt: new Date() },
+      });
+    }
+  });
+
+  it("Growth+ allows MANAGER invite", async () => {
+    const email = `growth-manager-${suffix}@example.com`;
+    const created = await createStaffInvite({
+      organizationId: growthOrgId,
+      actorUserId: ownerId,
+      email,
+      role: MembershipRole.MANAGER,
+    });
+    assert.equal(created.invite.role, MembershipRole.MANAGER);
+    await prisma.staffInvite.update({
+      where: { id: created.invite.id },
+      data: { revokedAt: new Date() },
+    });
   });
 
   it("wrong session user → SESSION_MISMATCH", async () => {

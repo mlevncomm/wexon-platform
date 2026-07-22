@@ -21,11 +21,13 @@ import {
   createTablesBulk,
   setProductModifierGroups,
   settlePaymentFromProviderWebhook,
+  updateBranch,
   updateModifierGroup,
   updateModifierOption,
   updatePayment,
   type WexPayMutationContext,
 } from "@/lib/wexpay-service";
+import { WexPayAccessError } from "@/lib/wexpay-tenant";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
 import { runWexPayWebhookTransaction } from "@/lib/wexpay-webhook-events";
 
@@ -56,6 +58,26 @@ function manageContext(organizationId: string, tableLimit = 50): WexPayMutationC
       feature_multi_location: true,
     },
     actor: { type: "admin_session", email: `lock-test-${suffix}@wexon.test`, role: "ADMIN" },
+    ipAddress: "127.0.0.1",
+  };
+}
+
+function staffCashierContext(organizationId: string): WexPayMutationContext {
+  return {
+    organizationId,
+    canManage: false,
+    entitlementMap: {
+      table_limit: 50,
+      branch_limit: 10,
+      product_limit: 500,
+      feature_multi_location: true,
+    },
+    actor: {
+      type: "customer_session",
+      userId: `staff-${suffix}`,
+      email: `staff-lock-${suffix}@wexon.test`,
+      role: "STAFF",
+    },
     ipAddress: "127.0.0.1",
   };
 }
@@ -722,5 +744,249 @@ describe("wexpay payment concurrency + modifiers (db)", () => {
       where: { branch: { restaurant: { organizationId: fixture.orgId } } },
     });
     assert.equal(after, limit);
+  });
+
+  it("payment create allowlist: manual PAID/PARTIAL only; rejects FAILED/REFUNDED; PayTR PENDING only", async () => {
+    await resetTableSession(fixture.tableId);
+    await openOrder(200);
+    const ctx = manageContext(fixture.orgId);
+
+    const paid = await createPayment(ctx, {
+      branchId: fixture.branchId,
+      tableId: fixture.tableId,
+      orderId: null,
+      amount: 40,
+      status: PaymentStatus.PAID,
+      provider: "manual",
+    });
+    assert.equal(paid.payment.status, PaymentStatus.PAID);
+    assert.equal(paid.externalCheckoutUrl, null);
+
+    const partial = await createPayment(ctx, {
+      branchId: fixture.branchId,
+      tableId: fixture.tableId,
+      orderId: null,
+      amount: 30,
+      status: PaymentStatus.PARTIAL,
+      provider: "manual",
+    });
+    assert.equal(partial.payment.status, PaymentStatus.PARTIAL);
+
+    for (const status of [PaymentStatus.FAILED, PaymentStatus.REFUNDED, PaymentStatus.PENDING] as const) {
+      await assert.rejects(
+        () =>
+          createPayment(ctx, {
+            branchId: fixture.branchId,
+            tableId: fixture.tableId,
+            orderId: null,
+            amount: 10,
+            status,
+            provider: "manual",
+          }),
+        (error: unknown) =>
+          error instanceof WexPayValidationError && /Manuel ödeme|oluşturulabilir/i.test(error.message),
+      );
+    }
+
+    await assert.rejects(
+      () =>
+        createPayment(ctx, {
+          branchId: fixture.branchId,
+          tableId: fixture.tableId,
+          orderId: null,
+          amount: 10,
+          status: PaymentStatus.PAID,
+          provider: "paytr",
+        }),
+      (error: unknown) =>
+        error instanceof WexPayValidationError && /PayTR|Bekliyor/i.test(error.message),
+    );
+  });
+
+  it("STAFF cannot refund, mutate PAID/REFUNDED, or cross-tenant update", async () => {
+    await resetTableSession(fixture.tableId);
+    await openOrder(100);
+    const admin = manageContext(fixture.orgId);
+    const staff = staffCashierContext(fixture.orgId);
+
+    const created = await createPayment(admin, {
+      branchId: fixture.branchId,
+      tableId: fixture.tableId,
+      orderId: null,
+      amount: 50,
+      status: PaymentStatus.PARTIAL,
+      provider: "manual",
+    });
+    const partialId = created.payment.id;
+
+    await assert.rejects(
+      () => updatePayment(staff, { paymentId: partialId, status: PaymentStatus.REFUNDED }),
+      (error: unknown) => error instanceof WexPayAccessError && /iade/i.test(error.message),
+    );
+
+    await updatePayment(admin, { paymentId: partialId, status: PaymentStatus.PAID });
+
+    await assert.rejects(
+      () => updatePayment(staff, { paymentId: partialId, status: PaymentStatus.FAILED }),
+      (error: unknown) => error instanceof WexPayAccessError && /değiştiremez/i.test(error.message),
+    );
+
+    const refunded = await prisma.payment.create({
+      data: {
+        branchId: fixture.branchId,
+        tableId: fixture.tableId,
+        amount: 10,
+        currency: "TRY",
+        status: PaymentStatus.REFUNDED,
+        provider: "manual",
+        providerRef: `refunded-${suffix}`,
+      },
+    });
+    await assert.rejects(
+      () => updatePayment(staff, { paymentId: refunded.id, status: PaymentStatus.PAID }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+
+    await assert.rejects(
+      () =>
+        updatePayment(staffCashierContext(fixture.foreignOrgId), {
+          paymentId: partialId,
+          status: PaymentStatus.FAILED,
+        }),
+      (error: unknown) => error instanceof Error,
+    );
+  });
+
+  it("denies inactive→active branch reactivation when multi-location is off", async () => {
+    const ctx: WexPayMutationContext = {
+      ...manageContext(fixture.orgId),
+      entitlementMap: {
+        branch_limit: 5,
+        table_limit: 50,
+        product_limit: 500,
+        feature_multi_location: false,
+      },
+    };
+
+    const inactive = await prisma.branch.create({
+      data: {
+        restaurantId: fixture.restaurantId,
+        name: `Inactive ${suffix}`,
+        slug: `inactive-${suffix}`,
+        isActive: false,
+      },
+    });
+
+    // Already-active legacy branch name update must still succeed.
+    await updateBranch(ctx, {
+      branchId: fixture.branchId,
+      name: `Active Renamed ${suffix}`,
+      address: null,
+      isActive: true,
+    });
+    const stillActive = await prisma.branch.findUniqueOrThrow({ where: { id: fixture.branchId } });
+    assert.equal(stillActive.isActive, true);
+
+    await assert.rejects(
+      () =>
+        updateBranch(ctx, {
+          branchId: inactive.id,
+          name: inactive.name,
+          address: null,
+          isActive: true,
+        }),
+      (error: unknown) =>
+        error instanceof WexPayValidationError && error.message.includes("feature_multi_location"),
+    );
+
+    const unchanged = await prisma.branch.findUniqueOrThrow({ where: { id: inactive.id } });
+    assert.equal(unchanged.isActive, false);
+  });
+
+  it("serializes concurrent create/reactivate and reactivate/reactivate under multi-location lock", async () => {
+    const org = await prisma.organization.create({
+      data: { name: `ML Race ${suffix}`, slug: `ml-race-${suffix}`, isActive: true },
+    });
+    const restaurant = await prisma.restaurant.create({
+      data: { organizationId: org.id, name: "MLR", slug: `mlr-${suffix}`, isActive: true },
+    });
+    const active = await prisma.branch.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: "Active",
+        slug: `ml-active-${suffix}`,
+        isActive: true,
+      },
+    });
+    const inactiveA = await prisma.branch.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: "Inactive A",
+        slug: `ml-ia-${suffix}`,
+        isActive: false,
+      },
+    });
+    const inactiveB = await prisma.branch.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: "Inactive B",
+        slug: `ml-ib-${suffix}`,
+        isActive: false,
+      },
+    });
+
+    const deniedCtx: WexPayMutationContext = {
+      ...manageContext(org.id),
+      entitlementMap: {
+        branch_limit: 10,
+        table_limit: 50,
+        product_limit: 500,
+        feature_multi_location: false,
+      },
+    };
+
+    try {
+      const createVsReactivate = await Promise.allSettled([
+        createBranch(deniedCtx, {
+          restaurantId: restaurant.id,
+          name: `Race Create ${suffix}`,
+          slug: `race-create-${suffix}`,
+          address: null,
+        }),
+        updateBranch(deniedCtx, {
+          branchId: inactiveA.id,
+          name: inactiveA.name,
+          address: null,
+          isActive: true,
+        }),
+      ]);
+      const createVsOk = createVsReactivate.filter((row) => row.status === "fulfilled").length;
+      assert.equal(createVsOk, 0, "neither create nor reactivate may add a second active branch");
+
+      const dualReactivate = await Promise.allSettled([
+        updateBranch(deniedCtx, {
+          branchId: inactiveA.id,
+          name: inactiveA.name,
+          address: null,
+          isActive: true,
+        }),
+        updateBranch(deniedCtx, {
+          branchId: inactiveB.id,
+          name: inactiveB.name,
+          address: null,
+          isActive: true,
+        }),
+      ]);
+      const reactivateOk = dualReactivate.filter((row) => row.status === "fulfilled").length;
+      assert.equal(reactivateOk, 0);
+
+      const activeCount = await prisma.branch.count({
+        where: { restaurantId: restaurant.id, isActive: true },
+      });
+      assert.equal(activeCount, 1);
+      assert.equal((await prisma.branch.findUniqueOrThrow({ where: { id: active.id } })).isActive, true);
+    } finally {
+      await prisma.organization.delete({ where: { id: org.id } });
+    }
   });
 });

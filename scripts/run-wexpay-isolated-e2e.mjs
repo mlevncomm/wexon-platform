@@ -98,6 +98,7 @@ async function runOnce(label) {
       "e2e/wexpay-pricing-parity.spec.ts",
       "e2e/wexpay-final-closure.spec.ts",
       "e2e/wexpay-pr4-full-journey.spec.ts",
+      "e2e/wexpay-package-role-gates.spec.ts",
       "e2e/core-canonical-routing.spec.ts",
       "--reporter=list",
     ],

@@ -72,11 +72,15 @@ describe("canonical package feature gates", () => {
     assert.equal(assertWexPayFeatureEnabled({ feature_csv_export: -1 }, "feature_csv_export").ok, false);
   });
 
-  it("advanced_roles gate is invite-time only (boolean check, no membership mutation)", () => {
+  it("advanced_roles is invite-time only; Core Membership remains org-global (architectural limit)", () => {
     const essential = getCanonicalTier("essential").entitlements;
     assert.equal(isWexPayFeatureEnabled(essential, "feature_advanced_roles"), false);
-    // Existing memberships are not rewritten by this helper — invite path checks it separately.
+    // StaffInvite gates MANAGER/ADMIN/BILLING when the flag is off.
+    // Core /dashboard/users uses the same org-global Membership.role for OWNER/ADMIN
+    // (needed outside WexPay), so product entitlement cannot safely own all role writes.
+    // Existing advanced memberships are never auto-downgraded.
     assert.equal(canManageWexPay("MANAGER"), true);
+    assert.equal(canConfigureWexPaySettings("ADMIN"), true);
   });
 });
 

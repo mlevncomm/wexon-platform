@@ -38,6 +38,8 @@ type ShellFeatures = {
   multiLocation: boolean;
   csvExport: boolean;
   advancedReports: boolean;
+  /** OWNER/ADMIN only — hide Paket/Lisans nav when false. */
+  settings?: boolean;
 };
 
 function buildHref(
@@ -129,9 +131,14 @@ function NavLinks({
   features: ShellFeatures;
   onNavigate?: () => void;
 }) {
+  const visibleTabs =
+    features.settings === false
+      ? tabs.filter((tab) => tab.path !== "/apps/wexpay/settings")
+      : tabs;
+
   return (
     <nav className="flex flex-col gap-0.5" aria-label="WexPay navigasyon">
-      {tabs.map((tab) => {
+      {visibleTabs.map((tab) => {
         const active = isActiveTab(pathname, tab.path);
         const lockedHint =
           tab.path === "/apps/wexpay/reports" && !features.advancedReports && !features.csvExport

@@ -393,6 +393,27 @@ export async function updateBranch(
   return runInTransaction(async (tx) => {
     await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
+    const existing = await tx.branch.findFirstOrThrow({
+      where: { id: input.branchId },
+      select: { id: true, isActive: true },
+    });
+
+    // Inactive → active must share createBranch's multi-location gate + advisory lock.
+    // Already-active legacy branches are left alone (name/address updates stay allowed).
+    const reactivating = input.isActive === true && !existing.isActive;
+    if (reactivating) {
+      await lockWexPayOrgBranchLimit(tx, context.organizationId);
+      const activeBranchCount = await tx.branch.count({
+        where: { restaurant: { organizationId: context.organizationId }, isActive: true },
+      });
+      if (
+        activeBranchCount >= 1 &&
+        !isWexPayFeatureEnabled(context.entitlementMap, "feature_multi_location")
+      ) {
+        await enforceFeatureEnabled(tx, context, "feature_multi_location");
+      }
+    }
+
     const branch = await tx.branch.update({
       where: { id: input.branchId },
       data: {
@@ -1410,6 +1431,18 @@ export async function createPayment(
   const { key: providerKey, adapter } = await resolveWexPayPaymentProvider(input.provider);
   const receiptRequested = Boolean(input.receiptRequested);
   const wantsExternalCheckout = providerKey === "paytr";
+
+  // Backend allowlist — never trust UI status for create.
+  // PayTR → PENDING only; manual → PAID | PARTIAL only; never FAILED/REFUNDED on create.
+  if (wantsExternalCheckout) {
+    if (input.status !== PaymentStatus.PENDING) {
+      throw new WexPayValidationError("PayTR ödemesi yalnızca Bekliyor durumunda oluşturulabilir.");
+    }
+  } else if (input.status !== PaymentStatus.PAID && input.status !== PaymentStatus.PARTIAL) {
+    throw new WexPayValidationError(
+      "Manuel ödeme yalnızca Ödendi veya Kısmi olarak oluşturulabilir.",
+    );
+  }
 
   // Phase 1 — lock table, validate remaining, persist payment (PENDING for external PSP).
   // External PayTR HTTP must NOT run inside this transaction.

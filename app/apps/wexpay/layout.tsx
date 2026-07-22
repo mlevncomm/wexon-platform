@@ -75,6 +75,7 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
           advancedReports:
             isWexPayFeatureEnabled(access.entitlementMap, "feature_advanced_reports") ||
             isWexPayFeatureEnabled(access.entitlementMap, "feature_reporting_advanced"),
+          settings: access.canConfigureSettings,
         }}
       >
         {activationView.setupMode ? (

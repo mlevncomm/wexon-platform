@@ -473,6 +473,22 @@ function validatePaymentStatus(raw: unknown): PaymentStatus {
   throw new WexPayValidationError("Geçerli bir ödeme durumu seçilmelidir.");
 }
 
+/** Manual create allowlist — UI status must not invent FAILED/REFUNDED/PENDING. */
+const MANUAL_PAYMENT_CREATE_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.PAID,
+  PaymentStatus.PARTIAL,
+]);
+
+export function validateManualPaymentCreateStatus(raw: unknown): PaymentStatus {
+  const status = validatePaymentStatus(raw);
+  if (!MANUAL_PAYMENT_CREATE_STATUSES.has(status)) {
+    throw new WexPayValidationError(
+      "Manuel ödeme yalnızca Ödendi veya Kısmi olarak oluşturulabilir.",
+    );
+  }
+  return status;
+}
+
 function parsePaymentProvider(raw: string | null): WexPayPaymentProviderKey {
   try {
     return parseWexPayPaymentProviderKey(raw);
@@ -526,7 +542,7 @@ export function parsePaymentCreate(formData: FormData) {
   const status =
     provider === "paytr"
       ? PaymentStatus.PENDING
-      : validatePaymentStatus(readString(formData, "status") || "PAID");
+      : validateManualPaymentCreateStatus(readString(formData, "status") || "PAID");
   return {
     branchId: requiredString(formData, "branchId", "Şube"),
     tableId: requiredString(formData, "tableId", "Masa"),
@@ -552,7 +568,7 @@ export function parsePaymentCreatePayload(body: unknown) {
       ? PaymentStatus.PENDING
       : data.status === undefined || data.status === null || data.status === ""
         ? PaymentStatus.PAID
-        : validatePaymentStatus(data.status);
+        : validateManualPaymentCreateStatus(data.status);
   return {
     branchId,
     tableId,
