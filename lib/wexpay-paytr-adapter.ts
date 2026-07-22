@@ -13,6 +13,7 @@ import {
   type WexPayProviderCallbackPayload,
   type WexPayProviderCallbackResult,
 } from "@/lib/wexpay-payment-provider";
+import { resolveWexPayPublicOrigin } from "@/lib/wexpay-public-table-url";
 
 const PAYTR_GET_TOKEN_URL = "https://www.paytr.com/odeme/api/get-token";
 const PAYTR_IFRAME_BASE = "https://www.paytr.com/odeme/guvenli/";
@@ -59,8 +60,10 @@ export function assertPaytrCredentialReady(
   if (mode === WexPayProviderCredentialMode.TEST) {
     messages.push("Test modu: PayTR test mağaza bilgileri kullanılmalıdır.");
   }
-  if (!process.env.NEXT_PUBLIC_APP_URL?.trim()) {
-    messages.push("NEXT_PUBLIC_APP_URL tanımlı değil; checkout yönlendirmeleri çalışmaz.");
+  try {
+    resolveWexPayPublicOrigin();
+  } catch {
+    messages.push("Genel erişim origin adresi geçersiz; checkout yönlendirmeleri çalışmaz.");
   }
   if (process.env.WEXPAY_PAYTR_ENABLE_API !== "true") {
     messages.push(
@@ -104,10 +107,7 @@ export function validatePaytrCheckoutAmount(amount: number, currency: string) {
 }
 
 export function buildPaytrCheckoutUrls() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
-  if (!appUrl) {
-    throw new WexPayPaymentProviderError("NEXT_PUBLIC_APP_URL tanımlı olmalıdır.");
-  }
+  const appUrl = resolveWexPayPublicOrigin();
   return {
     callbackUrl: `${appUrl}/api/wexpay/webhooks/paytr`,
     successUrl: `${appUrl}/apps/wexpay/payments?paytr=success`,
@@ -248,12 +248,10 @@ async function requestPaytrCheckoutToken(input: {
   return { externalCheckoutUrl: `${PAYTR_IFRAME_BASE}${body.token}`, iframeToken: body.token };
 }
 
-async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): Promise<WexPayPaymentIntentResult> {
-  const credentials = await loadPaytrCredentialBundle(context.organizationId);
-  if (!credentials) {
-    throw new WexPayProviderNotConfiguredError("paytr");
-  }
-
+export async function createPaytrPaymentIntentWithCredentials(
+  context: WexPayPaymentCheckoutContext,
+  credentials: PaytrCredentialBundle,
+): Promise<WexPayPaymentIntentResult> {
   const paymentAmountKurus = validatePaytrCheckoutAmount(context.amount, context.currency);
   const merchantOid = context.existingProviderRef?.trim() || generatePaytrMerchantOid();
   const baseUrls = buildPaytrCheckoutUrls();
@@ -295,6 +293,16 @@ async function createPaytrPaymentIntent(context: WexPayPaymentCheckoutContext): 
       iframeTokenPresent: Boolean(iframeToken),
     },
   };
+}
+
+async function createPaytrPaymentIntent(
+  context: WexPayPaymentCheckoutContext,
+): Promise<WexPayPaymentIntentResult> {
+  const credentials = await loadPaytrCredentialBundle(context.organizationId);
+  if (!credentials) {
+    throw new WexPayProviderNotConfiguredError("paytr");
+  }
+  return createPaytrPaymentIntentWithCredentials(context, credentials);
 }
 
 async function verifyPaytrCallback(payload: WexPayProviderCallbackPayload): Promise<WexPayProviderCallbackResult> {
