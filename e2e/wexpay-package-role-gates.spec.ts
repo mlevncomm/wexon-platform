@@ -323,7 +323,9 @@ test.describe("wexpay package + role gates (authenticated)", () => {
         page.waitForURL(new RegExp(`organizationId=${growth.organizationId}`)),
         createPanel.getByRole("button", { name: "Şube oluştur" }).click(),
       ]);
-      await expect(page.getByText(branchName)).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator("p").filter({ hasText: branchName }).first()).toBeVisible({
+        timeout: 15_000,
+      });
       const activeCount = await prisma.branch.count({
         where: { restaurantId: growth.restaurantId, isActive: true },
       });
@@ -422,12 +424,12 @@ test.describe("wexpay package + role gates (authenticated)", () => {
 
       await loginAs(page, admin.email);
       await page.goto(`/apps/wexpay/settings?organizationId=${encodeURIComponent(tenant.organizationId)}`);
-      await expect(page.getByText(/Sanal POS bağlantısı/i)).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Sanal POS bağlantısı" })).toBeVisible();
       await expect(page.getByText(/Ayarlara erişim yok/i)).toHaveCount(0);
 
       await loginAs(page, tenant.ownerEmail);
       await page.goto(`/apps/wexpay/settings?organizationId=${encodeURIComponent(tenant.organizationId)}`);
-      await expect(page.getByText(/Sanal POS bağlantısı/i)).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Sanal POS bağlantısı" })).toBeVisible();
     } finally {
       if (tenant) await cleanupTenant(prisma, tenant, extraUsers);
       await prisma.$disconnect();
