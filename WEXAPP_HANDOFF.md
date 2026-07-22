@@ -2,7 +2,7 @@
 
 WexApp/WexPay MVP gelistirmesi bu dosyadaki kurallara gore baslar.
 
-## Gercek App Ve Pilot Erisim
+## Gercek App Ve Kurucu Isletmeler Programi Erisimi
 
 Public interactive `/demo/wexpay*` sandbox kaldirildi.
 
@@ -12,7 +12,7 @@ Gercek WexPay app:
 - Tenant session veya API key ile cozulur.
 - Veri `Organization.isDemo = false` olan musteri organizasyonlarinda calisir.
 - `isDemo=true` tenant'lar gercek app'e giremez (Core / WexPay guard).
-- Pilot erisim marketing uzerinden `/demo-request` ve `/book-demo` ile baslatilir.
+- Kurucu Isletmeler Programi erisimi marketing uzerinden `/demo-request` ve `/book-demo` ile baslatilir.
 - Gercek app testleri icin `npm run prisma:seed:real` komutu `isDemo=false` WexPay musteri tenant'i olusturur.
 
 ## Merkezi Kural

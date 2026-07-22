@@ -12,7 +12,7 @@ monitoring, backups, and fast incident response.
 - Keep `MAINTENANCE_MODE=false` for live service; use `true` only for controlled
   pre-application mode.
 - Keep `WEXPAY_PAYTR_ENABLE_API=false` for the first public launch unless a
-  pilot PayTR merchant has been verified end-to-end.
+  Kurucu İşletmeler Programı PayTR merchant has been verified end-to-end.
 - Run `npm run production:check` and `npm run production:preflight` before each
   deploy.
 - Run `npm audit --omit=dev` before release and review any remaining advisories.

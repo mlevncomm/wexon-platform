@@ -11,6 +11,8 @@ import {
 } from "@/components/marketing/WexonAdminForms";
 import {
   addAdminMembershipAction,
+  adminAssistedWexPayGoLiveAction,
+  blockAdminWexPayActivationAction,
   changeAdminLicensePlanAction,
   changeAdminLicenseStatusAction,
   createAdminLicenseAction,
@@ -25,13 +27,44 @@ import {
   updateAdminMembershipStatusAction,
   updateAdminOrganizationAction,
   updateWexPayAccessStatusAction,
+  unblockAdminWexPayActivationAction,
 } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOrganizationDetail, getAdminOrganizationMutationOptions } from "@/lib/wexon-admin";
 import { coreAccessDenialMessage, evaluateProductAccess } from "@/lib/wexon-core-access";
-import { getActivationJourneyViewForOrg } from "@/lib/wexpay-activation-journey";
+import {
+  ACTIVATION_STEP_LABELS,
+  ACTIVATION_STEP_ORDER,
+  getActivationJourneyViewForOrg,
+} from "@/lib/wexpay-activation-journey";
+import {
+  getWexPayPublicPaymentAvailabilitySummary,
+  type WexPayPublicPaymentAvailabilitySummary,
+} from "@/lib/wexpay-public-payment-availability";
 
 function dateInput(value: Date | null | undefined) {
   return value ? value.toISOString().slice(0, 10) : "";
+}
+
+function currentOnlinePaymentLabel(
+  availability: WexPayPublicPaymentAvailabilitySummary,
+) {
+  if (availability.onlineCheckoutEnabled) {
+    const source =
+      availability.selectionSource === "LEGACY_BACKFILL"
+        ? " · legacy"
+        : "";
+    return `Açık · PayTR ${availability.mode}${source}`;
+  }
+  const reasons: Record<string, string> = {
+    JOURNEY_NOT_ACTIVE: "yolculuk aktif değil",
+    PAYMENT_STEP_INCOMPLETE: "ödeme adımı eksik",
+    MANUAL_SELECTED: "manuel seçildi",
+    SELECTION_INVALID: "seçim geçersiz",
+    CREDENTIAL_INVALID: "bağlantı bilgisi hazır değil",
+    PAYTR_TEST_MODE_PRODUCTION: "üretimde LIVE bağlantı gerekli",
+    PAYTR_API_DISABLED: "PayTR API kapalı",
+  };
+  return `Kapalı · ${reasons[availability.reason] ?? "kullanılamıyor"}`;
 }
 
 export default async function AdminOrganizationDetailPage({
@@ -43,11 +76,18 @@ export default async function AdminOrganizationDetailPage({
 }) {
   const { id } = await params;
   const { adminError } = await searchParams;
-  const [organization, options, wexPayCoreAccess, activationView] = await Promise.all([
+  const [
+    organization,
+    options,
+    wexPayCoreAccess,
+    activationView,
+    currentPaymentAvailability,
+  ] = await Promise.all([
     getAdminOrganizationDetail(id),
     getAdminOrganizationMutationOptions(),
     evaluateProductAccess({ organizationId: id, productKey: "wexpay" }),
     getActivationJourneyViewForOrg(id),
+    getWexPayPublicPaymentAvailabilitySummary(id),
   ]);
 
   if (!organization) {
@@ -67,6 +107,9 @@ export default async function AdminOrganizationDetailPage({
   const deactivateOrganization = deactivateAdminOrganizationAction.bind(null, organization.id);
   const reactivateOrganization = reactivateAdminOrganizationAction.bind(null, organization.id);
   const permanentlyDeleteOrganization = permanentlyDeleteAdminOrganizationAction.bind(null, organization.id);
+  const blockActivation = blockAdminWexPayActivationAction.bind(null, organization.id);
+  const unblockActivation = unblockAdminWexPayActivationAction.bind(null, organization.id);
+  const adminGoLive = adminAssistedWexPayGoLiveAction.bind(null, organization.id);
   const activeProduct = wexPayInstallation?.status === "ACTIVE" ? "WexPay" : "-";
   const activePlan = wexPayLicense ? displayPlanName(wexPayLicense.plan.name) : "-";
   const licenseStatus = wexPayLicense ? formatAdminStatus(wexPayLicense.status) : "-";
@@ -77,6 +120,36 @@ export default async function AdminOrganizationDetailPage({
       : "-";
   const onboarding = wexPayInstallation?.settingsJson as { onboardingStatus?: string; message?: string; estimatedBusinessDays?: number; source?: string } | null;
   const quickLinks = ["Bilgileri düzenle", "WexPay erişimi", "Lisans/Paket", "İşletme ekle", "Kullanıcı ekle"];
+  const activationJourney = activationView.journey;
+  const providerStep = activationJourney?.steps.find((step) => step.stepKey === "PAYMENT_PROVIDER");
+  const providerMetadata =
+    providerStep?.safeMetadataJson &&
+    typeof providerStep.safeMetadataJson === "object" &&
+    !Array.isArray(providerStep.safeMetadataJson)
+      ? (providerStep.safeMetadataJson as Record<string, unknown>)
+      : {};
+  const providerLabel =
+    providerMetadata.provider === "MANUAL"
+      ? "Manuel tahsilat"
+      : providerMetadata.provider === "PAYTR"
+        ? `PayTR · ${providerMetadata.mode === "LIVE" ? "LIVE" : "TEST"}`
+        : "Seçilmedi";
+  const onlinePaymentLabel = currentOnlinePaymentLabel(
+    currentPaymentAvailability,
+  );
+  const validationStep = activationJourney?.steps.find((step) => step.stepKey === "VALIDATION");
+  const validationMetadata =
+    validationStep?.safeMetadataJson &&
+    typeof validationStep.safeMetadataJson === "object" &&
+    !Array.isArray(validationStep.safeMetadataJson)
+      ? (validationStep.safeMetadataJson as Record<string, unknown>)
+      : {};
+  const validationSummary =
+    validationMetadata.result === "PASS" ||
+    validationMetadata.result === "WARNING" ||
+    validationMetadata.result === "FAIL"
+      ? `${validationMetadata.result} · ${Number(validationMetadata.passCount ?? 0)} geçti · ${Number(validationMetadata.warningCount ?? 0)} uyarı · ${Number(validationMetadata.failCount ?? 0)} başarısız`
+      : "Henüz çalıştırılmadı";
 
   return (
     <div className="space-y-8">
@@ -162,14 +235,105 @@ export default async function AdminOrganizationDetailPage({
         <AdminSectionTitle
           badge="Akıllı Aktivasyon"
           title="Aktivasyon yolculuğu"
-          description="Read-only durum. Kurulum Modu panel erişimini kapatmaz; public QR yalnız Canlıya Geçiş sonrası açılır."
+          description="Kurulum Modu panel erişimini kapatmaz; public QR yalnız Yayına alma sonrası açılır."
         />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <AdminInfoRow label="Durum" value={activationView.statusLabel} />
-          <AdminInfoRow label="Mod" value={activationView.setupMode ? "Kurulum Modu" : "Canlı Kullanım"} />
           <AdminInfoRow label="Kaynak" value={activationView.sourceLabel ?? "—"} />
-          <AdminInfoRow label="Adım" value={activationView.currentStepLabel ?? "—"} />
+          <AdminInfoRow label="Güncel adım" value={activationView.currentStepLabel ?? "—"} />
+          <AdminInfoRow label="Sürüm" value={activationJourney?.version ?? "—"} />
+          <AdminInfoRow
+            label="Tamamlanma"
+            value={activationJourney?.completedAt ? formatAdminDate(activationJourney.completedAt) : "—"}
+          />
+          <AdminInfoRow label="Bloke nedeni" value={activationJourney?.blockedReasonCode ?? "—"} />
         </div>
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {ACTIVATION_STEP_ORDER.map((stepKey) => {
+            const step = activationJourney?.steps.find((row) => row.stepKey === stepKey);
+            return (
+              <AdminInfoRow
+                key={stepKey}
+                label={ACTIVATION_STEP_LABELS[stepKey]}
+                value={formatAdminStatus(step?.status ?? "PENDING")}
+              />
+            );
+          })}
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <AdminInfoRow label="Ödeme yöntemi" value={providerLabel} />
+          <AdminInfoRow label="Online QR kart ödemesi" value={onlinePaymentLabel} />
+          <AdminInfoRow
+            label="Anahtar parmak izi"
+            value={
+              providerMetadata.provider === "PAYTR" &&
+              typeof providerMetadata.keyFingerprint === "string"
+                ? providerMetadata.keyFingerprint
+                : "—"
+            }
+          />
+          <AdminInfoRow label="Son doğrulama" value={validationSummary} />
+        </div>
+
+        {activationJourney ? (
+          <div className="mt-6 grid gap-5 border-t border-slate-200 pt-5 xl:grid-cols-3">
+            {activationJourney.status === "IN_PROGRESS" || activationJourney.status === "READY" ? (
+              <form action={blockActivation} className="grid gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
+                <input type="hidden" name="expectedVersion" value={String(activationJourney.version)} />
+                <h3 className="text-sm font-black text-rose-950">Aktivasyonu engelle</h3>
+                <AdminTextField label="Neden kodu" name="reason" placeholder="Örn. COMPLIANCE_HOLD" required />
+                <label className="block min-w-0">
+                  <span className="text-xs font-black uppercase tracking-[0.12em] text-rose-700">Not</span>
+                  <textarea
+                    name="note"
+                    required
+                    minLength={8}
+                    className="mt-2 min-h-24 w-full rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950"
+                  />
+                </label>
+                <AdminSubmitButton>Engelle</AdminSubmitButton>
+              </form>
+            ) : null}
+
+            {activationJourney.status === "BLOCKED" &&
+            activationJourney.blockedReasonCode === "ADMIN_BLOCKED" ? (
+              <form action={unblockActivation} className="grid gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
+                <input type="hidden" name="expectedVersion" value={String(activationJourney.version)} />
+                <h3 className="text-sm font-black text-amber-950">Aktivasyon engelini kaldır</h3>
+                <AdminTextField label="Neden" name="reason" placeholder="Örn. REVIEW_COMPLETE" required />
+                <AdminSubmitButton>Engeli kaldır</AdminSubmitButton>
+              </form>
+            ) : null}
+
+            {activationJourney.status === "READY" ? (
+              <form action={adminGoLive} className="grid gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
+                <input type="hidden" name="expectedVersion" value={String(activationJourney.version)} />
+                <input type="hidden" name="confirmed" value="1" />
+                <h3 className="text-sm font-black text-emerald-950">Admin destekli yayına alma</h3>
+                <p className="text-xs font-semibold text-emerald-900">
+                  Onay için slug değerini tam yazın: {organization.slug}
+                </p>
+                <AdminTextField label="Slug onayı" name="confirmationText" required />
+                <AdminTextField label="Neden kodu" name="reason" placeholder="Örn. ASSISTED_LAUNCH" required />
+                <label className="block min-w-0">
+                  <span className="text-xs font-black uppercase tracking-[0.12em] text-emerald-700">Not</span>
+                  <textarea
+                    name="note"
+                    required
+                    minLength={8}
+                    className="mt-2 min-h-24 w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950"
+                  />
+                </label>
+                <AdminSubmitButton>Admin olarak yayına al</AdminSubmitButton>
+              </form>
+            ) : null}
+          </div>
+        ) : (
+          <AdminActionNotice>Bu organizasyon için aktivasyon yolculuğu henüz başlamadı.</AdminActionNotice>
+        )}
       </AdminPanel>
 
       <AdminPanel>

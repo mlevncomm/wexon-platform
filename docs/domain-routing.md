@@ -1,6 +1,6 @@
 # Wexon Domain Routing
 
-Production host map and expected behavior for the WexPay Pilot Launch.
+Production host map and expected behavior for WexPay Canlıya Geçiş.
 
 ## Host → Surface
 

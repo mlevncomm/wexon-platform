@@ -65,7 +65,7 @@ Asagidaki degiskenler production deploy oncesi tanimli olmalidir. `.env` dosyala
 | `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` | Sanal POS baglantisi kullanilacaksa | Organization sanal POS API bilgilerinin sifrelenmesi (AES-256-GCM). Manuel tahsilat icin zorunlu degil. |
 | `NEXT_PUBLIC_APP_URL` | Evet | Public canonical app URL (redirect/link uretimi). |
 | `MAINTENANCE_MODE` | Evet | Canli hizmette `false`; yalnizca on basvuru moduna almak icin `true`. |
-| `WEXPAY_PAYTR_ENABLE_API` | Evet | Ilk production acilisinda `false`; PayTR sadece pilot dogrulamadan sonra acilir. |
+| `WEXPAY_PAYTR_ENABLE_API` | Evet | Ilk production acilisinda `false`; PayTR sadece Kurucu Isletmeler Programi dogrulamasindan sonra acilir. |
 
 **Local / smoke (opsiyonel):** `.env.example` dosyasina bakin — `SMOKE_PORT`, `SMOKE_BASE_URL`, `SMOKE_CUSTOMER_PASSWORD`, `SMOKE_SKIP_WEB_SERVER`, `SMOKE_REUSE_SERVER`.
 
@@ -288,7 +288,7 @@ Kisa yol (adim 2 icin migrate sonrasi): `npm run staging:validate`
 
 - [x] Sanal POS baglantisi storage foundation (`WexPayProviderCredential`, sifreli API bilgileri). Bkz. `lib/wexpay-provider-credentials.ts`, `docs/wexpay-payment-provider-adapters.md`.
 - [x] Inbound webhook event / idempotency ledger foundation (`WexPayWebhookEvent`). Bkz. `lib/wexpay-webhook-events.ts`.
-- [ ] Sanal POS baglantisi rotation policy: yeni API bilgisi ile upsert, eski baglanti `isActive=false`, audit (`wexpay.provider_credential.deactivated`) ve fingerprint takibi.
+- [x] Sanal POS baglantisi rotation policy: once `PENDING` odeme/callback uzlastirma, sonra tek kayda atomik upsert + secili aktivasyon metadata refresh + fingerprint/audit takibi. Immutable credential surumu bu semada yoktur; rotasyon oncesi uzlastirma zorunludur.
 - [x] **Phase 7 on kosullari (PayTR foundation — operator + public QR):**
   - [x] Inbound webhook route `/api/wexpay/webhooks/paytr` (demo route'lara dokunulmadi).
   - [x] Raw body okuma (JSON parse oncesi byte dizisi).

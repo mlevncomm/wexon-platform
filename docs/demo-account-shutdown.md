@@ -53,7 +53,7 @@ Enforced by:
 
 Also keep PayTR live charge gated:
 
-- `WEXPAY_PAYTR_ENABLE_API=false` unless intentional pilot + live merchant credentials
+- `WEXPAY_PAYTR_ENABLE_API=false` unless an intentional Canlıya Geçiş with verified LIVE merchant credentials is approved
 
 ## Local / E2E fixture rules
 

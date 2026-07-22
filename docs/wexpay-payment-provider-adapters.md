@@ -158,6 +158,8 @@ Firma kendi PayTR / iyzico / Param merchant bilgilerini girer; WexPay yalnizca s
 
 Unique constraint: `(organizationId, provider, mode)`.
 
+Bu tek-kayıt modeli immutable credential sürümü tutmaz. Merchant secret overwrite/rotasyonundan önce mevcut `PENDING` ödemeler ve beklenen callback'ler uzlaştırılmalıdır; aksi halde eski secret ile imzalanmış callback yeni kayıtla doğrulanamaz. Seçili PAYTR credential güncellendiğinde aktivasyon adımındaki güvenli fingerprint/config metadata aynı transaction içinde yenilenir, adım yeniden açılmaz.
+
 Helpers: `lib/wexpay-provider-credentials.ts`
 
 - **Encryption key:** `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` (32-byte hex or base64). Missing key → credentials cannot be stored and PSP adapters remain not configured.
