@@ -1,7 +1,14 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
-import { WexPayProviderCredentialMode } from ".prisma/client";
+import {
+  ActivationJourneyStepStatus,
+  ActivationStepKey,
+  WexPayProviderCredentialMode,
+  type Prisma,
+  type PrismaClient,
+} from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
+import { lockWexPayActivationJourneyForUpdate } from "@/lib/wexpay-locks";
 import { assertPaytrCredentialReady } from "@/lib/wexpay-paytr-adapter";
 import { mapIyzicoCredentialConfig } from "@/lib/wexpay-iyzico-adapter";
 import { mapParamCredentialConfig } from "@/lib/wexpay-param-adapter";
@@ -39,6 +46,99 @@ type CredentialAuditContext = {
   userId?: string | null;
   ipAddress?: string | null;
 };
+
+type CredentialDbClient = PrismaClient | Prisma.TransactionClient;
+
+export type WexPayProviderCredentialUpsertInput = {
+  provider: WexPayPspProviderKey;
+  displayName: string;
+  mode: WexPayProviderCredentialMode;
+  config: WexPayProviderCredentialConfig;
+  primarySecret: string;
+  isActive?: boolean;
+};
+
+function asSafeMetadataObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+async function refreshSelectedPaytrMetadataInTx(
+  client: CredentialDbClient,
+  context: CredentialAuditContext,
+  record: {
+    id: string;
+    provider: string;
+    mode: WexPayProviderCredentialMode;
+    isActive: boolean;
+    keyFingerprint: string;
+  },
+) {
+  if (record.provider !== "paytr" || !record.isActive) return false;
+  const journeyId = await lockWexPayActivationJourneyForUpdate(
+    client,
+    context.organizationId,
+  );
+  if (!journeyId) return false;
+
+  const step = await client.activationJourneyStep.findUnique({
+    where: {
+      journeyId_stepKey: {
+        journeyId,
+        stepKey: ActivationStepKey.PAYMENT_PROVIDER,
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      safeMetadataJson: true,
+    },
+  });
+  if (step?.status !== ActivationJourneyStepStatus.COMPLETED) return false;
+
+  const metadata = asSafeMetadataObject(step.safeMetadataJson);
+  if (
+    metadata.provider !== "PAYTR" ||
+    metadata.credentialId !== record.id ||
+    metadata.mode !== record.mode
+  ) {
+    return false;
+  }
+
+  const configCheckedAt = new Date().toISOString();
+  const safeMetadata = {
+    provider: "PAYTR",
+    credentialId: record.id,
+    mode: record.mode,
+    keyFingerprint: record.keyFingerprint,
+    configCheckedAt,
+    onlinePaymentApiEnabled:
+      process.env.WEXPAY_PAYTR_ENABLE_API === "true",
+  };
+  await client.activationJourneyStep.update({
+    where: { id: step.id },
+    data: { safeMetadataJson: safeMetadata as Prisma.InputJsonValue },
+  });
+  await client.activationJourney.update({
+    where: { id: journeyId },
+    data: { version: { increment: 1 } },
+  });
+  await writeAuditLog(
+    {
+      action: "activation.payment_provider.credential_refreshed",
+      organizationId: context.organizationId,
+      userId: context.userId ?? null,
+      entityType: "ActivationJourney",
+      entityId: journeyId,
+      ipAddress: context.ipAddress ?? null,
+      source: "wexpay_app",
+      metadata: safeMetadata,
+    },
+    client,
+  );
+  return true;
+}
 
 function isPspProviderKey(provider: string): provider is WexPayPspProviderKey {
   return (WEXPAY_PSP_PROVIDER_KEYS as readonly string[]).includes(provider);
@@ -149,6 +249,7 @@ function resolvePrimarySecret(
 ): string {
   return (
     incomingSecret?.trim() ||
+    config.merchantKey?.trim() ||
     config.secretKey?.trim() ||
     config.apiKey?.trim() ||
     config.merchantSalt?.trim() ||
@@ -165,6 +266,7 @@ export async function prepareProviderCredentialUpsert(
     config: WexPayProviderCredentialConfig;
     primarySecret?: string | null;
   },
+  client: CredentialDbClient = prisma,
 ) {
   if (!isProviderCredentialEncryptionAvailable()) {
     throw new WexPayProviderCredentialStorageError(
@@ -172,7 +274,7 @@ export async function prepareProviderCredentialUpsert(
     );
   }
 
-  const existing = await prisma.wexPayProviderCredential.findUnique({
+  const existing = await client.wexPayProviderCredential.findUnique({
     where: {
       organizationId_provider_mode: {
         organizationId,
@@ -301,16 +403,10 @@ export async function assertProviderCredentialConfigured(
   }
 }
 
-export async function upsertWexPayProviderCredential(
+export async function upsertWexPayProviderCredentialInTx(
+  client: CredentialDbClient,
   context: CredentialAuditContext,
-  input: {
-    provider: WexPayPspProviderKey;
-    displayName: string;
-    mode: WexPayProviderCredentialMode;
-    config: WexPayProviderCredentialConfig;
-    primarySecret: string;
-    isActive?: boolean;
-  },
+  input: WexPayProviderCredentialUpsertInput,
 ) {
   if (!isProviderCredentialEncryptionAvailable()) {
     throw new WexPayProviderCredentialStorageError(
@@ -322,7 +418,7 @@ export async function upsertWexPayProviderCredential(
   const keyFingerprint = computeKeyFingerprint(input.primarySecret);
   const maskedKey = maskProviderSecret(input.primarySecret);
 
-  const record = await prisma.wexPayProviderCredential.upsert({
+  const record = await client.wexPayProviderCredential.upsert({
     where: {
       organizationId_provider_mode: {
         organizationId: context.organizationId,
@@ -349,24 +445,36 @@ export async function upsertWexPayProviderCredential(
     },
   });
 
-  await writeAuditLog({
-    action: "wexpay.provider_credential.upserted",
-    organizationId: context.organizationId,
-    userId: context.userId ?? null,
-    entityType: "WexPayProviderCredential",
-    entityId: record.id,
-    ipAddress: context.ipAddress ?? null,
-    source: "wexpay_app",
-    metadata: {
-      provider: input.provider,
-      mode: input.mode,
-      keyFingerprint,
-      maskedKey,
-      isActive: record.isActive,
+  await writeAuditLog(
+    {
+      action: "wexpay.provider_credential.upserted",
+      organizationId: context.organizationId,
+      userId: context.userId ?? null,
+      entityType: "WexPayProviderCredential",
+      entityId: record.id,
+      ipAddress: context.ipAddress ?? null,
+      source: "wexpay_app",
+      metadata: sanitizeProviderCredentialAuditMetadata({
+        provider: input.provider,
+        mode: input.mode,
+        keyFingerprint,
+        maskedKey,
+        isActive: record.isActive,
+      }),
     },
-  });
+    client,
+  );
+
+  await refreshSelectedPaytrMetadataInTx(client, context, record);
 
   return toSummary(record);
+}
+
+export async function upsertWexPayProviderCredential(
+  context: CredentialAuditContext,
+  input: WexPayProviderCredentialUpsertInput,
+) {
+  return prisma.$transaction((tx) => upsertWexPayProviderCredentialInTx(tx, context, input));
 }
 
 export type ProviderCredentialTestResult = {
@@ -505,6 +613,15 @@ export async function assertProviderCredentialInOrg(
 export function sanitizeProviderCredentialAuditMetadata(
   metadata: Record<string, unknown>,
 ): Record<string, unknown> {
-  const blocked = new Set(["config", "configCiphertext", "primarySecret", "merchantKey", "merchantSalt", "secretKey"]);
-  return Object.fromEntries(Object.entries(metadata).filter(([key]) => !blocked.has(key)));
+  const allowed = new Set([
+    "provider",
+    "mode",
+    "ok",
+    "detailCount",
+    "keyFingerprint",
+    "maskedKey",
+    "isActive",
+    "credentialId",
+  ]);
+  return Object.fromEntries(Object.entries(metadata).filter(([key]) => allowed.has(key)));
 }

@@ -2,6 +2,7 @@ import { wexpayApiErrorResponse } from "@/lib/wexpay-api-guard";
 import { enforcePublicQrIpRateLimit } from "@/lib/wexpay-public-rate-limit";
 import { resolvePublicTableByPublicKey } from "@/lib/wexpay-read";
 import { getPublicTableBill } from "@/lib/wexpay-service";
+import { getWexPayPublicPaymentAvailabilitySummary } from "@/lib/wexpay-public-payment-availability";
 
 /**
  * PUBLIC QR table bill -> GET /api/wexpay/public/[qrCode]/bill
@@ -32,7 +33,9 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
       tableId: resolution.table.id,
     });
 
-    const onlineCheckoutEnabled = process.env.WEXPAY_PAYTR_ENABLE_API === "true";
+    const paymentAvailability = await getWexPayPublicPaymentAvailabilitySummary(
+      resolution.organizationId,
+    );
 
     return Response.json({
       restaurant: { name: resolution.restaurant.name },
@@ -50,7 +53,7 @@ export async function GET(request: Request, context: { params: Promise<{ qrCode:
       },
       paymentAvailability: {
         staffPaymentRequest: true,
-        onlineCheckout: onlineCheckoutEnabled,
+        onlineCheckout: paymentAvailability.onlineCheckoutEnabled,
         liveChargeFromThisEndpoint: false,
       },
     });

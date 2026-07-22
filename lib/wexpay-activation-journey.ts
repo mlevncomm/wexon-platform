@@ -508,6 +508,15 @@ export async function assertWizardStepMutableInTx(
   if (!journey) {
     throw new ActivationJourneyError("NOT_STARTED", "Akıllı Aktivasyon henüz başlamadı.");
   }
+  if (
+    journey.status === ActivationJourneyStatus.BLOCKED &&
+    journey.blockedReasonCode === "ADMIN_BLOCKED"
+  ) {
+    throw new ActivationJourneyError(
+      "ADMIN_BLOCKED",
+      "Aktivasyon yönetici tarafından durduruldu.",
+    );
+  }
   if (journey.version !== input.expectedVersion) {
     throw new ActivationJourneyError(
       "VERSION_CONFLICT",

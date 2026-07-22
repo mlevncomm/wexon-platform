@@ -17,6 +17,9 @@ const ACTIONABLE_ACTIVATION_STEPS = new Set<ActivationStepKey>([
   ActivationStepKey.TABLE_SETUP,
   ActivationStepKey.STAFF_INVITE,
   ActivationStepKey.MENU_IMPORT,
+  ActivationStepKey.PAYMENT_PROVIDER,
+  ActivationStepKey.VALIDATION,
+  ActivationStepKey.GO_LIVE,
 ]);
 
 export function isActivationStepActionable(step: ActivationStepKey | null | undefined): boolean {

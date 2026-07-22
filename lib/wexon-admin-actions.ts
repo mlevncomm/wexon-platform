@@ -17,6 +17,11 @@ import { hashPassword } from "@/lib/wexon-passwords";
 import { assertStaffEntitlementLimit, evaluateProductAccess } from "@/lib/wexon-core-access";
 import { syncSubscriptionAccessState } from "@/lib/wexon-subscription-lifecycle";
 import {
+  adminAssistedWexPayGoLive,
+  blockWexPayActivationAsAdmin,
+  unblockWexPayActivationAsAdmin,
+} from "@/lib/wexpay-activation-admin";
+import {
   assertMembershipChangePreservesActiveOwners,
   assertUserDeactivationPreservesActiveOwners,
   LastActiveOwnerError,
@@ -808,6 +813,86 @@ export async function createAdminLicenseFromListAction(formData: FormData) {
 function readStringFromForm(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readActivationExpectedVersion(formData: FormData) {
+  const raw = readStringFromForm(formData, "expectedVersion");
+  const value = Number(raw);
+  if (!raw || !Number.isSafeInteger(value) || value < 1) {
+    throw new AdminValidationError("Aktivasyon sürümü geçersiz. Sayfayı yenileyin.");
+  }
+  return value;
+}
+
+export async function blockAdminWexPayActivationAction(
+  organizationId: string,
+  formData: FormData,
+) {
+  const returnTo = readReturnTo(formData, `/admin/organizations/${organizationId}`);
+  try {
+    const actor = await assertAdminAccess();
+    await blockWexPayActivationAsAdmin({
+      organizationId,
+      expectedVersion: readActivationExpectedVersion(formData),
+      actor: { email: actor.email },
+      reason: readStringFromForm(formData, "reason"),
+      note: readStringFromForm(formData, "note"),
+    });
+    revalidateOrganizationRoutes(organizationId);
+    revalidatePath("/dashboard/wexpay/activation");
+    redirect(returnTo);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, returnTo, error, "Aktivasyon engellenemedi.");
+  }
+}
+
+export async function unblockAdminWexPayActivationAction(
+  organizationId: string,
+  formData: FormData,
+) {
+  const returnTo = readReturnTo(formData, `/admin/organizations/${organizationId}`);
+  try {
+    const actor = await assertAdminAccess();
+    await unblockWexPayActivationAsAdmin({
+      organizationId,
+      expectedVersion: readActivationExpectedVersion(formData),
+      actor: { email: actor.email },
+      reason: readStringFromForm(formData, "reason"),
+    });
+    revalidateOrganizationRoutes(organizationId);
+    revalidatePath("/dashboard/wexpay/activation");
+    redirect(returnTo);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, returnTo, error, "Aktivasyon engeli kaldırılamadı.");
+  }
+}
+
+export async function adminAssistedWexPayGoLiveAction(
+  organizationId: string,
+  formData: FormData,
+) {
+  const returnTo = readReturnTo(formData, `/admin/organizations/${organizationId}`);
+  try {
+    const actor = await assertAdminAccess();
+    await adminAssistedWexPayGoLive({
+      organizationId,
+      expectedVersion: readActivationExpectedVersion(formData),
+      actor: { email: actor.email },
+      reason: readStringFromForm(formData, "reason"),
+      note: readStringFromForm(formData, "note"),
+      confirmed: readStringFromForm(formData, "confirmed") === "1",
+      confirmationText: readStringFromForm(formData, "confirmationText"),
+    });
+    revalidateOrganizationRoutes(organizationId);
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/wexpay/activation");
+    redirect(returnTo);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, returnTo, error, "Admin destekli yayına alma tamamlanamadı.");
+  }
 }
 
 export async function changeAdminLicensePlanAction(organizationId: string, licenseId: string, formData: FormData) {

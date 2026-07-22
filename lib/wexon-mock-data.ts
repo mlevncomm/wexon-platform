@@ -16,7 +16,7 @@ export const PRODUCTS: WexonProduct[] = [
       "WexPay; QR menü, sipariş, masa yönetimi, ödeme, fiş talebi, raporlama ve operasyon takibini tek panelde birleştirir.",
     accentColor: "#10b981",
     features: [
-      "Pilot erişim",
+      "Akıllı Aktivasyon",
       "QR menü ve sipariş",
       "Masa ve ödeme takibi",
       "Menü / ürün yönetimi",
@@ -24,7 +24,7 @@ export const PRODUCTS: WexonProduct[] = [
       "Core lisans entegrasyonu",
     ],
     href: "/products/wexpay",
-    statusLabel: "Pilot",
+    statusLabel: "Canlıya Geçiş",
   },
   {
     id: "wexhotel",

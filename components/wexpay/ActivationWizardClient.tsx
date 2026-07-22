@@ -12,13 +12,15 @@ import {
   recoverQrPackAction,
   revokeStaffInviteAction,
   rotateTableQrWizardAction,
+  goLiveActivationAction,
+  runActivationValidationAction,
+  saveActivationPaymentProviderAction,
   saveBranchSetupAction,
   saveBusinessProfileAction,
   skipMenuImportEmptyStartAction,
   uploadMenuImportDryRunAction,
   type WizardActionState,
 } from "@/lib/wexpay-activation-wizard-actions";
-import { ACTIVATION_STEP_LABELS } from "@/lib/wexpay-activation-step-ui";
 import {
   downloadTableQrPng,
   generateTableQrDataUrl,
@@ -26,6 +28,12 @@ import {
 } from "@/lib/wexpay-table-qr";
 import type { WizardIssuedQr } from "@/lib/wexpay-activation-wizard";
 import type { MenuImportJobView } from "@/lib/wexpay-menu-import";
+import type { ActivationPaymentProviderSafeMetadata } from "@/lib/wexpay-activation-payment-provider";
+import type {
+  ActivationValidationCheck,
+  ActivationValidationSafeMetadata,
+  ActivationValidationStatus,
+} from "@/lib/wexpay-activation-validation";
 
 type StepKey =
   | "BUSINESS_PROFILE"
@@ -52,6 +60,7 @@ type Props = {
   organizationId: string;
   organization: {
     name: string;
+    slug: string;
     legalName: string | null;
     taxNo: string | null;
     phone: string | null;
@@ -71,11 +80,17 @@ type Props = {
   canSkipStaffInvite: boolean;
   menuImportJob: MenuImportJobView | null;
   publicOrigin: string;
+  actorRole: MembershipRole | null;
+  journeyStatus: string;
+  blockedReasonCode: string | null;
+  selectedProvider: ActivationPaymentProviderSafeMetadata | null;
+  latestValidationSummary: ActivationValidationSafeMetadata | null;
+  paytrApiEnabled: boolean;
+  isProductionEnvironment: boolean;
 };
 
 const initial: WizardActionState = { ok: false };
 
-const UPCOMING: StepKey[] = ["PAYMENT_PROVIDER", "VALIDATION", "GO_LIVE"];
 const INVITE_ROLE_LABELS: Record<MembershipRole, string> = {
   OWNER: "Sahip",
   ADMIN: "Yönetici",
@@ -84,6 +99,42 @@ const INVITE_ROLE_LABELS: Record<MembershipRole, string> = {
   BILLING: "Faturalama",
   VIEWER: "Görüntüleyici",
 };
+
+const VALIDATION_STATUS_LABELS: Record<ActivationValidationStatus, string> = {
+  PASS: "Geçti",
+  WARNING: "Uyarı",
+  FAIL: "Başarısız",
+};
+
+function SuccessBox({ state }: { state: WizardActionState }) {
+  if (!state.ok || !state.message) return null;
+  return (
+    <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800" role="status">
+      {state.message}
+    </p>
+  );
+}
+
+function ValidationCard({ check }: { check: ActivationValidationCheck }) {
+  const style =
+    check.status === "PASS"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+      : check.status === "WARNING"
+        ? "border-amber-200 bg-amber-50 text-amber-950"
+        : "border-rose-200 bg-rose-50 text-rose-950";
+  return (
+    <li className={`rounded-xl border p-3 ${style}`} data-testid={`activation-check-${check.status.toLowerCase()}`}>
+      <p className="text-xs font-black uppercase tracking-wide">{VALIDATION_STATUS_LABELS[check.status]}</p>
+      <h3 className="mt-1 text-sm font-black">{check.title}</h3>
+      <p className="mt-1 text-sm font-medium">{check.description}</p>
+      {check.remediationHref ? (
+        <a href={check.remediationHref} className="mt-2 inline-flex text-sm font-black underline">
+          Düzelt
+        </a>
+      ) : null}
+    </li>
+  );
+}
 const INVITE_DELIVERY_LABELS: Record<string, string> = {
   PENDING: "Gönderim bekliyor",
   SENT: "Gönderildi",
@@ -228,9 +279,27 @@ export function ActivationWizardClient(props: Props) {
     skipMenuImportEmptyStartAction,
     initial,
   );
+  const [providerState, providerAction, providerPending] = useActionState(
+    saveActivationPaymentProviderAction,
+    initial,
+  );
+  const [validationState, validationAction, validationPending] = useActionState(
+    runActivationValidationAction,
+    initial,
+  );
+  const [goLiveState, goLiveAction, goLivePending] = useActionState(
+    goLiveActivationAction,
+    initial,
+  );
   const [forceReimport, setForceReimport] = useState(false);
   const [confirmApply, setConfirmApply] = useState(false);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const [provider, setProvider] = useState<"MANUAL" | "PAYTR">(
+    props.selectedProvider?.provider ?? "MANUAL",
+  );
+  const [manualAcknowledged, setManualAcknowledged] = useState(false);
+  const [goLiveConfirmed, setGoLiveConfirmed] = useState(false);
+  const [confirmationText, setConfirmationText] = useState("");
   const menuApplyFormRef = useRef<HTMLFormElement>(null);
 
   const issuedQrs = useMemo(() => {
@@ -309,6 +378,8 @@ export function ActivationWizardClient(props: Props) {
           İşletme profili, şube, güvenli QR masaları ve personel davetlerini adım adım tamamlayın.
           Canlı QR, sipariş ve ödeme bağlantıları Yayına alma sonrası açılır.
         </p>
+        <SuccessBox state={providerState} />
+        <ErrorBox state={goLiveState} />
       </div>
 
       {step === "BUSINESS_PROFILE" ? (
@@ -876,26 +947,284 @@ export function ActivationWizardClient(props: Props) {
         </section>
       ) : null}
 
-      <section
-        className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:p-6"
-        data-testid="activation-upcoming-steps"
-      >
-        <h2 className="text-base font-black text-slate-800">
-          {UPCOMING.includes(step) ? `${ACTIVATION_STEP_LABELS[step]} bekleniyor` : "Sonraki adımlar"}
-        </h2>
-        <p className="mt-1 text-sm text-slate-600">
-          {UPCOMING.includes(step)
-            ? "Tamamladığınız kurulum kaydedildi. Bu adım henüz kullanıma açılmadığı için şu anda işlem yapmanız gerekmiyor."
-            : "Bu adımlar henüz kullanıma açık değildir; mevcut kurulum adımlarınızı tamamlayabilirsiniz."}
-        </p>
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-          {UPCOMING.map((key) => (
-            <li key={key} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-400">
-              {ACTIVATION_STEP_LABELS[key]} · yakında
-            </li>
-          ))}
-        </ul>
-      </section>
+      {step === "PAYMENT_PROVIDER" ? (
+        <section
+          className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6"
+          data-testid="wizard-payment-provider"
+        >
+          <h2 className="text-lg font-black text-slate-950">6. Ödeme altyapısı</h2>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            Tahsilat yönteminizi seçin. Sağlayıcı bilgileri şifreli saklanır ve bu ekranda tekrar gösterilmez.
+          </p>
+          {props.selectedProvider ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+              Seçili yöntem: {props.selectedProvider.provider === "MANUAL" ? "Manuel tahsilat" : `PayTR · ${props.selectedProvider.mode}`}
+              {props.selectedProvider.provider === "PAYTR" ? (
+                <span className="mt-1 block text-xs text-slate-500">
+                  Anahtar parmak izi: {props.selectedProvider.keyFingerprint}
+                </span>
+              ) : null}
+              {props.selectedProvider.provider === "PAYTR" &&
+              props.selectedProvider.mode === "TEST" &&
+              props.isProductionEnvironment ? (
+                <span className="mt-1 block text-xs font-bold text-amber-700">
+                  Üretimde online kart ödemesi için LIVE bağlantı seçilmelidir.
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <form action={providerAction} className="mt-4 space-y-4">
+            <input type="hidden" name="organizationId" value={props.organizationId} />
+            <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
+            <input type="hidden" name="provider" value={provider} />
+            <fieldset>
+              <legend className="text-sm font-black text-slate-900">Ödeme yöntemi</legend>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+                  <input
+                    type="radio"
+                    name="providerChoice"
+                    value="MANUAL"
+                    checked={provider === "MANUAL"}
+                    onChange={() => setProvider("MANUAL")}
+                    className="mt-1"
+                    data-testid="provider-manual"
+                  />
+                  <span>
+                    <span className="block text-sm font-black text-slate-950">Manuel tahsilat</span>
+                    <span className="mt-1 block text-xs font-medium text-slate-600">Nakit veya fiziksel POS</span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+                  <input
+                    type="radio"
+                    name="providerChoice"
+                    value="PAYTR"
+                    checked={provider === "PAYTR"}
+                    onChange={() => setProvider("PAYTR")}
+                    className="mt-1"
+                    data-testid="provider-paytr"
+                  />
+                  <span>
+                    <span className="block text-sm font-black text-slate-950">PayTR</span>
+                    <span className="mt-1 block text-xs font-medium text-slate-600">Online QR kart ödemesi</span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            {provider === "MANUAL" ? (
+              <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+                <input
+                  type="checkbox"
+                  name="manualAcknowledged"
+                  value="1"
+                  checked={manualAcknowledged}
+                  onChange={(event) => setManualAcknowledged(event.target.checked)}
+                  className="mt-1"
+                  data-testid="provider-manual-ack"
+                />
+                QR sipariş kullanılabilir; online kart ödemesi yerine nakit/fiziksel POS tahsilatı kaydedilir.
+              </label>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Bağlantı modu
+                  <select
+                    name="mode"
+                    defaultValue={props.selectedProvider?.provider === "PAYTR" ? props.selectedProvider.mode : "TEST"}
+                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                    data-testid="provider-paytr-mode"
+                  >
+                    <option value="TEST">TEST</option>
+                    <option value="LIVE">LIVE</option>
+                  </select>
+                </label>
+                <div className="hidden sm:block" aria-hidden="true" />
+                <label className="block text-sm font-semibold text-slate-700">
+                  Merchant ID
+                  <input name="merchantId" required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" autoComplete="off" />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Merchant Key
+                  <input name="merchantKey" type="password" required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" autoComplete="new-password" />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700 sm:col-span-2">
+                  Merchant Salt
+                  <input name="merchantSalt" type="password" required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" autoComplete="new-password" />
+                </label>
+              </div>
+            )}
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-xl border border-dashed border-slate-200 px-3 py-2 text-sm font-semibold text-slate-400" aria-disabled="true">
+                iyzico · yakında
+              </div>
+              <div className="rounded-xl border border-dashed border-slate-200 px-3 py-2 text-sm font-semibold text-slate-400" aria-disabled="true">
+                Param · yakında
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={providerPending || (provider === "MANUAL" && !manualAcknowledged)}
+              className="rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              data-testid="provider-submit"
+            >
+              {providerPending ? "Kaydediliyor…" : "Yöntemi kaydet ve devam et"}
+            </button>
+            <ErrorBox state={providerState} />
+          </form>
+        </section>
+      ) : null}
+
+      {step === "VALIDATION" ? (
+        <section
+          className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6"
+          data-testid="wizard-validation"
+        >
+          <h2 className="text-lg font-black text-slate-950">7. Son kontroller</h2>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            Kurulum, lisans, QR zinciri ve ödeme yöntemi sunucuda yeniden doğrulanır.
+          </p>
+          {props.blockedReasonCode === "ADMIN_BLOCKED" ? (
+            <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-900" role="alert">
+              Aktivasyon yönetici tarafından durduruldu. Kontroller yeniden çalıştırılamaz.
+            </p>
+          ) : null}
+          {props.latestValidationSummary ? (
+            <div className="mt-4 grid gap-2 sm:grid-cols-4" data-testid="validation-summary">
+              <div className="rounded-xl bg-slate-50 p-3 text-sm font-bold">Sonuç: {props.latestValidationSummary.result}</div>
+              <div className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-800">Geçti: {props.latestValidationSummary.passCount}</div>
+              <div className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">Uyarı: {props.latestValidationSummary.warningCount}</div>
+              <div className="rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">Başarısız: {props.latestValidationSummary.failCount}</div>
+            </div>
+          ) : null}
+          {validationState.validationReport ?? goLiveState.validationReport ? (
+            <ul className="mt-4 grid gap-3 lg:grid-cols-2" data-testid="validation-checks">
+              {(validationState.validationReport ?? goLiveState.validationReport)!.checks.map((check) => (
+                <ValidationCard key={check.key} check={check} />
+              ))}
+            </ul>
+          ) : null}
+          <form action={validationAction} className="mt-4">
+            <input type="hidden" name="organizationId" value={props.organizationId} />
+            <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
+            <button
+              type="submit"
+              disabled={validationPending || props.blockedReasonCode === "ADMIN_BLOCKED"}
+              className="rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              data-testid="validation-run"
+            >
+              {validationPending
+                ? "Kontroller çalışıyor…"
+                : props.latestValidationSummary
+                  ? "Kontrolleri yeniden çalıştır"
+                  : "Kontrolleri çalıştır"}
+            </button>
+            <SuccessBox state={validationState} />
+            <ErrorBox state={validationState} />
+          </form>
+        </section>
+      ) : null}
+
+      {step === "GO_LIVE" ? (
+        <section
+          className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6"
+          data-testid="wizard-go-live"
+        >
+          <h2 className="text-lg font-black text-slate-950">8. Yayına alma</h2>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            {props.journeyStatus === "READY" ? "Hazır durumdasınız. " : ""}
+            Public QR erişimi hâlâ kapalıdır; yalnızca “Yayına al” işlemi sonrası açılır.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-bold text-slate-500">Organizasyon</p>
+              <p className="mt-1 text-sm font-black text-slate-950">{props.organization.name}</p>
+              <p className="text-xs text-slate-500">{props.organization.slug}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-bold text-slate-500">Seçili yöntem</p>
+              <p className="mt-1 text-sm font-black text-slate-950">
+                {props.selectedProvider?.provider === "PAYTR"
+                  ? `PayTR · ${props.selectedProvider.mode}`
+                  : props.selectedProvider?.provider === "MANUAL"
+                    ? "Manuel tahsilat"
+                    : "Seçilmedi"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-bold text-slate-500">Online QR kart ödemesi</p>
+              <p className="mt-1 text-sm font-black text-slate-950">
+                {props.selectedProvider?.provider === "PAYTR" &&
+                props.paytrApiEnabled &&
+                (!props.isProductionEnvironment ||
+                  props.selectedProvider.mode === "LIVE")
+                  ? "Açık"
+                  : props.selectedProvider?.provider === "PAYTR" &&
+                      props.selectedProvider.mode === "TEST" &&
+                      props.isProductionEnvironment
+                    ? "Kapalı · üretimde LIVE gerekli"
+                    : "Kapalı"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-bold text-slate-500">Son kontroller</p>
+              <p className="mt-1 text-sm font-black text-slate-950">
+                {props.latestValidationSummary?.result ?? "Bilinmiyor"}
+              </p>
+            </div>
+          </div>
+
+          {props.actorRole === "OWNER" || props.actorRole === "ADMIN" ? (
+            <form action={goLiveAction} className="mt-5 space-y-4">
+              <input type="hidden" name="organizationId" value={props.organizationId} />
+              <input type="hidden" name="expectedVersion" value={String(props.journeyVersion)} />
+              <input type="hidden" name="confirmed" value={goLiveConfirmed ? "1" : "0"} />
+              <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+                <input
+                  type="checkbox"
+                  checked={goLiveConfirmed}
+                  onChange={(event) => setGoLiveConfirmed(event.target.checked)}
+                  className="mt-1"
+                  data-testid="go-live-confirm"
+                />
+                Kurulum özetini kontrol ettim ve public QR erişimini açmak istiyorum.
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                Organizasyon adı veya slug değerini tam olarak yazın
+                <input
+                  name="confirmationText"
+                  required
+                  value={confirmationText}
+                  onChange={(event) => setConfirmationText(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                  autoComplete="off"
+                  data-testid="go-live-confirmation-text"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={goLivePending || !goLiveConfirmed || !confirmationText}
+                className="rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                data-testid="go-live-submit"
+              >
+                {goLivePending ? "Yayına alınıyor…" : "Yayına al"}
+              </button>
+              <SuccessBox state={goLiveState} />
+              <ErrorBox state={goLiveState} />
+            </form>
+          ) : props.actorRole === "MANAGER" ? (
+            <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950" data-testid="go-live-manager-denied">
+              Müdür rolü son kontrolleri görüntüleyebilir; yayına alma işlemini yalnızca organizasyon sahibi veya yöneticisi tamamlayabilir.
+            </p>
+          ) : (
+            <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+              Yayına alma için sahip veya yönetici yetkisiyle müşteri hesabında oturum açın.
+            </p>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

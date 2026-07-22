@@ -1,6 +1,3 @@
-import { isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
-import { validatePublicAppUrl } from "@/lib/wexon-deploy-env";
-
 export class WexPayPublicTableUrlError extends Error {
   constructor(message: string) {
     super(message);
@@ -19,31 +16,36 @@ function assertSafeQrCode(qrCode: string): string {
   return trimmed;
 }
 
-function shouldRequireProductionUrl(rawAppUrl: string, env: NodeJS.ProcessEnv): boolean {
-  if (env.VERCEL_ENV === "production") return true;
-  if (env.WEXON_E2E_CONFIRM_PRODUCTION === "true") return true;
-  try {
-    const host = new URL(rawAppUrl).hostname.toLowerCase();
-    if (host === "wexon.dev" || host.endsWith(".wexon.dev")) return true;
-  } catch {
-    return false;
-  }
-  // Fall back to deployment helper when env matches the live process defaults.
-  if (env === process.env && isWexonProductionDeployment()) return true;
-  return false;
+function isLocalHostname(hostname: string) {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host.endsWith(".local")
+  );
 }
 
-function resolveAppBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const raw = env.NEXT_PUBLIC_APP_URL?.trim() ?? "";
+function shouldRequireProductionOrigin(parsed: URL, env: NodeJS.ProcessEnv): boolean {
+  if (env.VERCEL_ENV === "production") return true;
+  if (env.WEXON_E2E_CONFIRM_PRODUCTION === "true") return true;
+  const host = parsed.hostname.toLowerCase();
+  return host === "wexon.dev" || host.endsWith(".wexon.dev");
+}
+
+/**
+ * Canonical public QR origin. Prefer the dedicated public origin and fall back
+ * to the app origin. Accept an origin only: no credentials, path, query, hash.
+ */
+export function resolveWexPayPublicOrigin(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const raw =
+    env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN?.trim() ||
+    env.NEXT_PUBLIC_APP_URL?.trim() ||
+    "";
   if (!raw) {
     throw new WexPayPublicTableUrlError("Uygulama URL yapılandırması eksik.");
-  }
-
-  // Local `next start` uses NODE_ENV=production with localhost — that is not a live deploy.
-  const requireProductionUrl = shouldRequireProductionUrl(raw, env);
-  const issue = validatePublicAppUrl(raw, { requireProductionUrl });
-  if (issue) {
-    throw new WexPayPublicTableUrlError(issue.message);
   }
 
   let parsed: URL;
@@ -53,14 +55,35 @@ function resolveAppBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
     throw new WexPayPublicTableUrlError("NEXT_PUBLIC_APP_URL must be a valid absolute URL.");
   }
 
-  if (requireProductionUrl) {
-    const host = parsed.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".local")) {
-      throw new WexPayPublicTableUrlError("NEXT_PUBLIC_APP_URL must not point at localhost in production.");
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new WexPayPublicTableUrlError("Genel erişim adresi http veya https olmalıdır.");
+  }
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new WexPayPublicTableUrlError(
+      "Genel erişim adresi yalnızca origin içermelidir.",
+    );
+  }
+
+  if (shouldRequireProductionOrigin(parsed, env)) {
+    if (parsed.protocol !== "https:") {
+      throw new WexPayPublicTableUrlError(
+        "Genel erişim adresi üretimde https kullanmalıdır.",
+      );
+    }
+    if (isLocalHostname(parsed.hostname)) {
+      throw new WexPayPublicTableUrlError(
+        "Genel erişim adresi üretimde localhost olamaz.",
+      );
     }
   }
 
-  return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "");
+  return parsed.origin;
 }
 
 /** Relative guest path — never embeds tenant/internal IDs. */
@@ -77,12 +100,12 @@ export function buildOpaquePublicQrPath(token: string): string {
 
 /** Absolute canonical guest URL from NEXT_PUBLIC_APP_URL (server-side). */
 export function buildPublicTableQrUrl(qrCode: string, env: NodeJS.ProcessEnv = process.env): string {
-  const base = resolveAppBaseUrl(env);
+  const base = resolveWexPayPublicOrigin(env);
   return `${base}${buildPublicTableQrPath(qrCode)}`;
 }
 
 export function buildOpaquePublicQrUrl(token: string, env: NodeJS.ProcessEnv = process.env): string {
-  const base = resolveAppBaseUrl(env);
+  const base = resolveWexPayPublicOrigin(env);
   return `${base}${buildOpaquePublicQrPath(token)}`;
 }
 

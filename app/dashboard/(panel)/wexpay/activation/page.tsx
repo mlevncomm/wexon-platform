@@ -7,7 +7,9 @@ import { listOrganizationStaffInvites } from "@/lib/wexpay-staff-invite";
 import { getActiveMenuImportJobView } from "@/lib/wexpay-menu-import";
 import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import { prisma } from "@/lib/prisma";
-import { ActivationStepKey } from ".prisma/client";
+import { ActivationStepKey, type MembershipRole } from ".prisma/client";
+import type { ActivationPaymentProviderSafeMetadata } from "@/lib/wexpay-activation-payment-provider";
+import type { ActivationValidationSafeMetadata } from "@/lib/wexpay-activation-validation";
 
 type SearchParams = Promise<{ organizationId?: string; organizationSlug?: string }>;
 
@@ -62,6 +64,81 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
       ? (tableStep.safeMetadataJson as { awaitingQrAck?: boolean; branchId?: string })
       : {};
 
+  const providerStep = view.journey?.steps.find(
+    (s) => s.stepKey === ActivationStepKey.PAYMENT_PROVIDER,
+  );
+  const providerRaw =
+    providerStep?.safeMetadataJson && typeof providerStep.safeMetadataJson === "object"
+      ? (providerStep.safeMetadataJson as Record<string, unknown>)
+      : {};
+  const selectedProvider: ActivationPaymentProviderSafeMetadata | null =
+    providerRaw.provider === "MANUAL" &&
+    providerRaw.acknowledged === true &&
+    providerRaw.onlinePaymentReady === false
+      ? { provider: "MANUAL", acknowledged: true, onlinePaymentReady: false }
+      : providerRaw.provider === "PAYTR" &&
+          typeof providerRaw.credentialId === "string" &&
+          (providerRaw.mode === "TEST" || providerRaw.mode === "LIVE") &&
+          typeof providerRaw.keyFingerprint === "string" &&
+          typeof providerRaw.configCheckedAt === "string" &&
+          typeof providerRaw.onlinePaymentApiEnabled === "boolean"
+        ? {
+            provider: "PAYTR",
+            credentialId: providerRaw.credentialId,
+            mode: providerRaw.mode,
+            keyFingerprint: providerRaw.keyFingerprint,
+            configCheckedAt: providerRaw.configCheckedAt,
+            onlinePaymentApiEnabled: providerRaw.onlinePaymentApiEnabled,
+          }
+        : null;
+
+  const validationStep = view.journey?.steps.find(
+    (s) => s.stepKey === ActivationStepKey.VALIDATION,
+  );
+  const validationRaw =
+    validationStep?.safeMetadataJson && typeof validationStep.safeMetadataJson === "object"
+      ? (validationStep.safeMetadataJson as Record<string, unknown>)
+      : {};
+  const latestValidationSummary: ActivationValidationSafeMetadata | null =
+    (validationRaw.result === "PASS" ||
+      validationRaw.result === "WARNING" ||
+      validationRaw.result === "FAIL") &&
+    typeof validationRaw.passCount === "number" &&
+    typeof validationRaw.warningCount === "number" &&
+    typeof validationRaw.failCount === "number" &&
+    Array.isArray(validationRaw.checks)
+      ? {
+          result: validationRaw.result,
+          passCount: validationRaw.passCount,
+          warningCount: validationRaw.warningCount,
+          failCount: validationRaw.failCount,
+          checks: validationRaw.checks.flatMap((check) => {
+            if (!check || typeof check !== "object") return [];
+            const row = check as Record<string, unknown>;
+            if (
+              typeof row.key !== "string" ||
+              (row.status !== "PASS" && row.status !== "WARNING" && row.status !== "FAIL")
+            ) {
+              return [];
+            }
+            return [{ key: row.key, status: row.status }];
+          }),
+        }
+      : null;
+
+  const actorRole: MembershipRole | null = session
+    ? (
+        await prisma.membership.findFirst({
+          where: {
+            organizationId: organization.id,
+            userId: session.userId,
+            status: "ACTIVE",
+          },
+          select: { role: true },
+        })
+      )?.role ?? null
+    : null;
+
   // Explicit owner-only continue is always offered; server enforces OWNER_ONLY skip rules.
   const canSkipStaffInvite = true;
 
@@ -100,6 +177,7 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
         organizationId={organization.id}
         organization={{
           name: organization.name,
+          slug: organization.slug,
           legalName: organization.legalName,
           taxNo: organization.taxNo,
           phone: organization.phone,
@@ -124,6 +202,13 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
         canSkipStaffInvite={canSkipStaffInvite}
         menuImportJob={menuImportJob}
         publicOrigin={publicOrigin}
+        actorRole={actorRole}
+        journeyStatus={view.journey?.status ?? "IN_PROGRESS"}
+        blockedReasonCode={view.journey?.blockedReasonCode ?? null}
+        selectedProvider={selectedProvider}
+        latestValidationSummary={latestValidationSummary}
+        paytrApiEnabled={process.env.WEXPAY_PAYTR_ENABLE_API === "true"}
+        isProductionEnvironment={process.env.VERCEL_ENV === "production"}
       />
     </div>
   );

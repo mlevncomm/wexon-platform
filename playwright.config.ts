@@ -8,14 +8,29 @@ function loadEnvFile(fileName: string, { override = false } = {}) {
   if (!existsSync(fullPath)) return;
   const entries = parseEnv(readFileSync(fullPath));
   const isolatedPinned = process.env.WEXON_E2E_CONFIRM_ISOLATED === "true";
+  const isolatedPinnedKeys = new Set([
+    "DATABASE_URL",
+    "DIRECT_URL",
+    "WEXON_E2E_TARGET",
+    "WEXON_E2E_CONFIRM_ISOLATED",
+    "E2E_BASE_URL",
+    "SMOKE_BASE_URL",
+    "SMOKE_PORT",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN",
+    "WEXPAY_PAYTR_ENABLE_API",
+    "WEXPAY_PAYTR_ENABLE",
+    "PAYTR_ENABLED",
+    "WEXPAY_CREDENTIAL_ENCRYPTION_KEY",
+    "WEXON_EMAIL_PROVIDER",
+    "ADMIN_EMAILS",
+    "E2E_ADMIN_EMAIL",
+    "ADMIN_LOGIN_PASSWORD",
+    "E2E_ADMIN_PASSWORD",
+    "ADMIN_SESSION_SECRET",
+  ]);
   for (const [key, value] of Object.entries(entries)) {
-    if (
-      isolatedPinned &&
-      (key === "DATABASE_URL" ||
-        key === "DIRECT_URL" ||
-        key === "WEXON_E2E_TARGET" ||
-        key === "WEXON_E2E_CONFIRM_ISOLATED")
-    ) {
+    if (isolatedPinned && isolatedPinnedKeys.has(key)) {
       continue;
     }
     if (override || !process.env[key]) {

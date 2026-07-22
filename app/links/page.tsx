@@ -358,7 +358,7 @@ export default function WexonLinksPage() {
               </p>
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-200">
                 <LinkIconGlyph icon="qr" className="h-3 w-3" />
-                Masa QR · Pilot demo
+                Masa QR · Canlıya Geçiş
               </span>
             </div>
           </div>

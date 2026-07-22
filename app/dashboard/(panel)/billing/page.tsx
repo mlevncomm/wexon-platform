@@ -176,8 +176,8 @@ export default async function DashboardBillingPage({ searchParams }: { searchPar
 
         <p className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold leading-relaxed text-slate-600">
           Fatura ve tahsilat bilgileri Wexon Core üzerinden merkezi olarak takip edilir. Recurring
-          (otomatik yenileme) 13 günlük pilot kapsamında açılmaz; dönem sonunda manuel yenileme veya
-          admin lisans açılışı kullanılır.
+          (otomatik yenileme) Akıllı Aktivasyon kapsamında açılmaz; dönem sonunda manuel yenileme
+          veya admin lisans açılışı kullanılır.
           {!paytrOn
             ? " Canlı online ödeme bayrakları kapalıysa bu sayfada yeni ödeme oturumu başlatılmaz."
             : " Online ödeme bayrakları açıksa paket satın alma sayfası üzerinden ilerler."}

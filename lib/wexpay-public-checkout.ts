@@ -2,10 +2,15 @@ import { PaymentStatus } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { calculateTableAccount, filterTableSessionRecords } from "@/lib/wexpay-account";
-import { generatePaytrMerchantOid, loadPaytrCredentialBundle } from "@/lib/wexpay-paytr-adapter";
+import {
+  createPaytrPaymentIntentWithCredentials,
+  generatePaytrMerchantOid,
+  type PaytrCredentialBundle,
+} from "@/lib/wexpay-paytr-adapter";
 import { lockWexPayTableAccount } from "@/lib/wexpay-locks";
-import { resolveWexPayPaymentProvider } from "@/lib/wexpay-payment-provider";
+import { resolveWexPayPublicPaymentAvailability } from "@/lib/wexpay-public-payment-availability";
 import { buildPublicQrAuditReference } from "@/lib/wexpay-public-qr-audit";
+import { resolveWexPayPublicOrigin } from "@/lib/wexpay-public-table-url";
 import type { TenantDb } from "@/lib/wexpay-tenant";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
 
@@ -17,10 +22,7 @@ export class WexPayPublicCheckoutUnavailableError extends Error {
 }
 
 export function buildPublicCheckoutRedirectUrls(publicPath: string, paymentId: string) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
-  if (!appUrl) {
-    throw new WexPayValidationError("Uygulama URL yapılandırması eksik.");
-  }
+  const appUrl = resolveWexPayPublicOrigin();
   const path = publicPath.startsWith("/") ? publicPath : `/${publicPath}`;
   const paymentQuery = `&paymentId=${encodeURIComponent(paymentId)}`;
   return {
@@ -237,19 +239,22 @@ async function resolvePaytrCheckoutIntent(input: {
   paymentId: string;
   providerRef: string;
   ipAddress: string | null;
+  credentials: PaytrCredentialBundle;
 }) {
-  const { adapter } = await resolveWexPayPaymentProvider("paytr");
-  const intent = await adapter.createPaymentIntent({
-    organizationId: input.organizationId,
-    branchId: input.branchId,
-    tableId: input.tableId,
-    orderId: input.orderId,
-    amount: input.amount,
-    currency: "TRY",
-    clientIp: input.ipAddress,
-    existingProviderRef: input.providerRef,
-    checkoutRedirect: buildPublicCheckoutRedirectUrls(input.publicPath, input.paymentId),
-  });
+  const intent = await createPaytrPaymentIntentWithCredentials(
+    {
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      tableId: input.tableId,
+      orderId: input.orderId,
+      amount: input.amount,
+      currency: "TRY",
+      clientIp: input.ipAddress,
+      existingProviderRef: input.providerRef,
+      checkoutRedirect: buildPublicCheckoutRedirectUrls(input.publicPath, input.paymentId),
+    },
+    input.credentials,
+  );
 
   if (!intent.externalCheckoutUrl) {
     throw new WexPayPublicCheckoutUnavailableError();
@@ -270,21 +275,19 @@ export async function createPublicCheckoutPayment(input: {
   orderId?: string | null;
   ipAddress: string | null;
 }) {
+  const paymentAvailability = await resolveWexPayPublicPaymentAvailability(
+    input.organizationId,
+  );
+  if (!paymentAvailability.onlineCheckoutEnabled) {
+    throw new WexPayPublicCheckoutUnavailableError();
+  }
+
   const validated = await validatePublicCheckoutContext({
     organizationId: input.organizationId,
     branchId: input.branchId,
     tableId: input.tableId,
     orderId: input.orderId,
   });
-
-  if (process.env.WEXPAY_PAYTR_ENABLE_API !== "true") {
-    throw new WexPayPublicCheckoutUnavailableError();
-  }
-
-  const credentials = await loadPaytrCredentialBundle(input.organizationId);
-  if (!credentials) {
-    throw new WexPayPublicCheckoutUnavailableError();
-  }
 
   const locked = await prisma.$transaction(async (tx) => {
     // Lock order: table account only (see lib/wexpay-locks.ts).
@@ -418,6 +421,7 @@ export async function createPublicCheckoutPayment(input: {
       paymentId: locked.paymentId,
       providerRef: locked.providerRef,
       ipAddress: input.ipAddress,
+      credentials: paymentAvailability.credentials,
     });
 
     return {

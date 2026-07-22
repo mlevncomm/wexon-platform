@@ -177,7 +177,7 @@ Repoda yalnizca [`.env.example`](.env.example) (placeholder) bulunur; gercek deg
 
 **Opsiyonel / dev-only:** `CUSTOMER_DEV_LOGIN_PASSWORD` — yalnizca local dev; production'da tanimli olmamali.
 
-**PSP (env'e credential yazilmaz):** `WEXPAY_PAYTR_ENABLE_API=false` ilk canli acilista onerilen degerdir; manual provider ile baslanir. PayTR pilot musteriyle dogrulaninca `true` yapilir. PayTR/iyzico/Param API bilgileri DB'de sifreli (`WexPayProviderCredential`).
+**PSP (env'e credential yazilmaz):** `WEXPAY_PAYTR_ENABLE_API=false` ilk canli acilista onerilen degerdir; manual provider ile baslanir. PayTR Kurucu Isletmeler Programi kapsamindaki musteriyle dogrulaninca `true` yapilir. PayTR/iyzico/Param API bilgileri DB'de sifreli (`WexPayProviderCredential`).
 
 Dogrulama: `npm run production:check` (local: `.env` + `.env.local`).
 

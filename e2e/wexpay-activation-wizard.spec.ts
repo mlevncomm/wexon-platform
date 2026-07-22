@@ -488,12 +488,10 @@ test.describe.serial("WexPay activation wizard flow", () => {
         "SKIPPED",
       );
       expect(await prisma.menuProduct.count({ where: { branchId: branch.id } })).toBe(0);
-      await expect(page.getByTestId("activation-waiting-status")).toContainText(
-        "Ödeme altyapısı henüz kullanıma açılmadı",
-        { timeout: 15_000 },
-      );
-      await expect(page.getByRole("link", { name: "Kuruluma devam et" })).toHaveCount(0);
-      await expect(page.getByText(/PAYMENT_PROVIDER|PAYMENT PROVIDER|VALIDATION|GO_LIVE|GO LIVE/)).toHaveCount(0);
+      await expect(page.getByTestId("wizard-payment-provider")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId("provider-manual")).toBeVisible();
+      await expect(page.getByTestId("provider-paytr")).toBeVisible();
+      await expect(page.getByTestId("provider-submit")).toBeDisabled();
       expect(browserIssues.filter((issue) => /hydration|encType or method|unhandled/i.test(issue))).toEqual([]);
     } finally {
       await prisma.menuImportJob.deleteMany({ where: { organizationId: orgId } }).catch(() => undefined);
@@ -977,11 +975,9 @@ test.describe.serial("WexPay activation wizard flow", () => {
         .toBe(ActivationStepKey.PAYMENT_PROVIDER);
 
       await page.reload();
-      await expect(page.getByText(/Ödeme altyapısı\s*·\s*yakında/i)).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId("activation-waiting-status")).toContainText(
-        "Ödeme altyapısı henüz kullanıma açılmadı",
-      );
-      await expect(page.getByRole("link", { name: "Kuruluma devam et" })).toHaveCount(0);
+      await expect(page.getByTestId("wizard-payment-provider")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("provider-manual-ack")).toBeVisible();
+      await expect(page.getByTestId("provider-submit")).toBeDisabled();
       await expect(page.getByTestId("wizard-menu-import")).toHaveCount(0);
       expect(await prisma.menuProduct.count({ where: { branchId: branch.id } })).toBe(PRODUCT_COUNT);
       const jobAfterRefresh = await prisma.menuImportJob.findFirstOrThrow({
