@@ -5,6 +5,7 @@ import {
   buildPublicTableQrPath,
   buildPublicTableQrUrl,
   buildTableQrDownloadBasename,
+  resolveWexPayPublicOrigin,
   toQrFilenameSlug,
   WexPayPublicTableUrlError,
 } from "@/lib/wexpay-public-table-url";
@@ -38,12 +39,23 @@ describe("buildOpaquePublicQrPath", () => {
 });
 
 describe("buildPublicTableQrUrl", () => {
-  it("trims trailing slashes from NEXT_PUBLIC_APP_URL", () => {
+  it("prefers dedicated public origin over app origin", () => {
     const url = buildPublicTableQrUrl("ABC-01", {
-      NEXT_PUBLIC_APP_URL: "https://app.wexon.dev///",
+      NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN: "https://www.wexon.dev/",
+      NEXT_PUBLIC_APP_URL: "https://app.wexon.dev/",
       NODE_ENV: "development",
     } as NodeJS.ProcessEnv);
-    assert.equal(url, "https://app.wexon.dev/wexpay/t/ABC-01");
+    assert.equal(url, "https://www.wexon.dev/wexpay/t/ABC-01");
+  });
+
+  it("falls back to NEXT_PUBLIC_APP_URL", () => {
+    assert.equal(
+      resolveWexPayPublicOrigin({
+        NEXT_PUBLIC_APP_URL: "http://localhost:3100/",
+        NODE_ENV: "development",
+      } as NodeJS.ProcessEnv),
+      "http://localhost:3100",
+    );
   });
 
   it("rejects missing app URL", () => {
@@ -80,6 +92,24 @@ describe("buildPublicTableQrUrl", () => {
       NODE_ENV: "production",
     } as NodeJS.ProcessEnv);
     assert.equal(url, "http://localhost:3100/wexpay/t/ABC-01");
+  });
+
+  it("rejects credentials, paths, query, and fragments", () => {
+    for (const origin of [
+      "https://user:pass@example.com/",
+      "https://example.com/public",
+      "https://example.com/?tenant=1",
+      "https://example.com/#guest",
+    ]) {
+      assert.throws(
+        () =>
+          resolveWexPayPublicOrigin({
+            NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN: origin,
+            NODE_ENV: "development",
+          } as NodeJS.ProcessEnv),
+        WexPayPublicTableUrlError,
+      );
+    }
   });
 
   it("rejects non-https wexon.dev app URL", () => {

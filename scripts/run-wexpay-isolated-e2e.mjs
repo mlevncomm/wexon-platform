@@ -7,6 +7,7 @@
  * Fail-closed: never treat 0-pass / all-skip as success.
  */
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -20,6 +21,12 @@ const root = process.cwd();
 const twice = process.argv.includes("--twice");
 const keepDb = process.argv.includes("--keep-db");
 const port = process.env.SMOKE_PORT || "3100";
+const orchestratorRunId = `${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
+const mandatoryPr4Tests = [
+  "PR4 mandatory: full owner journey opens operations only after explicit go-live",
+  "PR4 mandatory: PayTR TEST stays encrypted and network-disabled",
+  "PR4 mandatory: admin block unblock and assisted launch reuse validation",
+];
 
 function run(cmd, args, env = {}) {
   console.log(`[isolated-e2e] $ ${cmd} ${args.join(" ")}`);
@@ -37,6 +44,7 @@ function run(cmd, args, env = {}) {
 function isolatedEnv() {
   applyIsolatedE2eEnv();
   const url = isolatedE2eConnectionUrl();
+  const adminPassword = randomBytes(24).toString("base64url");
   return {
     DATABASE_URL: url,
     DIRECT_URL: url,
@@ -50,9 +58,16 @@ function isolatedEnv() {
     WEXPAY_PAYTR_ENABLE_API: "false",
     WEXPAY_PAYTR_ENABLE: "false",
     PAYTR_ENABLED: "false",
+    WEXPAY_CREDENTIAL_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
     WEXON_E2E_RELAX_RATE_LIMIT: "true",
     WEXON_EMAIL_PROVIDER: "fake",
+    ADMIN_EMAILS: "pr4-isolated-admin@example.test",
+    E2E_ADMIN_EMAIL: "pr4-isolated-admin@example.test",
+    ADMIN_LOGIN_PASSWORD: adminPassword,
+    E2E_ADMIN_PASSWORD: adminPassword,
+    ADMIN_SESSION_SECRET: randomBytes(32).toString("base64url"),
     NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
+    NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN: `http://localhost:${port}`,
   };
 }
 
@@ -61,7 +76,8 @@ async function runOnce(label) {
   assertIsolatedWexPayDatabase(`isolated-e2e ${label}`);
   createRunArtifact(`${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
 
-  const reportPath = resolve(root, "e2e", `.isolated-report-${label}.txt`);
+  // Unique names preserve prior untracked reports from earlier isolated runs.
+  const reportPath = resolve(root, "e2e", `.isolated-report-${orchestratorRunId}-${label}.txt`);
   console.log(`[isolated-e2e] $ npx playwright test (isolated specs)`);
   const result = spawnSync(
     "npx",
@@ -81,6 +97,7 @@ async function runOnce(label) {
       "e2e/wexpay-app-wide-workspace.spec.ts",
       "e2e/wexpay-pricing-parity.spec.ts",
       "e2e/wexpay-final-closure.spec.ts",
+      "e2e/wexpay-pr4-full-journey.spec.ts",
       "e2e/core-canonical-routing.spec.ts",
       "--reporter=list",
     ],
@@ -110,22 +127,31 @@ async function runOnce(label) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
   // Includes activation, auth/tenant, pricing, workspace, final closure, routing, and core specs.
-  const MIN_ISOLATED_PASSES = 28;
+  const MIN_ISOLATED_PASSES = 31;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
     );
   }
-  if (
-    combined.includes("logged-in wizard: profile") &&
-    /logged-in wizard: profile[\s\S]{0,200}\bskipped\b/i.test(combined)
-  ) {
-    throw new Error(`[isolated-e2e] ${label}: wizard flow test must not skip`);
+  for (const mandatoryTitle of mandatoryPr4Tests) {
+    const resultLine = combined
+      .split(/\r?\n/)
+      .find((line) => line.includes(mandatoryTitle));
+    if (!resultLine) {
+      throw new Error(
+        `[isolated-e2e] ${label}: mandatory PR-4 test did not run: ${mandatoryTitle}`,
+      );
+    }
+    if (/\b(skipped|fixme)\b/i.test(resultLine) || /^\s*-\s/.test(resultLine)) {
+      throw new Error(
+        `[isolated-e2e] ${label}: mandatory PR-4 test must not skip: ${mandatoryTitle}`,
+      );
+    }
   }
 
   const report = await cleanupWexPayE2ERun();
   writeFileSync(
-    resolve(root, "e2e", `.cleanup-report-${label}.json`),
+    resolve(root, "e2e", `.cleanup-report-${orchestratorRunId}-${label}.json`),
     JSON.stringify(report, null, 2),
     "utf8",
   );
@@ -133,22 +159,20 @@ async function runOnce(label) {
 }
 
 async function main() {
-  const env = isolatedEnv();
-
-  run("node", ["scripts/e2e-db.mjs", "up"], env);
-  run("node", ["scripts/e2e-db.mjs", "prepare"], env);
+  run("node", ["scripts/e2e-db.mjs", "up"], isolatedEnv());
+  run("node", ["scripts/e2e-db.mjs", "prepare"], isolatedEnv());
 
   // Build against isolated DB so server actions hit the right schema.
-  run("npm", ["run", "build"], env);
+  run("npm", ["run", "build"], isolatedEnv());
 
   await runOnce("run1");
   if (twice) {
-    run("node", ["scripts/e2e-db.mjs", "prepare"], env);
+    run("node", ["scripts/e2e-db.mjs", "prepare"], isolatedEnv());
     await runOnce("run2");
   }
 
   if (!keepDb) {
-    run("node", ["scripts/e2e-db.mjs", "down"], env);
+    run("node", ["scripts/e2e-db.mjs", "down"], isolatedEnv());
   }
 
   console.log("[isolated-e2e] complete");

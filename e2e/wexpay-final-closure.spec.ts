@@ -309,9 +309,8 @@ test.describe.serial("WexPay final closure browser regressions", () => {
       ).toBe(2);
 
       await page.reload();
-      await expect(page.getByTestId("activation-waiting-status")).toContainText(
-        "Ödeme altyapısı henüz kullanıma açılmadı",
-      );
+      await expect(page.getByTestId("wizard-payment-provider")).toBeVisible();
+      await expect(page.getByRole("link", { name: "Kuruluma devam et" })).toBeVisible();
       expectCleanBrowser(quality);
     } finally {
       await page.goto("about:blank").catch(() => undefined);
