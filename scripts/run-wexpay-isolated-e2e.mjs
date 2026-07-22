@@ -66,6 +66,8 @@ function isolatedEnv() {
     ADMIN_LOGIN_PASSWORD: adminPassword,
     E2E_ADMIN_PASSWORD: adminPassword,
     ADMIN_SESSION_SECRET: randomBytes(32).toString("base64url"),
+    CUSTOMER_SESSION_SECRET: randomBytes(32).toString("base64url"),
+    API_KEY_HASH_SECRET: randomBytes(32).toString("base64url"),
     NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
     NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN: `http://localhost:${port}`,
   };
