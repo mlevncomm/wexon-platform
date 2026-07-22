@@ -424,12 +424,12 @@ test.describe("wexpay package + role gates (authenticated)", () => {
 
       await loginAs(page, admin.email);
       await page.goto(`/apps/wexpay/settings?organizationId=${encodeURIComponent(tenant.organizationId)}`);
-      await expect(page.getByRole("heading", { name: "Sanal POS bağlantısı" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Sanal POS bağlantısı", exact: true })).toBeVisible();
       await expect(page.getByText(/Ayarlara erişim yok/i)).toHaveCount(0);
 
       await loginAs(page, tenant.ownerEmail);
       await page.goto(`/apps/wexpay/settings?organizationId=${encodeURIComponent(tenant.organizationId)}`);
-      await expect(page.getByRole("heading", { name: "Sanal POS bağlantısı" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Sanal POS bağlantısı", exact: true })).toBeVisible();
     } finally {
       if (tenant) await cleanupTenant(prisma, tenant, extraUsers);
       await prisma.$disconnect();
