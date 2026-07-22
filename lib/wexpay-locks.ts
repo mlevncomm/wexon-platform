@@ -20,6 +20,10 @@ type LockClient = {
   $executeRaw: Prisma.TransactionClient["$executeRaw"];
 };
 
+type RowLockClient = {
+  $queryRaw: Prisma.TransactionClient["$queryRaw"];
+};
+
 /** Namespace + entity two-key advisory xact lock. */
 async function advisoryXactLock(tx: LockClient, namespace: string, entityId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${namespace}), hashtext(${entityId}))`;
@@ -53,4 +57,23 @@ export async function lockWexPayOrgProductLimit(tx: LockClient, organizationId: 
 /** Serializes a single MenuImportJob apply/cancel path. */
 export async function lockWexPayMenuImportJob(tx: LockClient, jobId: string) {
   await advisoryXactLock(tx, "wexpay:menu-import-job", jobId);
+}
+
+/**
+ * Row-level lock for the organization-scoped WexPay activation journey.
+ * Call before go-live version/status reads; never perform network I/O while held.
+ */
+export async function lockWexPayActivationJourneyForUpdate(
+  tx: RowLockClient,
+  organizationId: string,
+): Promise<string | null> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT journey.id
+    FROM "ActivationJourney" AS journey
+    INNER JOIN "Product" AS product ON product.id = journey."productId"
+    WHERE journey."organizationId" = ${organizationId}
+      AND product.key = 'wexpay'
+    FOR UPDATE OF journey
+  `;
+  return rows[0]?.id ?? null;
 }

@@ -28,6 +28,16 @@ import {
 } from "@/lib/wexpay-menu-import";
 import { MenuImportParseError } from "@/lib/wexpay-menu-import-parse";
 import { ActivationJourneyError } from "@/lib/wexpay-activation-journey";
+import {
+  ActivationPaymentProviderError,
+  parseActivationPaymentProviderInput,
+  saveActivationPaymentProviderStep,
+} from "@/lib/wexpay-activation-payment-provider";
+import {
+  runWexPayActivationValidation,
+  type ActivationValidationReport,
+} from "@/lib/wexpay-activation-validation";
+import { goLiveWexPayActivation } from "@/lib/wexpay-activation-go-live";
 import { assertCustomerOrganizationRole } from "@/lib/wexon-customer-auth";
 import {
   buildRateLimitKey,
@@ -46,6 +56,9 @@ export type WizardActionState = {
   menuImportJob?: MenuImportJobView;
   /** Menu import: false when more chunks remain — UI should continue. */
   menuImportDone?: boolean;
+  message?: string;
+  validationReport?: ActivationValidationReport;
+  activated?: boolean;
 };
 
 function readString(formData: FormData, key: string) {
@@ -53,10 +66,28 @@ function readString(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readExpectedVersion(formData: FormData) {
+  const raw = readString(formData, "expectedVersion");
+  const value = Number(raw);
+  if (!raw || !Number.isSafeInteger(value) || value < 1) {
+    throw new ActivationJourneyError(
+      "INVALID_VERSION",
+      "Kurulum sürümü geçersiz. Sayfayı yenileyip tekrar deneyin.",
+    );
+  }
+  return value;
+}
+
+function readChecked(formData: FormData, key: string) {
+  const value = readString(formData, key).toLowerCase();
+  return value === "1" || value === "true" || value === "on";
+}
+
 function mapError(error: unknown): WizardActionState {
   if (
     error instanceof ActivationWizardError ||
     error instanceof ActivationJourneyError ||
+    error instanceof ActivationPaymentProviderError ||
     error instanceof StaffInviteError ||
     error instanceof MenuImportError ||
     error instanceof MenuImportParseError
@@ -69,6 +100,10 @@ function mapError(error: unknown): WizardActionState {
 
 async function requireWizardActor(organizationId: string) {
   return assertCustomerOrganizationRole(organizationId, ["OWNER", "ADMIN", "MANAGER"]);
+}
+
+async function requireGoLiveActor(organizationId: string) {
+  return assertCustomerOrganizationRole(organizationId, ["OWNER", "ADMIN"]);
 }
 
 export async function saveBusinessProfileAction(
@@ -399,6 +434,102 @@ export async function skipMenuImportEmptyStartAction(
     revalidatePath("/dashboard/wexpay/activation");
     revalidatePath("/dashboard");
     return { ok: true };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function saveActivationPaymentProviderAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = readExpectedVersion(formData);
+    const { user } = await requireWizardActor(organizationId);
+    const providerInput = parseActivationPaymentProviderInput(formData);
+    await saveActivationPaymentProviderStep({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+      providerInput,
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    return {
+      ok: true,
+      message:
+        providerInput.provider === "PAYTR" && process.env.WEXPAY_PAYTR_ENABLE_API !== "true"
+          ? "PayTR yapılandırması kaydedildi. Wexon ödeme servisi etkinleştirilene kadar online QR kart ödemesi kapalıdır."
+          : "Ödeme yöntemi kaydedildi.",
+    };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function runActivationValidationAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = readExpectedVersion(formData);
+    const { user } = await requireWizardActor(organizationId);
+    const result = await runWexPayActivationValidation({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    return {
+      ok: result.report.failCount === 0,
+      code: result.report.failCount === 0 ? undefined : "VALIDATION_FAILED",
+      error:
+        result.report.failCount > 0
+          ? "Bazı kontroller başarısız. Sorunları giderip doğrulamayı yeniden çalıştırın."
+          : undefined,
+      message:
+        result.report.failCount === 0
+          ? "Kontroller tamamlandı. Yayına almaya hazırsınız."
+          : undefined,
+      validationReport: result.report,
+      journeyVersion: result.journey.version,
+    };
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+export async function goLiveActivationAction(
+  _prev: WizardActionState,
+  formData: FormData,
+): Promise<WizardActionState> {
+  try {
+    const organizationId = readString(formData, "organizationId");
+    const expectedVersion = readExpectedVersion(formData);
+    const { user } = await requireGoLiveActor(organizationId);
+    const result = await goLiveWexPayActivation({
+      organizationId,
+      actorUserId: user.id,
+      expectedVersion,
+      confirmed: readChecked(formData, "confirmed"),
+      confirmationText: readString(formData, "confirmationText"),
+    });
+    revalidatePath("/dashboard/wexpay/activation");
+    revalidatePath("/dashboard");
+    return {
+      ok: result.activated,
+      activated: result.activated,
+      message: result.activated
+        ? "WexPay aktivasyonu başarıyla yayına alındı."
+        : "Son kontroller değişti. Sorunları giderip tekrar deneyin.",
+      error: result.activated
+        ? undefined
+        : "Yayına alma tamamlanamadı; doğrulama adımına geri dönüldü.",
+      code: result.activated ? undefined : "VALIDATION_REGRESSED",
+      validationReport: result.report ?? undefined,
+      journeyVersion: result.journey.version,
+    };
   } catch (error) {
     return mapError(error);
   }
