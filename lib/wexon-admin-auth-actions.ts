@@ -2,7 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
-import { adminDebug, clearAdminSessionCookie, createAdminSessionCookie, isAdminEmailAllowed } from "@/lib/wexon-admin-auth";
+import {
+  ADMIN_LOGIN_GENERIC_ERROR,
+  adminDebug,
+  clearAdminSessionCookie,
+  createAdminSessionCookie,
+  isAdminEmailAllowed,
+  securePasswordEqual,
+} from "@/lib/wexon-admin-auth";
 import { clearCustomerSessionCookie } from "@/lib/wexon-customer-auth";
 import { isWexonProductionDeployment, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath } from "@/lib/wexon-canonical-host";
 import { clearActiveOrganizationCookie } from "@/lib/wexon-organization-context";
@@ -45,16 +52,29 @@ function adminLoginPath() {
   return isWexonProductionDeployment() ? "/login" : "/admin/login";
 }
 
-function redirectLoginError(message: string, nextPath: string, details?: { email?: string; reason?: string }) {
-  adminDebug("login:error_redirect", { message, next: safeAdminNextPath(nextPath) });
+function redirectLoginError(
+  nextPath: string,
+  details: { email?: string; reason: "rate_limited" | "invalid_credentials" | "config_missing" },
+) {
+  const userMessage =
+    details.reason === "rate_limited"
+      ? "Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin."
+      : ADMIN_LOGIN_GENERIC_ERROR;
+
+  adminDebug("login:error_redirect", { reason: details.reason, next: safeAdminNextPath(nextPath) });
   writeAuditFailure({
-    action: details?.reason === "rate_limited" ? "admin.auth.rate_limited" : "admin.auth.login_failed",
-    message,
+    action:
+      details.reason === "rate_limited"
+        ? "admin.auth.rate_limited"
+        : details.reason === "config_missing"
+          ? "admin.auth.config_missing"
+          : "admin.auth.login_failed",
+    message: details.reason,
     level: "WARN",
     source: "admin_auth",
-    metadata: { email: details?.email, next: safeAdminNextPath(nextPath) },
+    metadata: { email: details?.email, next: safeAdminNextPath(nextPath), reason: details.reason },
   });
-  const params = new URLSearchParams({ adminError: message });
+  const params = new URLSearchParams({ adminError: userMessage });
   if (nextPath) {
     params.set("next", safeAdminNextPath(nextPath));
   }
@@ -71,49 +91,40 @@ export async function loginAdminAction(formData: FormData) {
 
   const ipLimit = enforceRateLimit("admin.login.ip", ipAddress, RATE_LIMITS.adminLoginIp);
   if (!ipLimit.ok) {
-    redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, {
-      email,
-      reason: "rate_limited",
-    });
+    redirectLoginError(nextPath, { email, reason: "rate_limited" });
   }
 
   if (email) {
     const emailLimit = enforceRateLimit("admin.login.email", email, RATE_LIMITS.adminLoginEmail);
     if (!emailLimit.ok) {
-      redirectLoginError("Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin.", nextPath, {
-        email,
-        reason: "rate_limited",
-      });
+      redirectLoginError(nextPath, { email, reason: "rate_limited" });
     }
   }
 
   /**
-   * PRODUCTION NOTE: Replace shared-password auth with per-admin credentials + MFA.
+   * PRODUCTION NOTE: Replace shared-password auth with per-admin credentials + MFA (PR2).
    * See `lib/wexon-admin-auth.ts`.
    */
-  const expectedPassword = process.env.ADMIN_LOGIN_PASSWORD;
-  const allowed = isAdminEmailAllowed(email);
-  const passwordValid = Boolean(expectedPassword && password === expectedPassword);
+  const expectedPassword = process.env.ADMIN_LOGIN_PASSWORD ?? "";
+  const sessionSecret = process.env.ADMIN_SESSION_SECRET ?? "";
+  const allowed = Boolean(email) && isAdminEmailAllowed(email);
+  const passwordValid = Boolean(expectedPassword) && securePasswordEqual(password, expectedPassword);
 
-  adminDebug("login:payload", { hasEmail: Boolean(email), email, next: nextPath });
-  adminDebug("login:email_allowed", { allowed, email });
+  adminDebug("login:payload", { hasEmail: Boolean(email), next: nextPath });
+  adminDebug("login:email_allowed", { allowed });
   adminDebug("login:password_valid", { valid: passwordValid });
 
   if (!email || !password) {
-    redirectLoginError("E-posta ve şifre zorunludur.", nextPath);
+    redirectLoginError(nextPath, { email, reason: "invalid_credentials" });
   }
 
-  if (!expectedPassword) {
-    redirectLoginError("ADMIN_LOGIN_PASSWORD tanımlı değil.", nextPath);
+  if (!expectedPassword || !sessionSecret) {
+    redirectLoginError(nextPath, { email, reason: "config_missing" });
   }
 
-  if (!allowed) {
-    adminDebug("login:unauthorized", { email });
-    redirectLoginError("Bu e-posta admin yetki listesinde değil.", nextPath, { email });
-  }
-
-  if (!passwordValid) {
-    redirectLoginError("E-posta veya şifre hatalı.", nextPath, { email });
+  if (!allowed || !passwordValid) {
+    adminDebug("login:unauthorized", { allowed, passwordValid });
+    redirectLoginError(nextPath, { email, reason: "invalid_credentials" });
   }
 
   await createAdminSessionCookie(email);

@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
-import { createAdminSessionCookie, isAdminEmailAllowed } from "@/lib/wexon-admin-auth";
 import { createCustomerSessionCookie } from "@/lib/wexon-customer-auth";
 import {
   buildProductionSubdomainUrl,
@@ -66,13 +65,8 @@ export async function loginUnifiedAction(formData: FormData) {
     redirectUnifiedError(undefined, { email });
   }
 
-  const adminPassword = process.env.ADMIN_LOGIN_PASSWORD;
-  if (isAdminEmailAllowed(email) && adminPassword && password === adminPassword) {
-    await createAdminSessionCookie(email);
-    redirect(
-      resolvePostLoginDestination(nextPath || "/admin", { isAdmin: true, productionWexon }),
-    );
-  }
+  // Admin sessions are never minted from unified/public login (PR1).
+  // Admins must authenticate via loginAdminAction on the admin host only.
 
   let user;
 

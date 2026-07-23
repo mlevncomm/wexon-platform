@@ -54,8 +54,10 @@ WEXPAY_PAYTR_ENABLE_API=false
 ## Admin security (production)
 
 1. `admin.wexon.dev` behind **Cloudflare Access** (allowlist real admin emails).
-2. App-level `ADMIN_LOGIN_PASSWORD` + `ADMIN_EMAILS` remains MVP; rotate to per-admin credentials + MFA before broad use.
-3. In-memory rate limiting is not sufficient for multi-instance production — use Cloudflare WAF/Access.
+2. App-level admin login (`loginAdminAction`) uses shared `ADMIN_LOGIN_PASSWORD` + `ADMIN_EMAILS` (MVP until per-admin MFA).
+3. Admin session cookies are **host-only** on `admin.wexon.dev` (no `Domain=.wexon.dev`). Public `/login` never mints admin sessions.
+4. Production `assertAdminAccess` requires the admin host/surface — www/core/app cannot run admin actions even with a forged cookie header.
+5. In-memory rate limiting is not sufficient for multi-instance production — use Cloudflare WAF/Access.
 
 Automate Access with API token env vars (never commit tokens):
 

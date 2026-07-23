@@ -1,31 +1,46 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
+  isAdminHost,
   isWexonProductionDeployment,
   normalizeHost,
+  PRODUCTION_ROOT_HOST,
   resolveHostSurface,
-  sessionCookieClearOptions,
-  sessionCookieOptions,
 } from "@/lib/wexon-canonical-host";
 
 /**
  * Admin session auth (MVP).
  *
  * PRODUCTION NOTE: A shared `ADMIN_LOGIN_PASSWORD` plus an email allowlist is
- * not sufficient for production admin access. Target architecture:
+ * not sufficient for production admin access. Target architecture (PR2):
  * - Per-admin user records with unique password hashes (argon2/bcrypt)
  * - MFA (TOTP/WebAuthn) for privileged operations
- * - Session rotation, device binding, and audit on every admin mutation
+ * - Session rotation, device binding, and Cloudflare Access identity binding
+ *
+ * PR1 hardening: host-only admin cookies, production admin-host gate, 2h TTL,
+ * timing-safe shared-password compare. Shared password remains until PR2.
  */
 
 export const ADMIN_SESSION_COOKIE = "wexon_admin_session";
-const SESSION_TTL_MS = 10 * 60 * 60 * 1000;
+/** Absolute admin session lifetime (no idle refresh in PR1). */
+export const ADMIN_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const SESSION_COOKIE_PATH = "/";
+
+export const ADMIN_LOGIN_GENERIC_ERROR = "E-posta veya şifre hatalı.";
 
 export type AdminSession = {
   email: string;
   expiresAt: number;
+};
+
+export type AdminSessionCookieOptions = {
+  httpOnly: true;
+  sameSite: "lax";
+  secure: boolean;
+  path: string;
+  expires: Date;
+  domain?: string;
 };
 
 export function adminDebug(label: string, data?: Record<string, unknown>) {
@@ -44,13 +59,56 @@ function getAdminEmails() {
 function getSessionSecret() {
   const secret = process.env.ADMIN_SESSION_SECRET;
   if (!secret) {
-    throw new Error("ADMIN_SESSION_SECRET tanımlı olmalıdır.");
+    throw new Error("Admin oturum yapılandırması eksik.");
   }
   return secret;
 }
 
 export function isAdminEmailAllowed(email: string) {
   return getAdminEmails().includes(email.trim().toLowerCase());
+}
+
+/**
+ * Timing-safe shared-password compare (temporary until PR2 per-admin hashes).
+ * Hashes both sides with SHA-256 so digest lengths always match.
+ */
+export function securePasswordEqual(provided: string, expected: string) {
+  const providedDigest = createHash("sha256").update(provided, "utf8").digest();
+  const expectedDigest = createHash("sha256").update(expected, "utf8").digest();
+  return timingSafeEqual(providedDigest, expectedDigest);
+}
+
+/** Host-only admin cookie options — never sets Domain (not shared across *.wexon.dev). */
+export function adminSessionCookieOptions(expires: Date): AdminSessionCookieOptions {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: SESSION_COOKIE_PATH,
+    expires,
+  };
+}
+
+export function adminSessionCookieClearOptions(): AdminSessionCookieOptions {
+  return adminSessionCookieOptions(new Date(0));
+}
+
+/** Legacy Domain=.wexon.dev clear options for migrating pre-PR1 cookies. */
+export function adminSessionCookieLegacyDomainClearOptions(): AdminSessionCookieOptions {
+  return {
+    ...adminSessionCookieClearOptions(),
+    domain: `.${PRODUCTION_ROOT_HOST}`,
+  };
+}
+
+/**
+ * Production admin access is bound to the admin host/surface.
+ * Local / preview (non-production Wexon deployment) keeps `/admin` on the same origin.
+ */
+export function isAdminAccessHostAllowed(host: string | null | undefined, productionWexon: boolean) {
+  if (!productionWexon) return true;
+  const normalized = normalizeHost(host);
+  return resolveHostSurface(normalized) === "admin" || isAdminHost(normalized);
 }
 
 function signSession(email: string, expiresAt: number) {
@@ -127,7 +185,7 @@ async function adminLoginRedirectPath() {
   }
 
   const headerStore = await headers();
-  const host = normalizeHost(headerStore.get("host"));
+  const host = normalizeHost(headerStore.get("host") ?? headerStore.get("x-forwarded-host"));
   if (resolveHostSurface(host) === "admin") {
     return "/login";
   }
@@ -137,6 +195,15 @@ async function adminLoginRedirectPath() {
 
 export async function assertAdminAccess() {
   adminDebug("assert:start");
+  const productionWexon = isWexonProductionDeployment();
+  const headerStore = await headers();
+  const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
+
+  if (!isAdminAccessHostAllowed(host, productionWexon)) {
+    adminDebug("assert:redirect", { to: "login", reason: "wrong_host", host: normalizeHost(host) });
+    redirect(await adminLoginRedirectPath());
+  }
+
   const session = await getAdminSession();
   if (!session) {
     const loginPath = await adminLoginRedirectPath();
@@ -149,7 +216,7 @@ export async function assertAdminAccess() {
 
 export async function createAdminSessionCookie(email: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
   const signature = signSession(normalizedEmail, expiresAt);
   const encodedEmail = encodeCookieEmail(normalizedEmail);
   const cookieStore = await cookies();
@@ -158,14 +225,24 @@ export async function createAdminSessionCookie(email: string) {
     email: normalizedEmail,
     path: SESSION_COOKIE_PATH,
     expiresAt,
-    maxAgeMs: SESSION_TTL_MS,
+    maxAgeMs: ADMIN_SESSION_TTL_MS,
+    hostOnly: true,
   });
 
-  cookieStore.set(ADMIN_SESSION_COOKIE, `${encodedEmail}.${expiresAt}.${signature}`, sessionCookieOptions(new Date(expiresAt)));
+  cookieStore.set(
+    ADMIN_SESSION_COOKIE,
+    `${encodedEmail}.${expiresAt}.${signature}`,
+    adminSessionCookieOptions(new Date(expiresAt)),
+  );
 }
 
 export async function clearAdminSessionCookie() {
   const cookieStore = await cookies();
-  adminDebug("session:cookie_clear", { path: SESSION_COOKIE_PATH });
-  cookieStore.set(ADMIN_SESSION_COOKIE, "", sessionCookieClearOptions());
+  adminDebug("session:cookie_clear", { path: SESSION_COOKIE_PATH, hostOnly: true });
+  // Clear host-only cookie (current PR1 shape).
+  cookieStore.set(ADMIN_SESSION_COOKIE, "", adminSessionCookieClearOptions());
+  // Also clear legacy Domain=.wexon.dev cookie if present from pre-PR1 sessions.
+  if (isWexonProductionDeployment()) {
+    cookieStore.set(ADMIN_SESSION_COOKIE, "", adminSessionCookieLegacyDomainClearOptions());
+  }
 }

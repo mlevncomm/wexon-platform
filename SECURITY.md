@@ -48,6 +48,8 @@ monitoring, backups, and fast incident response.
 - Production session secrets must be at least 32 characters and non-placeholder.
 - Current admin shared-password auth is MVP-only. Before broader production use,
   replace it with per-admin credentials and MFA.
+- Admin sessions are host-only on `admin.wexon.dev` (not shared via `Domain=.wexon.dev`).
+  Unified public login must not mint admin cookies.
 
 ## Rate limiting
 

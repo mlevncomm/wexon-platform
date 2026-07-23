@@ -143,6 +143,20 @@ export async function expectSessionCookieSecureFlags(page: Page, name: string) {
   return cookie!;
 }
 
+/** Admin session cookies must be host-only (no Domain attribute / empty domain). */
+export async function expectAdminSessionCookieHostOnly(page: Page) {
+  const cookie = await expectSessionCookieSecureFlags(page, "wexon_admin_session");
+  const domain = (cookie.domain || "").replace(/^\./, "");
+  const pageHost = new URL(page.url()).hostname;
+  // Playwright reports the host the cookie is bound to; host-only cookies match the page host
+  // without a leading-dot shared suffix for *.wexon.dev.
+  expect(cookie.domain?.startsWith(".") ?? false, "admin cookie must not use Domain=.wexon.dev").toBe(false);
+  if (pageHost === "localhost" || pageHost === "127.0.0.1") {
+    expect(["localhost", "127.0.0.1"]).toContain(domain || pageHost);
+  }
+  return cookie;
+}
+
 export async function fillDemoRequestForm(
   page: Page,
   input: {
