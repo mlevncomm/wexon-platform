@@ -27,6 +27,12 @@ const mandatoryPr4Tests = [
   "PR4 mandatory: PayTR TEST stays encrypted and network-disabled",
   "PR4 mandatory: admin block unblock and assisted launch reuse validation",
 ];
+const mandatoryPlatformAdminTests = [
+  "lists readiness panel and adds platform admins",
+  "deactivates and reactivates when another active admin exists",
+  "blocks deactivating the last active PlatformAdmin",
+  "smoke: nav link reaches platform admins",
+];
 
 function run(cmd, args, env = {}) {
   console.log(`[isolated-e2e] $ ${cmd} ${args.join(" ")}`);
@@ -102,6 +108,7 @@ async function runOnce(label) {
       "e2e/wexpay-pr4-full-journey.spec.ts",
       "e2e/wexpay-package-role-gates.spec.ts",
       "e2e/core-canonical-routing.spec.ts",
+      "e2e/admin-platform-admins.spec.ts",
       "--reporter=list",
     ],
     {
@@ -129,25 +136,32 @@ async function runOnce(label) {
   if (failed > 0) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
-  // Includes activation, auth/tenant, pricing, workspace, final closure, routing, and core specs.
-  const MIN_ISOLATED_PASSES = 31;
+  // Includes activation, auth/tenant, pricing, workspace, final closure, routing,
+  // core specs, and PlatformAdmin PR2A (4 scenarios).
+  const MIN_ISOLATED_PASSES = 35;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
     );
   }
-  for (const mandatoryTitle of mandatoryPr4Tests) {
+  for (const mandatoryTitle of [...mandatoryPr4Tests, ...mandatoryPlatformAdminTests]) {
     const resultLine = combined
       .split(/\r?\n/)
       .find((line) => line.includes(mandatoryTitle));
     if (!resultLine) {
       throw new Error(
-        `[isolated-e2e] ${label}: mandatory PR-4 test did not run: ${mandatoryTitle}`,
+        `[isolated-e2e] ${label}: mandatory test did not run: ${mandatoryTitle}`,
       );
     }
-    if (/\b(skipped|fixme)\b/i.test(resultLine) || /^\s*-\s/.test(resultLine)) {
+    if (/\b(skipped|todo|fixme)\b/i.test(resultLine) || /^\s*-\s/.test(resultLine)) {
       throw new Error(
-        `[isolated-e2e] ${label}: mandatory PR-4 test must not skip: ${mandatoryTitle}`,
+        `[isolated-e2e] ${label}: mandatory test must not skip: ${mandatoryTitle}`,
+      );
+    }
+    // Require a real pass marker from the list reporter (✓ / √ / "passed").
+    if (!/[✓√]|\bpassed\b/i.test(resultLine)) {
+      throw new Error(
+        `[isolated-e2e] ${label}: mandatory test did not pass: ${mandatoryTitle}`,
       );
     }
   }

@@ -15,7 +15,23 @@ CREATE TABLE "PlatformAdmin" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "PlatformAdmin_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "PlatformAdmin_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "PlatformAdmin_emailNormalized_matches_email_chk"
+      CHECK ("emailNormalized" = lower(btrim("email"))),
+    CONSTRAINT "PlatformAdmin_emailNormalized_not_empty_chk"
+      CHECK (length(btrim("emailNormalized")) > 0),
+    CONSTRAINT "PlatformAdmin_displayName_trimmed_chk"
+      CHECK ("displayName" = btrim("displayName")),
+    CONSTRAINT "PlatformAdmin_displayName_len_chk"
+      CHECK (char_length("displayName") BETWEEN 1 AND 120),
+    CONSTRAINT "PlatformAdmin_cloudflareSubject_trimmed_chk"
+      CHECK (
+        "cloudflareSubject" IS NULL
+        OR (
+          length(btrim("cloudflareSubject")) > 0
+          AND "cloudflareSubject" = btrim("cloudflareSubject")
+        )
+      )
 );
 
 CREATE UNIQUE INDEX "PlatformAdmin_emailNormalized_key" ON "PlatformAdmin"("emailNormalized");

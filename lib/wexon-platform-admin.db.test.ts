@@ -189,6 +189,82 @@ describe("PlatformAdmin foundation (db)", () => {
     );
   });
 
+  it("DB CHECK constraints reject bad PlatformAdmin inserts", async () => {
+    const id = () => `chk_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+    async function assertCheckRejected(sql: string, values: unknown[]) {
+      await assert.rejects(
+        () => prisma.$executeRawUnsafe(sql, ...values),
+        (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          // Postgres CHECK violations surface as 23514 / check_violation.
+          return /23514|check_violation|PlatformAdmin_/i.test(message);
+        },
+      );
+    }
+
+    // emailNormalized must equal lower(btrim(email))
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, NOW(), NOW())`,
+      [id(), "Admin@Example.com", "Admin@Example.com", "Bad Norm"],
+    );
+
+    // emailNormalized must not be empty
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, NOW(), NOW())`,
+      [id(), "   ", "   ", "Empty Norm"],
+    );
+
+    // displayName must equal btrim(displayName)
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, NOW(), NOW())`,
+      [id(), `padmin+trim+${suffix}@example.com`, `padmin+trim+${suffix}@example.com`, "  padded  "],
+    );
+
+    // displayName length 1–120
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, NOW(), NOW())`,
+      [id(), `padmin+len+${suffix}@example.com`, `padmin+len+${suffix}@example.com`, ""],
+    );
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, NOW(), NOW())`,
+      [id(), `padmin+long+${suffix}@example.com`, `padmin+long+${suffix}@example.com`, "x".repeat(121)],
+    );
+
+    // cloudflareSubject: empty string / whitespace / untrimmed rejected; NULL ok
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "cloudflareSubject", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())`,
+      [id(), `padmin+cf1+${suffix}@example.com`, `padmin+cf1+${suffix}@example.com`, "CF Empty", ""],
+    );
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "cloudflareSubject", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())`,
+      [id(), `padmin+cf2+${suffix}@example.com`, `padmin+cf2+${suffix}@example.com`, "CF Space", "   "],
+    );
+    await assertCheckRejected(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "cloudflareSubject", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())`,
+      [id(), `padmin+cf3+${suffix}@example.com`, `padmin+cf3+${suffix}@example.com`, "CF Pad", "  cf|padded  "],
+    );
+
+    const okId = id();
+    createdIds.push(okId);
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "PlatformAdmin" (id, email, "emailNormalized", "displayName", "isActive", "cloudflareSubject", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, true, NULL, NOW(), NOW())`,
+      okId,
+      `padmin+ok+${suffix}@example.com`,
+      `padmin+ok+${suffix}@example.com`,
+      "OK Row",
+    );
+  });
+
   it("rolls back admin mutation when audit write fails (atomicity)", async () => {
     const row = await createAdmin(`atomic+${suffix}@example.com`, "Atomic");
     const before = await prisma.platformAdmin.findUniqueOrThrow({ where: { id: row.id } });

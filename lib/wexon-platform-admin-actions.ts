@@ -3,24 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { assertAdminAccess } from "@/lib/wexon-admin-auth";
-import { AdminValidationError, readReturnTo } from "@/lib/wexon-admin-validation";
+import { readReturnTo } from "@/lib/wexon-admin-validation";
 import { prisma } from "@/lib/prisma";
 import {
+  buildPlatformAdminActionErrorQuery,
   createPlatformAdminRecord,
-  LastActivePlatformAdminError,
-  PlatformAdminDuplicateEmailError,
   runPlatformAdminMutation,
   setPlatformAdminActiveRecord,
   updatePlatformAdminDisplayNameRecord,
 } from "@/lib/wexon-platform-admin";
-
-function getActionErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof AdminValidationError) return error.message;
-  if (error instanceof LastActivePlatformAdminError) return error.message;
-  if (error instanceof PlatformAdminDuplicateEmailError) return error.message;
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
-}
 
 function throwIfRedirectError(error: unknown) {
   if (
@@ -34,10 +25,11 @@ function throwIfRedirectError(error: unknown) {
   }
 }
 
-function redirectWithError(formData: FormData, fallback: string, error: unknown, message: string) {
+function redirectWithError(formData: FormData, fallback: string, error: unknown) {
   const returnTo = readReturnTo(formData, fallback);
-  const params = new URLSearchParams({ adminError: getActionErrorMessage(error, message) });
-  redirect(`${returnTo.split("?")[0]}?${params.toString()}`);
+  // Only allowlisted domain messages; never put technical/Prisma/SQL text into the URL.
+  const params = buildPlatformAdminActionErrorQuery(error);
+  redirect(`${returnTo.split("?")[0]}?${params}`);
 }
 
 function revalidatePlatformAdminRoutes() {
@@ -63,7 +55,7 @@ export async function createPlatformAdminAction(formData: FormData) {
     redirect(returnTo.split("?")[0]);
   } catch (error) {
     throwIfRedirectError(error);
-    redirectWithError(formData, returnTo, error, "Platform yöneticisi eklenemedi.");
+    redirectWithError(formData, returnTo, error);
   }
 }
 
@@ -84,7 +76,7 @@ export async function updatePlatformAdminDisplayNameAction(adminId: string, form
     redirect(returnTo.split("?")[0]);
   } catch (error) {
     throwIfRedirectError(error);
-    redirectWithError(formData, returnTo, error, "Görünen ad güncellenemedi.");
+    redirectWithError(formData, returnTo, error);
   }
 }
 
@@ -105,6 +97,6 @@ export async function setPlatformAdminActiveAction(adminId: string, formData: Fo
     redirect(returnTo.split("?")[0]);
   } catch (error) {
     throwIfRedirectError(error);
-    redirectWithError(formData, returnTo, error, "Platform yöneticisi durumu güncellenemedi.");
+    redirectWithError(formData, returnTo, error);
   }
 }

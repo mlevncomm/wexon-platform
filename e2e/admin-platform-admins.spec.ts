@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { adminEmailFromEnv, adminPassword, e2eTimestamp, loadFixtures, loginAdmin } from "./helpers";
 
+/**
+ * PlatformAdmin PR2A — required scenarios for isolated CI (must not skip/fake-green).
+ * Titles are gated by scripts/run-wexpay-isolated-e2e.mjs.
+ */
 test.describe.serial("admin platform admins (PR2A)", () => {
   const fixtures = loadFixtures();
   const password = adminPassword();
@@ -8,12 +12,19 @@ test.describe.serial("admin platform admins (PR2A)", () => {
   const emailA = `e2e.padmin.a+${stamp}@example.com`;
   const emailB = `e2e.padmin.b+${stamp}@example.com`;
 
-  test("lists readiness panel and adds platform admins", async ({ page }) => {
-    test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
+  function requireAdminCreds() {
+    // Fail-closed in isolated CI: never skip into a fake-green suite.
+    expect(fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable").toBe(true);
     const email = adminEmailFromEnv(fixtures);
-    test.skip(!email || !password, "admin credentials required");
+    expect(email, "admin email required (E2E_ADMIN_EMAIL / fixtures)").toBeTruthy();
+    expect(password, "admin password required (E2E_ADMIN_PASSWORD)").toBeTruthy();
+    return email!;
+  }
 
-    await loginAdmin(page, email!, password);
+  test("lists readiness panel and adds platform admins", async ({ page }) => {
+    const email = requireAdminCreds();
+
+    await loginAdmin(page, email, password);
     await page.goto("/admin/platform-admins");
     await expect(page).toHaveURL(/\/admin\/platform-admins/);
     await expect(page.locator("body")).toContainText(/PlatformAdmin yönetimi/i);
@@ -37,11 +48,9 @@ test.describe.serial("admin platform admins (PR2A)", () => {
   });
 
   test("deactivates and reactivates when another active admin exists", async ({ page }) => {
-    test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
-    const email = adminEmailFromEnv(fixtures);
-    test.skip(!email || !password, "admin credentials required");
+    const email = requireAdminCreds();
 
-    await loginAdmin(page, email!, password);
+    await loginAdmin(page, email, password);
     await page.goto("/admin/platform-admins");
 
     const rowA = page.locator("tr").filter({ hasText: emailA }).first();
@@ -55,11 +64,9 @@ test.describe.serial("admin platform admins (PR2A)", () => {
   });
 
   test("blocks deactivating the last active PlatformAdmin", async ({ page }) => {
-    test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
-    const email = adminEmailFromEnv(fixtures);
-    test.skip(!email || !password, "admin credentials required");
+    const email = requireAdminCreds();
 
-    await loginAdmin(page, email!, password);
+    await loginAdmin(page, email, password);
     await page.goto("/admin/platform-admins");
 
     // Deactivate B first so only A (among the e2e pair) remains active among our rows;
@@ -88,11 +95,9 @@ test.describe.serial("admin platform admins (PR2A)", () => {
   });
 
   test("smoke: nav link reaches platform admins", async ({ page }) => {
-    test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
-    const email = adminEmailFromEnv(fixtures);
-    test.skip(!email || !password, "admin credentials required");
+    const email = requireAdminCreds();
 
-    await loginAdmin(page, email!, password);
+    await loginAdmin(page, email, password);
     await page.goto("/admin");
     const nav = page.getByRole("link", { name: /Platform Yöneticileri/i }).first();
     await expect(nav).toBeVisible();
