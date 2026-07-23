@@ -43,6 +43,7 @@ const files = [
   "lib/wexpay-activation-wizard.db.test.ts",
   "lib/wexpay-activation-pr4.db.test.ts",
   "lib/wexpay-menu-import.db.test.ts",
+  "lib/wexon-platform-admin.db.test.ts",
 ];
 
 const credentialEncryptionKey = randomBytes(32).toString("hex");

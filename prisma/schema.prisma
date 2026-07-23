@@ -276,6 +276,22 @@ model User {
   @@index([isActive])
 }
 
+/// Platform operators (Wexon Admin). Separate from tenant User/Membership — no role system.
+/// Cloudflare Access subject binding lands in PR2B; shared password remains transitional in PR2A.
+model PlatformAdmin {
+  id                 String    @id @default(cuid())
+  email              String
+  emailNormalized    String    @unique
+  displayName        String
+  isActive           Boolean   @default(true)
+  cloudflareSubject  String?   @unique
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([isActive])
+}
+
 model Membership {
   id             String           @id @default(cuid())
   organizationId String

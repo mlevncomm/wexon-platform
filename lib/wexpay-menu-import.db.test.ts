@@ -620,7 +620,7 @@ describe("menu import security (db)", () => {
     );
   });
 
-  it("public schema has 40 tables and MenuImport RLS enabled", async () => {
+  it("public schema has 41 tables and MenuImport RLS enabled", async () => {
     const tables = await prisma.$queryRaw<Array<{ table_name: string; rls: boolean }>>`
       SELECT c.relname AS table_name, c.relrowsecurity AS rls
       FROM pg_class c
@@ -629,7 +629,7 @@ describe("menu import security (db)", () => {
       ORDER BY c.relname
     `;
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 40);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 41);
     for (const name of ["MenuImportJob", "MenuImportRowError"]) {
       const row = tables.find((t) => t.table_name === name);
       assert.ok(row, `${name} must exist`);

@@ -14,6 +14,7 @@ import {
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_SMART_ACTIVATION,
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_STAFF_INVITE,
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_MENU_IMPORT,
+  HISTORICAL_PUBLIC_TABLE_COUNT_PRE_PLATFORM_ADMIN,
   parsePostgresMajorVersion,
   RECOVERY_STATUS,
   sanitizeBackupLog,
@@ -29,22 +30,35 @@ describe("parsePostgresMajorVersion", () => {
 });
 
 describe("current schema table count", () => {
-  it("expects 40 public tables after Menu Import (MenuImportJob + RowError)", () => {
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 40);
+  it("expects 41 public tables after PlatformAdmin (PR2A)", () => {
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 41);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER, 33);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_SMART_ACTIVATION, 34);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_STAFF_INVITE, 37);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_MENU_IMPORT, 38);
-    assert.equal(assertCurrentSchemaPublicTableCount(40).ok, true);
+    assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_PLATFORM_ADMIN, 40);
+    assert.equal(assertCurrentSchemaPublicTableCount(41).ok, true);
+    assert.equal(assertCurrentSchemaPublicTableCount(40).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(38).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(37).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(34).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(33).ok, false);
   });
 
-  it("accepts a current 40-table manifest contract", () => {
+  it("accepts a current 41-table manifest contract", () => {
     const rowCounts = Object.fromEntries(
-      Array.from({ length: 40 }, (_, i) => [`T${i}`, i]),
+      Array.from({ length: 41 }, (_, i) => [`T${i}`, i]),
+    );
+    const ok = evaluateRestoreTableCountContract({
+      restoredTableCount: 41,
+      manifest: { tableCount: 41, rowCounts },
+    });
+    assert.equal(ok.ok, true);
+  });
+
+  it("accepts a historical 40-table (pre-platform-admin) manifest", () => {
+    const rowCounts = Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [`P${i}`, i]),
     );
     const ok = evaluateRestoreTableCountContract({
       restoredTableCount: 40,
@@ -97,12 +111,12 @@ describe("current schema table count", () => {
     assert.equal(ok.ok, true);
   });
 
-  it("rejects manifest 33 vs restore 40", () => {
+  it("rejects manifest 33 vs restore 41", () => {
     const rowCounts = Object.fromEntries(
       Array.from({ length: 33 }, (_, i) => [`H${i}`, i]),
     );
     const bad = evaluateRestoreTableCountContract({
-      restoredTableCount: 40,
+      restoredTableCount: 41,
       manifest: { tableCount: 33, rowCounts },
     });
     assert.equal(bad.ok, false);

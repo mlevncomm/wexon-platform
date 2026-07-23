@@ -5,6 +5,7 @@ const ADMIN_ROUTES = [
   "",
   "organizations",
   "users",
+  "platform-admins",
   "applications",
   "support",
   "licenses",
