@@ -55,8 +55,8 @@ function isTerminalPaymentStatus(status: PaymentStatus) {
   return status === PaymentStatus.PAID || status === PaymentStatus.REFUNDED;
 }
 
-export default async function WexPayPaymentsPage({ params, searchParams }: { params: Promise<{ organizationId: string }>; searchParams: SearchParams  }) {
-  const { organizationId } = await params;
+export default async function WexPayPaymentsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams  }) {
+  const { id: organizationId } = await params;
   const basePath = wexpayAdminPreviewBasePath(organizationId);
   const context = await resolveWexPaySessionContext({ organizationId });
   if (!context.ok) return null;

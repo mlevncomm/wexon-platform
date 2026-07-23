@@ -16,10 +16,10 @@ export default async function AdminWexPayPreviewLayout({
   params,
 }: {
   children: ReactNode;
-  params: Promise<{ organizationId: string }>;
+  params: Promise<{ id: string }>;
 }) {
   await assertAdminAccess();
-  const { organizationId } = await params;
+  const { id: organizationId } = await params;
   const access = await getWexPayAdminPreviewAccess(organizationId);
 
   if (!access.allowed) {

@@ -19,8 +19,8 @@ import { wexpayAdminPreviewBasePath } from "@/lib/wexon-admin-preview-path";
 
 type SearchParams = Promise<{ wexpayError?: string; branchId?: string }>;
 
-export default async function WexPayOrdersPage({ params, searchParams }: { params: Promise<{ organizationId: string }>; searchParams: SearchParams  }) {
-  const { organizationId } = await params;
+export default async function WexPayOrdersPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams  }) {
+  const { id: organizationId } = await params;
   const basePath = wexpayAdminPreviewBasePath(organizationId);
   const context = await resolveWexPaySessionContext({ organizationId });
   if (!context.ok) return null;

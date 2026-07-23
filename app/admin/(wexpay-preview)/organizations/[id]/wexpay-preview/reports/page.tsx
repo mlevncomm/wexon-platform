@@ -14,8 +14,8 @@ import Link from "next/link";
 
 type SearchParams = Promise<{ branchId?: string }>;
 
-export default async function WexPayReportsPage({ params, searchParams }: { params: Promise<{ organizationId: string }>; searchParams: SearchParams  }) {
-  const { organizationId } = await params;
+export default async function WexPayReportsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams  }) {
+  const { id: organizationId } = await params;
   const basePath = wexpayAdminPreviewBasePath(organizationId);
   const access = await getWexPayAdminPreviewAccess(organizationId);
   if (!access.allowed) return null;

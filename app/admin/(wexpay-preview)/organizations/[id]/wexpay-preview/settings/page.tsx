@@ -14,8 +14,8 @@ import { dashboardPreviewHref } from "@/lib/wexon-organization-context";
 
 type SearchParams = Promise<{ wexpayError?: string; wexpayTest?: string; wexpayTestMsg?: string; wexpayTestDetails?: string }>;
 
-export default async function WexPaySettingsPage({ params, searchParams }: { params: Promise<{ organizationId: string }>; searchParams: SearchParams  }) {
-  const { organizationId } = await params;
+export default async function WexPaySettingsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams  }) {
+  const { id: organizationId } = await params;
   const basePath = wexpayAdminPreviewBasePath(organizationId);
   const SETTINGS_PATH = `${basePath}/settings`;
   const access = await getWexPayAdminPreviewAccess(organizationId);
