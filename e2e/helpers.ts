@@ -157,6 +157,21 @@ export async function expectAdminSessionCookieHostOnly(page: Page) {
   return cookie;
 }
 
+/** Seed necessary-only cookie consent so the marketing banner does not block E2E clicks. */
+export async function seedCookieConsentRejected(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "wexon_cookie_consent",
+      JSON.stringify({
+        necessary: true,
+        analytics: false,
+        marketing: false,
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+  });
+}
+
 export async function fillDemoRequestForm(
   page: Page,
   input: {

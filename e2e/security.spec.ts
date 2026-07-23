@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { customerPassword, loadFixtures, loginCustomer } from "./helpers";
+import { customerPassword, loadFixtures, loginCustomer, seedCookieConsentRejected } from "./helpers";
 
 test.describe.serial("security journey", () => {
   const fixtures = loadFixtures();
@@ -15,6 +15,7 @@ test.describe.serial("security journey", () => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     test.skip(!fixtures.fixturesReady || !fixtures.customerOrgId, fixtures.setupError ?? "customer fixture required");
 
+    await seedCookieConsentRejected(page);
     await loginCustomer(page, fixtures.customerEmail, customerPassword());
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/(admin\/login|login|unauthorized)/);
@@ -24,6 +25,7 @@ test.describe.serial("security journey", () => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     test.skip(!fixtures.customerOrgId, "customer org fixture required");
 
+    await seedCookieConsentRejected(page);
     await loginCustomer(page, fixtures.customerEmail, customerPassword());
     await page.goto("/dashboard?organizationId=00000000-0000-0000-0000-000000000088");
     await expect(page).toHaveURL(/\/unauthorized/);
@@ -41,12 +43,14 @@ test.describe.serial("security journey", () => {
     test.skip(!fixtures.customerOrgId, "customer org fixture required");
 
     // Real password path must work independently of optional dev fallback.
+    await seedCookieConsentRejected(page);
     await loginCustomer(page, fixtures.customerEmail, customerPassword());
     await page.goto(`/dashboard?organizationId=${fixtures.customerOrgId}`);
     await expect(page).toHaveURL(new RegExp(`organizationId=${fixtures.customerOrgId}`));
   });
 
   test("unknown demo credential login fails", async ({ page }) => {
+    await seedCookieConsentRejected(page);
     await page.goto("/login");
     await page.locator('input[name="email"]').fill("demo-shutdown@example.invalid");
     await page.locator('input[name="password"]').fill("Definitely-Not-A-Real-Password-999");

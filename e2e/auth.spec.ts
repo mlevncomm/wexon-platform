@@ -10,6 +10,7 @@ import {
   loginAdmin,
   loginCustomer,
   loginUnified,
+  seedCookieConsentRejected,
 } from "./helpers";
 
 test.describe.serial("auth journey", () => {
@@ -17,6 +18,7 @@ test.describe.serial("auth journey", () => {
   const password = adminPassword();
 
   test("unified login shows validation for empty submit", async ({ page }) => {
+    await seedCookieConsentRejected(page);
     await page.goto("/login");
     await page.locator('button[type="submit"]').click();
     await expect(page.locator('input[name="email"]:invalid')).toBeVisible();
@@ -26,6 +28,7 @@ test.describe.serial("auth journey", () => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     test.skip(!fixtures.fixturesReady || !fixtures.customerOrgId, fixtures.setupError ?? "customer fixture required");
 
+    await seedCookieConsentRejected(page);
     await loginUnified(page, fixtures.customerEmail, "Definitely-Wrong-Password-999");
     await expect(page).toHaveURL(/\/(login|dashboard\/login)/);
     await expect(page.getByText(/hatalı|geçersiz|yanlış|şifre|credentials|unauthorized/i).first()).toBeVisible({
@@ -37,6 +40,7 @@ test.describe.serial("auth journey", () => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     test.skip(!fixtures.fixturesReady || !fixtures.customerOrgId, fixtures.setupError ?? "customer org fixture required");
 
+    await seedCookieConsentRejected(page);
     await loginCustomer(page, fixtures.customerEmail, customerPassword());
     await page.goto(`/dashboard?organizationId=${fixtures.customerOrgId}`);
     await expect(page).toHaveURL(new RegExp(`organizationId=${fixtures.customerOrgId}`));
@@ -48,6 +52,7 @@ test.describe.serial("auth journey", () => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     test.skip(!fixtures.customerOrgId, "customer org fixture required");
 
+    await seedCookieConsentRejected(page);
     const next = `/dashboard?organizationId=${fixtures.customerOrgId}`;
     await loginUnified(page, fixtures.customerEmail, customerPassword(), next);
     await expect(page).toHaveURL(new RegExp(`organizationId=${fixtures.customerOrgId}`));
@@ -74,6 +79,7 @@ test.describe.serial("auth journey", () => {
     const email = adminEmailFromEnv(fixtures);
     test.skip(!email || !password, "ADMIN_EMAILS and ADMIN_LOGIN_PASSWORD required");
 
+    await seedCookieConsentRejected(page);
     await loginUnified(page, email!, password);
     await expect(page).toHaveURL(/\/(login|dashboard\/login)/);
     const cookies = await page.context().cookies();
@@ -108,11 +114,14 @@ test.describe.serial("auth journey", () => {
   });
 
   test("cookie consent banner is hidden on admin routes", async ({ page }) => {
+    // Intentionally do NOT seed consent — admin surfaces must hide the banner even without consent.
     await page.goto("/admin/login");
+    await page.waitForLoadState("networkidle");
     await expect(page.getByText("Çerez tercihleri")).toHaveCount(0);
   });
 
   test("signup page renders and validation blocks empty submit", async ({ page }) => {
+    await seedCookieConsentRejected(page);
     await page.goto("/signup");
     await expect(page.getByRole("heading", { name: /Kayıt ol/i })).toBeVisible();
     await page.getByRole("button", { name: /Hesap oluştur/i }).click();
