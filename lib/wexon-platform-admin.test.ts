@@ -257,9 +257,10 @@ describe("status decisions / readiness", () => {
   it("readiness recommends at least two active admins and keeps Cloudflare note safe", () => {
     const low = evaluatePlatformAdminReadiness(1);
     assert.equal(low.recommendAtLeastTwo, true);
-    assert.equal(low.cloudflareIdentity, "PR2B'de bağlanacak");
-    assert.equal(low.sharedPasswordTransitional, true);
-    assert.match(low.message, /paylaşılan admin şifresi/i);
+    assert.equal(low.cloudflareIdentity, "Aktif (JWT + subject)");
+    assert.equal(low.sharedPasswordTransitional, false);
+    assert.match(low.message, /Cloudflare Access JWT/i);
+    assert.doesNotMatch(low.message, /paylaşılan admin şifresi geçiş/i);
 
     const ok = evaluatePlatformAdminReadiness(2);
     assert.equal(ok.recommendAtLeastTwo, false);

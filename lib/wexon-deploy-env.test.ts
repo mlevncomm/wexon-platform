@@ -15,6 +15,8 @@ function baseEnv(overrides: Record<string, string | undefined> = {}) {
     ADMIN_EMAILS: "admin@wexon.dev",
     ADMIN_LOGIN_PASSWORD: "strong-admin-password",
     ADMIN_SESSION_SECRET: "adm1n-Sess1on-Secret-Value-9f3a2c71e8b4",
+    CLOUDFLARE_ACCESS_TEAM_DOMAIN: "mute-snow-d07a.cloudflareaccess.com",
+    CLOUDFLARE_ACCESS_AUD: "wexon-admin-access-audience-9f3a2c71",
     CUSTOMER_SESSION_SECRET: "cust0mer-Sess1on-Secret-Value-7d2e9a14c6",
     API_KEY_HASH_SECRET: "ap1-Key-Hash-Secret-Value-4b8c1e9063d2",
     NEXT_PUBLIC_APP_URL: "https://www.wexon.dev",
@@ -91,6 +93,52 @@ describe("deploy environment validation", () => {
       }),
     );
     assert.equal(report.ok, true);
+  });
+
+  it("requires Cloudflare Access team domain + audience", () => {
+    const report = validateDeployEnvironment(
+      baseEnv({ CLOUDFLARE_ACCESS_TEAM_DOMAIN: undefined, CLOUDFLARE_ACCESS_AUD: undefined }),
+    );
+    assert.equal(report.ok, false);
+    assert.ok(report.missing.includes("CLOUDFLARE_ACCESS_TEAM_DOMAIN"));
+    assert.ok(report.missing.includes("CLOUDFLARE_ACCESS_AUD"));
+  });
+
+  it("forbids CF Access test mode envs in production-like env", () => {
+    for (const name of [
+      "WEXON_CF_ACCESS_TEST_MODE",
+      "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+      "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
+    ] as const) {
+      const report = validateDeployEnvironment(baseEnv({ [name]: "1" }));
+      assert.equal(report.ok, false, name);
+      assert.ok(
+        report.issues.some((i) => i.code === "forbidden_env" && i.message.includes(name)),
+        name,
+      );
+    }
+  });
+
+  it("forbids CF Access test mode envs in preview env", () => {
+    for (const name of [
+      "WEXON_CF_ACCESS_TEST_MODE",
+      "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+      "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
+    ] as const) {
+      const report = validateDeployEnvironment(
+        baseEnv({
+          NODE_ENV: "development",
+          VERCEL_ENV: "preview",
+          NEXT_PUBLIC_APP_URL: "https://preview.example.com",
+          [name]: name === "WEXON_CF_ACCESS_TEST_MODE" ? "1" : '{"keys":[]}',
+        }),
+      );
+      assert.equal(report.ok, false, name);
+      assert.ok(
+        report.issues.some((i) => i.code === "forbidden_env" && i.message.includes(name)),
+        name,
+      );
+    }
   });
 
   it("masks secrets in messages", () => {

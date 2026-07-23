@@ -33,6 +33,14 @@ const mandatoryPlatformAdminTests = [
   "blocks deactivating the last active PlatformAdmin",
   "smoke: nav link reaches platform admins",
 ];
+const mandatoryAdminIdentityTests = [
+  "PR2B: CF JWT + active PlatformAdmin reaches dashboard",
+  "PR2B: password fields absent and stale password POST does not mint session",
+  "PR2B: missing JWT denies admin continue",
+  "PR2B: logout clears v3 session cookie",
+  "PR2B: v3 cookie without JWT is denied",
+  "PR2B: admin root redirect keeps PR48 default",
+];
 
 function run(cmd, args, env = {}) {
   console.log(`[isolated-e2e] $ ${cmd} ${args.join(" ")}`);
@@ -47,13 +55,27 @@ function run(cmd, args, env = {}) {
   }
 }
 
+function loadCfAccessTestEnv() {
+  const result = spawnSync(process.execPath, ["scripts/ensure-cf-access-test-keys.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(result.stderr || result.stdout || "failed to mint CF Access test keys");
+  }
+  return JSON.parse(result.stdout);
+}
+
 function isolatedEnv() {
   applyIsolatedE2eEnv();
   const url = isolatedE2eConnectionUrl();
   const adminPassword = randomBytes(24).toString("base64url");
+  const cfEnv = loadCfAccessTestEnv();
   return {
     DATABASE_URL: url,
     DIRECT_URL: url,
+    // Required by seed-platform-admin-e2e + shared local DB test guard.
+    WEXON_ALLOW_LOCAL_DB_TESTS: "1",
     WEXON_E2E_TARGET: "isolated",
     WEXON_E2E_CONFIRM_ISOLATED: "true",
     E2E_BASE_URL: `http://localhost:${port}`,
@@ -69,6 +91,7 @@ function isolatedEnv() {
     WEXON_EMAIL_PROVIDER: "fake",
     ADMIN_EMAILS: "pr4-isolated-admin@example.test",
     E2E_ADMIN_EMAIL: "pr4-isolated-admin@example.test",
+    // Rollback-only leftovers — must not authorize after PR2B.
     ADMIN_LOGIN_PASSWORD: adminPassword,
     E2E_ADMIN_PASSWORD: adminPassword,
     ADMIN_SESSION_SECRET: randomBytes(32).toString("base64url"),
@@ -76,6 +99,7 @@ function isolatedEnv() {
     API_KEY_HASH_SECRET: randomBytes(32).toString("base64url"),
     NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
     NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN: `http://localhost:${port}`,
+    ...cfEnv,
   };
 }
 
@@ -109,6 +133,7 @@ async function runOnce(label) {
       "e2e/wexpay-package-role-gates.spec.ts",
       "e2e/core-canonical-routing.spec.ts",
       "e2e/admin-platform-admins.spec.ts",
+      "e2e/admin-cloudflare-identity.spec.ts",
       "--reporter=list",
     ],
     {
@@ -137,14 +162,18 @@ async function runOnce(label) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
   // Includes activation, auth/tenant, pricing, workspace, final closure, routing,
-  // core specs, and PlatformAdmin PR2A (4 scenarios).
-  const MIN_ISOLATED_PASSES = 35;
+  // PlatformAdmin management, and PR2B Cloudflare identity specs.
+  const MIN_ISOLATED_PASSES = 41;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
     );
   }
-  for (const mandatoryTitle of [...mandatoryPr4Tests, ...mandatoryPlatformAdminTests]) {
+  for (const mandatoryTitle of [
+    ...mandatoryPr4Tests,
+    ...mandatoryPlatformAdminTests,
+    ...mandatoryAdminIdentityTests,
+  ]) {
     const resultLine = combined
       .split(/\r?\n/)
       .find((line) => line.includes(mandatoryTitle));

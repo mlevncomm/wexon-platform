@@ -8,15 +8,18 @@ import { PRODUCTION_FORBIDDEN_ENVS } from "@/lib/wexon-production-guards";
 export const DEPLOY_REQUIRED_ENVS = [
   "DATABASE_URL",
   "DIRECT_URL",
-  "ADMIN_EMAILS",
-  "ADMIN_LOGIN_PASSWORD",
   "ADMIN_SESSION_SECRET",
+  "CLOUDFLARE_ACCESS_TEAM_DOMAIN",
+  "CLOUDFLARE_ACCESS_AUD",
   "CUSTOMER_SESSION_SECRET",
   "API_KEY_HASH_SECRET",
   "NEXT_PUBLIC_APP_URL",
   "MAINTENANCE_MODE",
   "WEXPAY_PAYTR_ENABLE_API",
 ] as const;
+
+/** Kept on Vercel for emergency rollback only — not used for production authorization after PR2B. */
+export const DEPLOY_ADMIN_ROLLBACK_ENVS = ["ADMIN_EMAILS", "ADMIN_LOGIN_PASSWORD"] as const;
 
 export const DEPLOY_PSP_OPTIONAL_ENVS = ["WEXPAY_CREDENTIAL_ENCRYPTION_KEY"] as const;
 
@@ -221,6 +224,18 @@ export function isProductionLikeEnv(env: EnvMap) {
   return env.NODE_ENV === "production" || env.VERCEL_ENV === "production";
 }
 
+/** Hosted Vercel preview — must not accept CF Access test JWT/JWKS opt-ins. */
+export function isPreviewDeployEnv(env: EnvMap) {
+  return (env.VERCEL_ENV ?? "").trim().toLowerCase() === "preview";
+}
+
+/** CF Access test material — forbidden on production and preview deployments. */
+export const CF_ACCESS_TEST_FORBIDDEN_ENVS = [
+  "WEXON_CF_ACCESS_TEST_MODE",
+  "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+  "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
+] as const;
+
 export type ValidateDeployEnvironmentOptions = {
   strictPsp?: boolean;
   /** Force https + non-localhost APP_URL even when not production-like */
@@ -250,7 +265,24 @@ export function validateDeployEnvironment(
   }
 
   const passwordIssue = validatePasswordValue("ADMIN_LOGIN_PASSWORD", trim(env, "ADMIN_LOGIN_PASSWORD"));
-  if (passwordIssue) issues.push(passwordIssue);
+  if (passwordIssue && isSet(env, "ADMIN_LOGIN_PASSWORD")) issues.push(passwordIssue);
+
+  for (const name of ["CLOUDFLARE_ACCESS_TEAM_DOMAIN", "CLOUDFLARE_ACCESS_AUD"] as const) {
+    if (isSet(env, name) && isPlaceholderSecret(trim(env, name))) {
+      issues.push({
+        code: "cf_access_placeholder",
+        message: `${name} still looks like a placeholder.`,
+      });
+    }
+  }
+
+  const teamDomain = trim(env, "CLOUDFLARE_ACCESS_TEAM_DOMAIN").replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  if (teamDomain && (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(teamDomain) || teamDomain.includes(".."))) {
+    issues.push({
+      code: "cf_access_team_domain_invalid",
+      message: "CLOUDFLARE_ACCESS_TEAM_DOMAIN must be a canonical hostname (no scheme/path).",
+    });
+  }
 
   for (const name of ["MAINTENANCE_MODE", "WEXPAY_PAYTR_ENABLE_API"] as const) {
     const issue = validateBooleanFlagValue(name, trim(env, name));
@@ -274,6 +306,15 @@ export function validateDeployEnvironment(
         issues.push({
           code: "forbidden_env",
           message: `${name} must be unset in production.`,
+        });
+      }
+    }
+  } else if (isPreviewDeployEnv(env)) {
+    for (const name of CF_ACCESS_TEST_FORBIDDEN_ENVS) {
+      if (isSet(env, name)) {
+        issues.push({
+          code: "forbidden_env",
+          message: `${name} must be unset in preview.`,
         });
       }
     }

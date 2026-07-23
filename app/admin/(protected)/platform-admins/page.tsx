@@ -58,7 +58,7 @@ export default async function AdminPlatformAdminsPage({
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 sm:rounded-[32px] sm:p-6">
         <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Hazırlık paneli</p>
-        <h3 className="mt-1 text-xl font-black text-slate-950">PR2A hazırlık durumu</h3>
+        <h3 className="mt-1 text-xl font-black text-slate-950">PR2B kimlik durumu</h3>
         <p className="mt-2 text-sm font-semibold text-slate-500">{readiness.message}</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <AdminSummaryCard label="Aktif PlatformAdmin" value={readiness.activeCount} />
@@ -69,8 +69,8 @@ export default async function AdminPlatformAdminsPage({
           <AdminSummaryCard label="Cloudflare kimliği" value={readiness.cloudflareIdentity} />
         </div>
         <ul className="mt-5 space-y-2 text-sm font-semibold text-slate-600">
-          <li>Paylaşılan admin şifresi geçiş sürecinde hâlâ kullanılmaktadır (PR2A).</li>
-          <li>Cloudflare Access JWT doğrulama ve subject bağlama PR2B&apos;de yapılacaktır.</li>
+          <li>Her istekte Cloudflare Access JWT doğrulanır; oturum çerezi tek başına yetmez.</li>
+          <li>İlk girişte Cloudflare subject, eşleşen aktif PlatformAdmin kaydına bağlanır.</li>
           <li>Bu ekranda secret, JWT veya ortam değişkeni değeri gösterilmez.</li>
         </ul>
       </section>
@@ -82,7 +82,7 @@ export default async function AdminPlatformAdminsPage({
 
       <AdminFormPanel
         title="Yeni platform yöneticisi"
-        description="E-posta trim+lowercase ile tekilleştirilir. Cloudflare subject PR2B'de bağlanır."
+        description="E-posta trim+lowercase ile tekilleştirilir. Cloudflare subject ilk başarılı girişte bağlanır."
       >
         <form action={createPlatformAdminAction} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="returnTo" value="/admin/platform-admins" />

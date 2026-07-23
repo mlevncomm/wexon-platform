@@ -54,9 +54,14 @@ WEXPAY_PAYTR_ENABLE_API=false
 ## Admin security (production)
 
 1. `admin.wexon.dev` behind **Cloudflare Access** (allowlist real admin emails).
-2. App-level admin login (`loginAdminAction`) uses shared `ADMIN_LOGIN_PASSWORD` + `ADMIN_EMAILS` (MVP until per-admin MFA).
-3. Active admin session cookie is **`wexon_admin_session_v2`** (host-only, no `Domain`). Legacy `wexon_admin_session` is not accepted by proxy/auth. Expect a **one-time re-login** after deploy.
-4. Public `/login` never mints admin sessions. Production `loginAdminAction` host-gates before password/rate-limit checks and redirects wrong hosts to `https://admin.wexon.dev/login`.
+2. App-level admin continue-login verifies Cloudflare Access JWT + ACTIVE `PlatformAdmin`
+   (shared `ADMIN_LOGIN_PASSWORD` / `ADMIN_EMAILS` are not authorization sources after PR2B).
+3. Active admin session cookie is **`wexon_admin_session_v3`** (host-only, no `Domain`).
+   Prior `wexon_admin_session_v2` and legacy `wexon_admin_session` are not accepted by
+   proxy/auth. Expect a **one-time re-login** after deploy.
+4. Public `/login` never mints admin sessions. Production continue-login host-gates before
+   identity work and redirects wrong hosts to `https://admin.wexon.dev/login`.
+   Cookie alone is insufficient in production — JWT must be present and verified.
 5. Production `assertAdminAccess` requires the admin host/surface — www/core/app cannot run admin actions even with a forged cookie header.
 6. In-memory rate limiting is not sufficient for multi-instance production — use Cloudflare WAF/Access.
 

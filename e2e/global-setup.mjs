@@ -176,11 +176,37 @@ export default async function globalSetup() {
       ? (realUser?.email ?? (realOrg ? "real@wexon.dev" : "demo@wexon.dev"))
       : "real@wexon.dev";
     const licensedOrgId = fixturesReady ? (realOrg?.id ?? customerOrgId) : null;
+    const adminEmail =
+      process.env.E2E_ADMIN_EMAIL?.trim() ||
+      (process.env.ADMIN_EMAILS ?? "").split(",")[0]?.trim() ||
+      null;
+
+    // Ensure ACTIVE PlatformAdmin for CF Access E2E continue-login (local/CI only).
+    if (adminEmail && process.env.VERCEL_ENV !== "production") {
+      const emailNormalized = adminEmail.trim().toLowerCase();
+      const existing = await prisma.platformAdmin.findUnique({ where: { emailNormalized } });
+      if (!existing) {
+        await prisma.platformAdmin.create({
+          data: {
+            email: adminEmail,
+            emailNormalized,
+            displayName: "E2E Platform Admin",
+            isActive: true,
+          },
+        });
+      } else if (!existing.isActive) {
+        await prisma.platformAdmin.update({
+          where: { id: existing.id },
+          data: { isActive: true },
+        });
+      }
+    }
+
     const fixtures = {
       dbAvailable: true,
       fixturesReady,
       setupError: fixturesReady ? null : `Seed incomplete — run npm run prisma:seed:real (${missing.join(", ")})`,
-      adminEmail: (process.env.ADMIN_EMAILS ?? "").split(",")[0]?.trim() || null,
+      adminEmail,
       customerEmail,
       customerOrgId,
       licensedCustomerEmail: "real@wexon.dev",

@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { parse as parseEnv } from "dotenv";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -28,6 +29,11 @@ function loadEnvFile(fileName: string, { override = false } = {}) {
     "ADMIN_LOGIN_PASSWORD",
     "E2E_ADMIN_PASSWORD",
     "ADMIN_SESSION_SECRET",
+    "CLOUDFLARE_ACCESS_TEAM_DOMAIN",
+    "CLOUDFLARE_ACCESS_AUD",
+    "WEXON_CF_ACCESS_TEST_MODE",
+    "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+    "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
   ]);
   for (const [key, value] of Object.entries(entries)) {
     if (isolatedPinned && isolatedPinnedKeys.has(key)) {
@@ -57,6 +63,17 @@ if (looksProduction && !(e2eTarget === "production" && productionConfirmed)) {
   throw new Error(
     "E2E production target blocked. Set WEXON_E2E_TARGET=production and WEXON_E2E_CONFIRM_PRODUCTION=true, or use a local/preview base URL.",
   );
+}
+
+/** Local/CI only — inject CF Access test JWKS + mint material for Playwright + next start. */
+if (!looksProduction && process.env.VERCEL_ENV !== "production") {
+  if (process.env.WEXON_CF_ACCESS_TEST_MODE !== "0" && !process.env.WEXON_CF_ACCESS_TEST_PUBLIC_JWKS) {
+    const raw = execFileSync(process.execPath, [resolve("scripts/ensure-cf-access-test-keys.mjs")], {
+      encoding: "utf8",
+    });
+    const env = JSON.parse(raw) as Record<string, string>;
+    Object.assign(process.env, env);
+  }
 }
 
 export default defineConfig({

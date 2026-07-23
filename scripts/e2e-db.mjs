@@ -205,6 +205,20 @@ async function prepare() {
     },
   });
 
+  run(process.execPath, ["--import", "tsx", "scripts/seed-platform-admin-e2e.mjs"], {
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.DATABASE_URL,
+      DIRECT_URL: process.env.DIRECT_URL,
+      WEXON_ALLOW_LOCAL_DB_TESTS: "1",
+      WEXON_E2E_TARGET: "isolated",
+      WEXON_E2E_CONFIRM_ISOLATED: "true",
+      // Guard rejects NODE_ENV=production; keep prepare on the test path.
+      NODE_ENV: process.env.NODE_ENV === "production" ? "test" : process.env.NODE_ENV || "test",
+      VERCEL_ENV: "",
+    },
+  });
+
   console.log("[e2e-db] fixture prepare complete");
 }
 

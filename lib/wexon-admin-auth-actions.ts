@@ -8,10 +8,8 @@ import {
   ADMIN_PRODUCTION_LOGIN_URL,
   adminDebug,
   clearAdminSessionCookie,
-  createAdminSessionCookie,
+  establishAdminSessionFromCloudflareAccess,
   isAdminAccessHostAllowed,
-  isAdminEmailAllowed,
-  securePasswordEqual,
 } from "@/lib/wexon-admin-auth";
 import { clearCustomerSessionCookie } from "@/lib/wexon-customer-auth";
 import { defaultAdminPostLoginPath, safeAdminNextPath } from "@/lib/wexon-admin-login-next";
@@ -23,6 +21,10 @@ import {
 import { clearActiveOrganizationCookie } from "@/lib/wexon-organization-context";
 import { unifiedLoginUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
+import { cloudflareAccessAuditSafeMeta } from "@/lib/wexon-cloudflare-access-jwt";
+import { CloudflareAccessJwtError } from "@/lib/wexon-cloudflare-access-jwt";
+import { PlatformAdminCloudflareAccessError } from "@/lib/wexon-platform-admin-cloudflare-bind";
+import { maskPlatformAdminEmail } from "@/lib/wexon-platform-admin";
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -35,7 +37,7 @@ function adminLoginPath() {
 
 function redirectLoginError(
   nextPath: string,
-  details: { email?: string; reason: "rate_limited" | "invalid_credentials" | "config_missing" },
+  details: { reason: "rate_limited" | "access_denied" | "config_missing" | "wrong_host" },
 ) {
   const userMessage =
     details.reason === "rate_limited"
@@ -54,7 +56,7 @@ function redirectLoginError(
     message: details.reason,
     level: "WARN",
     source: "admin_auth",
-    metadata: { email: details?.email, next: safeNext, reason: details.reason },
+    metadata: cloudflareAccessAuditSafeMeta({ reason: details.reason }),
   });
   const params = new URLSearchParams({ adminError: userMessage });
   if (safeNext && safeNext !== defaultAdminPostLoginPath()) {
@@ -63,13 +65,18 @@ function redirectLoginError(
   redirect(`${adminLoginPath()}?${params.toString()}`);
 }
 
-export async function loginAdminAction(formData: FormData) {
+/**
+ * Post-Cloudflare-Access continue action.
+ * Verifies JWT + binds/resolves PlatformAdmin + sets session v3.
+ * Does NOT read ADMIN_LOGIN_PASSWORD or ADMIN_EMAILS.
+ */
+export async function continueAdminCloudflareLoginAction(formData: FormData) {
   adminDebug("login:start");
   const productionWexon = isWexonProductionDeployment();
   const headerStore = await headers();
   const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
 
-  // Host gate MUST run before reading credentials into rate limits or password checks.
+  // Host gate MUST run before identity work.
   if (!isAdminAccessHostAllowed(host, productionWexon)) {
     adminDebug("login:wrong_host", { host: normalizeHost(host) });
     writeAuditFailure({
@@ -82,52 +89,72 @@ export async function loginAdminAction(formData: FormData) {
     redirect(ADMIN_PRODUCTION_LOGIN_URL);
   }
 
-  const email = readString(formData, "email").toLowerCase();
-  const password = readString(formData, "password");
   const nextPath = safeAdminNextPath(readString(formData, "next"), productionWexon);
   const ipAddress = await getServerActionIpAddress();
 
   const ipLimit = enforceRateLimit("admin.login.ip", ipAddress, RATE_LIMITS.adminLoginIp);
   if (!ipLimit.ok) {
-    redirectLoginError(nextPath, { email, reason: "rate_limited" });
+    redirectLoginError(nextPath, { reason: "rate_limited" });
   }
 
-  if (email) {
-    const emailLimit = enforceRateLimit("admin.login.email", email, RATE_LIMITS.adminLoginEmail);
-    if (!emailLimit.ok) {
-      redirectLoginError(nextPath, { email, reason: "rate_limited" });
+  if (!process.env.ADMIN_SESSION_SECRET?.trim()) {
+    redirectLoginError(nextPath, { reason: "config_missing" });
+  }
+
+  try {
+    const established = await establishAdminSessionFromCloudflareAccess();
+    adminDebug("login:redirect", {
+      next: nextPath,
+      emailMasked: maskPlatformAdminEmail(established.sessionEmail),
+    });
+    redirect(resolvePostLoginDestination(nextPath, { isAdmin: true, productionWexon }));
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "digest" in error &&
+      typeof error.digest === "string" &&
+      error.digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw error;
     }
+
+    const reason =
+      error instanceof CloudflareAccessJwtError && error.code === "missing_config"
+        ? "config_missing"
+        : "access_denied";
+
+    adminDebug("login:unauthorized", {
+      ...cloudflareAccessAuditSafeMeta({
+        reason:
+          error instanceof CloudflareAccessJwtError
+            ? error.code
+            : error instanceof PlatformAdminCloudflareAccessError
+              ? error.code
+              : "access_denied",
+      }),
+    });
+    redirectLoginError(nextPath, { reason });
   }
+}
 
-  /**
-   * PRODUCTION NOTE: Replace shared-password auth with per-admin credentials + MFA (PR2).
-   * See `lib/wexon-admin-auth.ts`.
-   */
-  const expectedPassword = process.env.ADMIN_LOGIN_PASSWORD ?? "";
-  const sessionSecret = process.env.ADMIN_SESSION_SECRET ?? "";
-  const allowed = Boolean(email) && isAdminEmailAllowed(email);
-  const passwordValid = Boolean(expectedPassword) && securePasswordEqual(password, expectedPassword);
-
-  adminDebug("login:payload", { hasEmail: Boolean(email), next: nextPath });
-  adminDebug("login:email_allowed", { allowed });
-  adminDebug("login:password_valid", { valid: passwordValid });
-
-  if (!email || !password) {
-    redirectLoginError(nextPath, { email, reason: "invalid_credentials" });
-  }
-
-  if (!expectedPassword || !sessionSecret) {
-    redirectLoginError(nextPath, { email, reason: "config_missing" });
-  }
-
-  if (!allowed || !passwordValid) {
-    adminDebug("login:unauthorized", { allowed, passwordValid });
-    redirectLoginError(nextPath, { email, reason: "invalid_credentials" });
-  }
-
-  await createAdminSessionCookie(email);
-  adminDebug("login:redirect", { next: nextPath });
-  redirect(resolvePostLoginDestination(nextPath, { isAdmin: true, productionWexon }));
+/**
+ * @deprecated PR2B — shared password login removed. Kept as a hard deny so stale
+ * forms/clients cannot authenticate via ADMIN_LOGIN_PASSWORD / ADMIN_EMAILS.
+ */
+export async function loginAdminAction(formData: FormData) {
+  void formData;
+  adminDebug("login:shared_password_rejected");
+  writeAuditFailure({
+    action: "admin.auth.login_failed",
+    message: "shared_password_removed",
+    level: "WARN",
+    source: "admin_auth",
+    metadata: { reason: "shared_password_removed" },
+  });
+  redirect(
+    `${adminLoginPath()}?${new URLSearchParams({ adminError: ADMIN_LOGIN_GENERIC_ERROR }).toString()}`,
+  );
 }
 
 export async function logoutAdminAction() {
@@ -135,7 +162,6 @@ export async function logoutAdminAction() {
   await clearAdminSessionCookie();
   await clearCustomerSessionCookie();
   await clearActiveOrganizationCookie();
-  // Always return to unified login without a sticky admin `next` target.
   adminDebug("logout:redirect", { to: unifiedLoginUrl() });
   redirect(unifiedLoginUrl());
 }
