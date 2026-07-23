@@ -14,11 +14,11 @@ import {
   securePasswordEqual,
 } from "@/lib/wexon-admin-auth";
 import { clearCustomerSessionCookie } from "@/lib/wexon-customer-auth";
+import { defaultAdminPostLoginPath, safeAdminNextPath } from "@/lib/wexon-admin-login-next";
 import {
   isWexonProductionDeployment,
   normalizeHost,
   resolvePostLoginDestination,
-  safeNextPath as canonicalSafeNextPath,
 } from "@/lib/wexon-canonical-host";
 import { clearActiveOrganizationCookie } from "@/lib/wexon-organization-context";
 import { unifiedLoginUrl } from "@/lib/wexon/urls";
@@ -27,33 +27,6 @@ import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function safeAdminNextPath(value: string) {
-  const path = canonicalSafeNextPath(value, "/applications");
-  const productionWexon = isWexonProductionDeployment();
-
-  if (path === "/login" || path.startsWith("/login/")) {
-    return productionWexon ? "/applications" : "/admin";
-  }
-  if (path.startsWith("/admin/login")) {
-    return productionWexon ? "/applications" : "/admin";
-  }
-  if (path === "/" || path === "/admin") {
-    return productionWexon ? "/applications" : "/admin";
-  }
-
-  // Local/preview serve admin under /admin/*; production admin host strips the prefix.
-  if (!productionWexon) {
-    if (path === "/applications" || path.startsWith("/applications/")) {
-      return `/admin${path}`;
-    }
-    if (!path.startsWith("/admin")) {
-      return `/admin${path.startsWith("/") ? path : `/${path}`}`;
-    }
-  }
-
-  return path;
 }
 
 function adminLoginPath() {
@@ -69,7 +42,8 @@ function redirectLoginError(
       ? "Çok fazla giriş denemesi. Lütfen bir süre sonra tekrar deneyin."
       : ADMIN_LOGIN_GENERIC_ERROR;
 
-  adminDebug("login:error_redirect", { reason: details.reason, next: safeAdminNextPath(nextPath) });
+  const safeNext = safeAdminNextPath(nextPath);
+  adminDebug("login:error_redirect", { reason: details.reason, next: safeNext });
   writeAuditFailure({
     action:
       details.reason === "rate_limited"
@@ -80,11 +54,11 @@ function redirectLoginError(
     message: details.reason,
     level: "WARN",
     source: "admin_auth",
-    metadata: { email: details?.email, next: safeAdminNextPath(nextPath), reason: details.reason },
+    metadata: { email: details?.email, next: safeNext, reason: details.reason },
   });
   const params = new URLSearchParams({ adminError: userMessage });
-  if (nextPath) {
-    params.set("next", safeAdminNextPath(nextPath));
+  if (safeNext && safeNext !== defaultAdminPostLoginPath()) {
+    params.set("next", safeNext);
   }
   redirect(`${adminLoginPath()}?${params.toString()}`);
 }
@@ -110,7 +84,7 @@ export async function loginAdminAction(formData: FormData) {
 
   const email = readString(formData, "email").toLowerCase();
   const password = readString(formData, "password");
-  const nextPath = safeAdminNextPath(readString(formData, "next") || "/applications");
+  const nextPath = safeAdminNextPath(readString(formData, "next"), productionWexon);
   const ipAddress = await getServerActionIpAddress();
 
   const ipLimit = enforceRateLimit("admin.login.ip", ipAddress, RATE_LIMITS.adminLoginIp);
@@ -161,6 +135,7 @@ export async function logoutAdminAction() {
   await clearAdminSessionCookie();
   await clearCustomerSessionCookie();
   await clearActiveOrganizationCookie();
+  // Always return to unified login without a sticky admin `next` target.
   adminDebug("logout:redirect", { to: unifiedLoginUrl() });
   redirect(unifiedLoginUrl());
 }

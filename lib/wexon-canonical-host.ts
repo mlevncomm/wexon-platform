@@ -253,7 +253,25 @@ export function buildProductionSubdomainUrl(subdomain: ProductionSubdomain, path
 
 export function safeNextPath(value: string | undefined, fallback: string) {
   const trimmed = value?.trim() ?? "";
+  if (!trimmed) return fallback;
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return fallback;
+  if (trimmed.includes("\\") || /[\u0000-\u001f]/.test(trimmed)) return fallback;
+
+  const pathPart = trimmed.split(/[?#]/, 2)[0] ?? trimmed;
+  let decodedPath = pathPart;
+  try {
+    for (let i = 0; i < 3; i += 1) {
+      const next = decodeURIComponent(decodedPath);
+      if (next === decodedPath) break;
+      decodedPath = next;
+    }
+  } catch {
+    return fallback;
+  }
+
+  if (!decodedPath.startsWith("/") || decodedPath.startsWith("//")) return fallback;
+  if (decodedPath.includes("\\") || decodedPath.includes("://")) return fallback;
+
   return trimmed;
 }
 
@@ -264,9 +282,38 @@ export function resolvePostLoginDestination(
   const productionWexon = options.productionWexon ?? isWexonProductionDeployment();
   const safeNext = safeNextPath(nextPath, "");
 
+  // Admin destinations stay on the admin surface — never cross to app/core hosts.
+  if (options.isAdmin) {
+    if (!productionWexon) {
+      if (
+        !safeNext ||
+        safeNext.startsWith(APP_PREFIX) ||
+        safeNext.startsWith(CORE_PREFIX) ||
+        safeNext === "/dashboard" ||
+        safeNext.startsWith("/dashboard/")
+      ) {
+        return ADMIN_PREFIX;
+      }
+      return safeNext;
+    }
+
+    const isCrossSurface =
+      safeNext.startsWith(APP_PREFIX) ||
+      safeNext.startsWith(CORE_PREFIX) ||
+      safeNext === "/dashboard" ||
+      safeNext.startsWith("/dashboard/");
+    const adminPath =
+      !safeNext || safeNext === "/" || safeNext === ADMIN_PREFIX || isCrossSurface
+        ? "/"
+        : safeNext.startsWith(ADMIN_PREFIX)
+          ? stripPathPrefix(safeNext, ADMIN_PREFIX) || "/"
+          : safeNext;
+    return buildProductionSubdomainUrl("admin", adminPath);
+  }
+
   if (!productionWexon) {
     if (safeNext) return safeNext;
-    return options.isAdmin ? ADMIN_PREFIX : CORE_PREFIX;
+    return CORE_PREFIX;
   }
 
   if (safeNext.startsWith(APP_PREFIX)) {
@@ -277,16 +324,6 @@ export function resolvePostLoginDestination(
   if (safeNext.startsWith(CORE_PREFIX)) {
     const path = stripPathPrefix(safeNext, CORE_PREFIX);
     return buildProductionSubdomainUrl("core", path);
-  }
-
-  if (options.isAdmin) {
-    const adminPath =
-      !safeNext || safeNext === "/" || safeNext === ADMIN_PREFIX
-        ? "/applications"
-        : safeNext.startsWith(ADMIN_PREFIX)
-          ? stripPathPrefix(safeNext, ADMIN_PREFIX) || "/applications"
-          : safeNext;
-    return buildProductionSubdomainUrl("admin", adminPath);
   }
 
   if (safeNext.startsWith(ADMIN_PREFIX)) {

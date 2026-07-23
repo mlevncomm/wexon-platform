@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AdminPasswordField from "@/app/admin/login/AdminPasswordField";
 import { loginAdminAction } from "@/lib/wexon-admin-auth-actions";
+import { defaultAdminPostLoginPath, safeAdminNextPath } from "@/lib/wexon-admin-login-next";
 import { isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
 import { publicUrl } from "@/lib/wexon/urls";
 
@@ -10,7 +11,12 @@ export default async function AdminLoginPage({
   searchParams: Promise<{ next?: string; adminError?: string }>;
 }) {
   const { next, adminError } = await searchParams;
-  const defaultNext = isWexonProductionDeployment() ? "/applications" : "/admin";
+  const productionWexon = isWexonProductionDeployment();
+  // Only honor an explicit query `next`. Direct /login visits default to admin root
+  // so logout → login cannot resurrect a prior /applications target.
+  const nextPath = next?.trim()
+    ? safeAdminNextPath(next, productionWexon)
+    : defaultAdminPostLoginPath(productionWexon);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-5 py-12 text-slate-950">
@@ -31,7 +37,7 @@ export default async function AdminLoginPage({
             </div>
           )}
           <form action={loginAdminAction} className="mt-6 grid gap-4">
-            <input type="hidden" name="next" value={next ?? defaultNext} />
+            <input type="hidden" name="next" value={nextPath} />
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">E-posta</span>
               <input
