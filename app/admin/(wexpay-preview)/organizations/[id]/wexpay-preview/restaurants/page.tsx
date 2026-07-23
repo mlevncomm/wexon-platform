@@ -69,27 +69,31 @@ export default async function WexPayRestaurantsPage({ params, searchParams }: { 
         )}
       </WexPayPanel>
 
-      <WexPayPanel
-        title="Yeni restoran oluştur"
-        description={
-          context.canManage
-            ? "Yeni işletme kaydı."
-            : "Salt okunur önizleme — gönderim sunucu tarafında reddedilir."
-        }
-      >
-        <form
-          action={createRestaurantAction}
-          className="grid min-w-0 gap-4 md:grid-cols-2"
-          data-testid="admin-preview-create-restaurant"
-        >
-          <input type="hidden" name="redirectTo" value={redirectTo} />
-          <DemoInput label="Restoran adı" name="name" required placeholder="Örn. Mavi Bahçe Restaurant" />
-          <DemoInput label="Slug" name="slug" required placeholder="Örn. mavi-bahce" />
-          <div className="md:col-span-2">
-            <DemoPrimaryButton>Restoran oluştur</DemoPrimaryButton>
-          </div>
-        </form>
-      </WexPayPanel>
+      {context.canManage ? (
+        <WexPayPanel title="Yeni restoran oluştur" description="Yeni işletme kaydı.">
+          <form
+            action={createRestaurantAction}
+            className="grid min-w-0 gap-4 md:grid-cols-2"
+            data-testid="admin-preview-create-restaurant"
+          >
+            <input type="hidden" name="redirectTo" value={redirectTo} />
+            <DemoInput label="Restoran adı" name="name" required placeholder="Örn. Mavi Bahçe Restaurant" />
+            <DemoInput label="Slug" name="slug" required placeholder="Örn. mavi-bahce" />
+            <div className="md:col-span-2">
+              <DemoPrimaryButton>Restoran oluştur</DemoPrimaryButton>
+            </div>
+          </form>
+        </WexPayPanel>
+      ) : (
+        <WexPayPanel title="Yeni restoran oluştur">
+          <p
+            data-testid="admin-preview-readonly-notice"
+            className="text-sm font-semibold text-slate-700"
+          >
+            Salt okunur önizleme — yazmak için doğrulama gerekli
+          </p>
+        </WexPayPanel>
+      )}
     </WexPayPage>
   );
 }

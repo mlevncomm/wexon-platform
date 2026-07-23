@@ -47,14 +47,16 @@ test.describe.serial("admin wexpay preview write controls (PR3)", () => {
     await loginAdmin(page, email, password);
     await page.goto(await previewPath(orgId, "/restaurants"));
 
-    const before = await prisma.restaurant.count({ where: { organizationId: orgId } });
-    const stamp = Date.now().toString(36);
-    await page.getByTestId("admin-preview-create-restaurant").locator('input[name="name"]').fill(`Denied ${stamp}`);
-    await page.getByTestId("admin-preview-create-restaurant").locator('input[name="slug"]').fill(`denied-${stamp}`);
-    await page.getByTestId("admin-preview-create-restaurant").getByRole("button", { name: /Restoran oluştur/i }).click();
-    await page.waitForTimeout(1500);
-
+    // Mutation controls must be closed in the UI; backend deny is proven in DB unit tests.
     await expect(page.getByTestId("admin-preview-write-mode")).toContainText(/Read-only/i);
+    await expect(page.getByTestId("admin-preview-readonly-notice").first()).toContainText(
+      /Salt okunur önizleme — yazmak için doğrulama gerekli/i,
+    );
+    await expect(page.getByTestId("admin-preview-create-restaurant")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Restoran oluştur/i })).toHaveCount(0);
+
+    const before = await prisma.restaurant.count({ where: { organizationId: orgId } });
+    await page.waitForTimeout(300);
     const after = await prisma.restaurant.count({ where: { organizationId: orgId } });
     expect(after).toBe(before);
   });
@@ -153,16 +155,15 @@ test.describe.serial("admin wexpay preview write controls (PR3)", () => {
         timeout: 15_000,
       });
 
-      // Switching org must not inherit write — other tenant stays read-only.
+      // Switching org must not inherit write — other tenant stays read-only with closed controls.
       await page.goto(await previewPath(otherOrg.id, "/restaurants"));
       await expect(page.getByTestId("admin-wexpay-preview-banner")).toBeVisible();
       await expect(page.getByTestId("admin-preview-write-mode")).toContainText(/Read-only/i);
+      await expect(page.getByTestId("admin-preview-readonly-notice").first()).toBeVisible();
+      await expect(page.getByTestId("admin-preview-create-restaurant")).toHaveCount(0);
 
       const before = await prisma.restaurant.count({ where: { organizationId: otherOrg.id } });
-      await page.getByTestId("admin-preview-create-restaurant").locator('input[name="name"]').fill(`XTenant ${stamp}`);
-      await page.getByTestId("admin-preview-create-restaurant").locator('input[name="slug"]').fill(`xtenant-${stamp}`);
-      await page.getByTestId("admin-preview-create-restaurant").getByRole("button", { name: /Restoran oluştur/i }).click();
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(300);
       const after = await prisma.restaurant.count({ where: { organizationId: otherOrg.id } });
       expect(after).toBe(before);
     } finally {

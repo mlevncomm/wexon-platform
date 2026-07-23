@@ -99,6 +99,15 @@ export default function AdminWexPayPreviewBanner({
           ) : null}
         </div>
 
+        {!writeLive ? (
+          <p
+            data-testid="admin-preview-readonly-notice"
+            className="text-[11px] font-semibold text-slate-700"
+          >
+            Salt okunur önizleme — yazmak için doğrulama gerekli
+          </p>
+        ) : null}
+
         {previewError ? (
           <p
             data-testid="admin-preview-error"

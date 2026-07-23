@@ -41,20 +41,64 @@ export function wexpayAdminPreviewHref(
   return adminNavigationUrl(path, query);
 }
 
-const PREVIEW_PATH_RE = /^\/admin\/organizations\/[^/]+\/wexpay-preview(?:\/|$)/;
+const PREVIEW_PATH_RE = /^\/admin\/organizations\/([^/]+)\/wexpay-preview(?:\/|$)/;
 
 export function isWexPayAdminPreviewPath(path: string) {
   const pathname = path.split("?")[0] ?? path;
   return PREVIEW_PATH_RE.test(pathname);
 }
 
-/** Safe redirect targets for WexPay server actions. */
+export function extractWexPayAdminPreviewOrganizationId(path: string): string | null {
+  const pathname = path.split("?")[0] ?? path;
+  const match = pathname.match(PREVIEW_PATH_RE);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+/** True when path is an admin preview URL for the given organizationId. */
+export function isSameOrgWexPayAdminPreviewPath(path: string, organizationId: string) {
+  const fromPath = extractWexPayAdminPreviewOrganizationId(path);
+  return Boolean(fromPath && fromPath === organizationId);
+}
+
+/**
+ * Safe redirect targets for WexPay server actions.
+ * Customer `/apps/wexpay...` paths remain allowed without org confinement.
+ * Admin preview paths are accepted here; callers that know organizationId must
+ * further confine via `resolveSafeWexPayRedirectPath`.
+ */
 export function isAllowedWexPayRedirectPath(path: string) {
   if (!path.startsWith("/")) return false;
   if (path.startsWith("//")) return false;
   if (path.includes("://")) return false;
   const pathname = path.split("?")[0] ?? path;
   return pathname.startsWith(WEXPAY_APP_BASE_PATH) || isWexPayAdminPreviewPath(pathname);
+}
+
+/**
+ * Resolve a post-mutation redirect.
+ * - `/apps/wexpay...` unchanged (customer surface).
+ * - Admin preview paths must stay under the same organizationId; cross-org
+ *   preview paths fall back to that org's preview base.
+ */
+export function resolveSafeWexPayRedirectPath(
+  path: string | null | undefined,
+  organizationId: string,
+  fallback: string,
+) {
+  if (!path || !isAllowedWexPayRedirectPath(path)) return fallback;
+  const pathname = path.split("?")[0] ?? path;
+  if (pathname.startsWith(WEXPAY_APP_BASE_PATH)) return path;
+  if (isWexPayAdminPreviewPath(pathname)) {
+    return isSameOrgWexPayAdminPreviewPath(pathname, organizationId)
+      ? path
+      : wexpayAdminPreviewBasePath(organizationId);
+  }
+  return fallback;
 }
 
 export function mapAppPathToPreviewPath(appPath: string, organizationId: string) {

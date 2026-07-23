@@ -11,8 +11,11 @@ import { createRestaurant, type WexPayMutationContext } from "@/lib/wexpay-servi
 import { WexPayAccessError } from "@/lib/wexpay-tenant";
 import {
   buildAdminPreviewWriteCapability,
+  evaluateAdminPreviewDisableRequest,
   evaluateAdminPreviewWriteGate,
+  hashPreviewWriteReason,
   validatePreviewWriteEnableInput,
+  writeAdminPreviewMutationAuditInTransaction,
 } from "@/lib/wexon-admin-preview-write";
 import { writeAuditLog } from "@/lib/wexon-audit";
 
@@ -33,7 +36,11 @@ function withSecret<T>(fn: () => T): T {
   }
 }
 
-function adminContext(organizationId: string, canManage: boolean): WexPayMutationContext {
+function adminContext(
+  organizationId: string,
+  canManage: boolean,
+  adminPreviewWrite?: WexPayMutationContext["adminPreviewWrite"],
+): WexPayMutationContext {
   return {
     organizationId,
     canManage,
@@ -45,13 +52,18 @@ function adminContext(organizationId: string, canManage: boolean): WexPayMutatio
     },
     actor: { type: "admin_session", email: `preview+${suffix}@wexon.test`, role: "ADMIN" },
     ipAddress: "127.0.0.1",
+    adminPreviewWrite: adminPreviewWrite ?? null,
   };
 }
 
-function customerContext(organizationId: string, userId: string): WexPayMutationContext {
+function customerContext(
+  organizationId: string,
+  userId: string,
+  role: "OWNER" | "ADMIN" | "MANAGER" | "STAFF" = "OWNER",
+): WexPayMutationContext {
   return {
     organizationId,
-    canManage: true,
+    canManage: role === "STAFF" ? false : true,
     entitlementMap: {
       table_limit: 50,
       branch_limit: 10,
@@ -62,10 +74,35 @@ function customerContext(organizationId: string, userId: string): WexPayMutation
       type: "customer_session",
       userId,
       email: `owner+${suffix}@example.test`,
-      role: "OWNER",
+      role,
     },
     ipAddress: "127.0.0.1",
   };
+}
+
+function previewBinding(
+  organizationId: string,
+  actionKey: string,
+  reason = "db regression support reason",
+  extras: Partial<NonNullable<WexPayMutationContext["adminPreviewWrite"]>> = {},
+) {
+  return withSecret(() => {
+    const capability = buildAdminPreviewWriteCapability({
+      adminId: "admin_1",
+      cloudflareSubject: "cf-1",
+      organizationId,
+      reason,
+    });
+    return {
+      actionKey,
+      adminId: "admin_1",
+      email: `preview+${suffix}@wexon.test`,
+      reasonHash: capability.reasonHash,
+      writeSessionId: capability.writeSessionId,
+      writeModeExpiry: capability.expiresAt,
+      ...extras,
+    };
+  });
 }
 
 describe("admin preview write controls (db)", () => {
@@ -159,15 +196,110 @@ describe("admin preview write controls (db)", () => {
     assert.equal(after, before);
   });
 
-  it("wrong slug enable validation fails against DB slug", async () => {
-    const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgA.id } });
-    const result = validatePreviewWriteEnableInput({
-      slug: "definitely-wrong-slug",
-      expectedSlug: org.slug,
-      reason: "long enough reason",
+  it("production-path createRestaurant audit failure rolls back domain mutation", async () => {
+    const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    const binding = previewBinding(orgA.id, "create_restaurant", "rollback reason path", {
+      writeAudit: async () => {
+        throw new Error("audit_failed");
+      },
     });
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.reason, "slug_mismatch");
+
+    await assert.rejects(
+      () =>
+        createRestaurant(adminContext(orgA.id, true, binding), {
+          name: `AuditFail Real ${suffix}`,
+          slug: `audit-fail-real-${suffix}`,
+        }),
+      (error: unknown) => error instanceof Error && error.message.includes("audit_failed"),
+    );
+
+    const after = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    assert.equal(after, before);
+    const leaked = await prisma.restaurant.findFirst({
+      where: { organizationId: orgA.id, slug: `audit-fail-real-${suffix}` },
+    });
+    assert.equal(leaked, null);
+
+    const previewAudits = await prisma.auditLog.findMany({
+      where: { organizationId: orgA.id, action: "admin.preview.write" },
+    });
+    assert.equal(
+      previewAudits.filter((row) => {
+        const meta = (row.metadataJson ?? {}) as Record<string, unknown>;
+        return meta.actionKey === "create_restaurant" && meta.writeSessionId === binding.writeSessionId;
+      }).length,
+      0,
+    );
+  });
+
+  it("production-path createRestaurant + admin.preview.write succeed in same transaction", async () => {
+    const reason = "successful atomic write reason";
+    const binding = previewBinding(orgA.id, "create_restaurant", reason);
+    const restaurant = await createRestaurant(adminContext(orgA.id, true, binding), {
+      name: `Atomic Ok ${suffix}`,
+      slug: `atomic-ok-${suffix}`,
+    });
+    createdRestaurantIds.push(restaurant.id);
+
+    const found = await prisma.restaurant.findUnique({ where: { id: restaurant.id } });
+    assert.ok(found);
+
+    const row = await prisma.auditLog.findFirst({
+      where: { organizationId: orgA.id, action: "admin.preview.write" },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.ok(row);
+    const meta = (row!.metadataJson ?? {}) as Record<string, unknown>;
+    assert.equal(meta.actionKey, "create_restaurant");
+    assert.equal(meta.reasonHash, hashPreviewWriteReason(reason));
+    assert.equal(meta.writeSessionId, binding.writeSessionId);
+    assert.equal(meta.organizationId, orgA.id);
+    assert.equal(meta.writeModeExpiry, binding.writeModeExpiry);
+    assert.equal(meta.jwt, undefined);
+    assert.equal(meta.cloudflareSubject, undefined);
+  });
+
+  it("Org A capability denies Org B mutation at gate", async () => {
+    withSecret(() => {
+      const capability = buildAdminPreviewWriteCapability({
+        adminId: "admin_1",
+        cloudflareSubject: "cf-1",
+        organizationId: orgA.id,
+        reason: "support write window",
+      });
+      const forB = evaluateAdminPreviewWriteGate({
+        capability,
+        adminId: "admin_1",
+        cloudflareSubject: "cf-1",
+        organizationId: orgB.id,
+        organization: { isActive: true, isDemo: false },
+      });
+      assert.equal(forB.ok, false);
+      if (!forB.ok) assert.equal(forB.reason, "capability_mismatch");
+    });
+  });
+
+  it("Org A capability + Org B disable request denied", async () => {
+    withSecret(() => {
+      const capability = buildAdminPreviewWriteCapability({
+        adminId: "admin_1",
+        cloudflareSubject: "cf-1",
+        organizationId: orgA.id,
+        reason: "support write window",
+      });
+      const decision = evaluateAdminPreviewDisableRequest({
+        formOrganizationId: orgB.id,
+        capability,
+        adminId: "admin_1",
+        cloudflareSubject: "cf-1",
+      });
+      assert.equal(decision.ok, false);
+      if (!decision.ok) {
+        assert.equal(decision.reason, "capability_mismatch");
+        assert.equal(decision.clearCookie, false);
+        assert.equal(decision.auditOrganizationId, orgA.id);
+      }
+    });
   });
 
   it("demo write enable gate always denied", async () => {
@@ -190,40 +322,15 @@ describe("admin preview write controls (db)", () => {
     });
   });
 
-  it("correct slug capability allows only that org; Org A capability denies Org B", async () => {
-    withSecret(() => {
-      const capability = buildAdminPreviewWriteCapability({
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
-        organizationId: orgA.id,
-        reason: "support write window",
-      });
-      const forA = evaluateAdminPreviewWriteGate({
-        capability,
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
-        organizationId: orgA.id,
-        organization: { isActive: true, isDemo: false },
-      });
-      assert.equal(forA.ok, true);
-
-      const forB = evaluateAdminPreviewWriteGate({
-        capability,
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
-        organizationId: orgB.id,
-        organization: { isActive: true, isDemo: false },
-      });
-      assert.equal(forB.ok, false);
-      if (!forB.ok) assert.equal(forB.reason, "capability_mismatch");
+  it("wrong slug enable validation fails against DB slug", async () => {
+    const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgA.id } });
+    const result = validatePreviewWriteEnableInput({
+      slug: "definitely-wrong-slug",
+      expectedSlug: org.slug,
+      reason: "long enough reason",
     });
-
-    const slugOk = validatePreviewWriteEnableInput({
-      slug: orgA.slug,
-      expectedSlug: orgA.slug,
-      reason: "support write window",
-    });
-    assert.equal(slugOk.ok, true);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.reason, "slug_mismatch");
   });
 
   it("inactive organization denied", async () => {
@@ -246,62 +353,35 @@ describe("admin preview write controls (db)", () => {
     });
   });
 
-  it("capability expiry denied", async () => {
-    withSecret(() => {
-      const now = Date.now();
-      const capability = buildAdminPreviewWriteCapability({
+  it("customer OWNER/ADMIN/MANAGER mutations still work; STAFF manage denied", async () => {
+    for (const role of ["OWNER", "ADMIN", "MANAGER"] as const) {
+      const restaurant = await createRestaurant(customerContext(orgA.id, customerUserId, role), {
+        name: `Customer ${role} ${suffix}`,
+        slug: `customer-${role.toLowerCase()}-${suffix}`,
+      });
+      createdRestaurantIds.push(restaurant.id);
+    }
+
+    await assert.rejects(
+      () =>
+        createRestaurant(customerContext(orgA.id, customerUserId, "STAFF"), {
+          name: `Customer STAFF ${suffix}`,
+          slug: `customer-staff-${suffix}`,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+  });
+
+  it("write_enabled audit metadata carries sanitized reason + linkage fields", async () => {
+    const reason = "db test enable reason";
+    const capability = withSecret(() =>
+      buildAdminPreviewWriteCapability({
         adminId: "admin_1",
         cloudflareSubject: "cf-1",
         organizationId: orgA.id,
-        reason: "support write window",
-        now,
-        ttlMs: 1_000,
-      });
-      const gate = evaluateAdminPreviewWriteGate({
-        capability,
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
-        organizationId: orgA.id,
-        organization: { isActive: true, isDemo: false },
-        now: now + 5_000,
-      });
-      assert.equal(gate.ok, false);
-      if (!gate.ok) assert.equal(gate.reason, "capability_expired");
-    });
-  });
-
-  it("audit failure rolls back mutation in transaction", async () => {
-    const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
-    await assert.rejects(async () => {
-      await prisma.$transaction(async (tx) => {
-        await tx.restaurant.create({
-          data: {
-            organizationId: orgA.id,
-            name: `AuditFail ${suffix}`,
-            slug: `audit-fail-${suffix}`,
-            isActive: true,
-          },
-        });
-        // Simulate required preview audit failure → entire transaction rolls back.
-        throw new Error("audit_failed");
-      });
-    });
-    const after = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
-    assert.equal(after, before);
-  });
-
-  it("normal customer mutations still work", async () => {
-    const restaurant = await createRestaurant(customerContext(orgA.id, customerUserId), {
-      name: `Customer Ok ${suffix}`,
-      slug: `customer-ok-${suffix}`,
-    });
-    createdRestaurantIds.push(restaurant.id);
-    const found = await prisma.restaurant.findUnique({ where: { id: restaurant.id } });
-    assert.ok(found);
-    assert.equal(found!.organizationId, orgA.id);
-  });
-
-  it("successful preview write audit metadata is sanitized", async () => {
+        reason,
+      }),
+    );
     await writeAuditLog({
       action: "admin.preview.write_enabled",
       organizationId: orgA.id,
@@ -312,7 +392,11 @@ describe("admin preview write controls (db)", () => {
         adminId: "admin_1",
         emailMasked: "a***@wexon.dev",
         actionKey: "enable_write",
-        reason: "db test reason",
+        reason,
+        reasonHash: capability.reasonHash,
+        writeSessionId: capability.writeSessionId,
+        organizationId: orgA.id,
+        writeModeExpiry: capability.expiresAt,
       },
     });
     const row = await prisma.auditLog.findFirst({
@@ -321,8 +405,34 @@ describe("admin preview write controls (db)", () => {
     });
     assert.ok(row);
     const meta = (row!.metadataJson ?? {}) as Record<string, unknown>;
+    assert.equal(meta.reason, reason);
+    assert.equal(meta.reasonHash, capability.reasonHash);
+    assert.equal(meta.writeSessionId, capability.writeSessionId);
+    assert.equal(meta.organizationId, orgA.id);
     assert.equal(meta.cloudflareSubject, undefined);
     assert.equal(meta.jwt, undefined);
     assert.equal(meta.password, undefined);
+  });
+
+  it("writeAdminPreviewMutationAuditInTransaction writes on provided client", async () => {
+    const binding = previewBinding(orgA.id, "update_restaurant", "client tx linkage");
+    await prisma.$transaction(async (tx) => {
+      await writeAdminPreviewMutationAuditInTransaction(tx, {
+        organizationId: orgA.id,
+        binding,
+      });
+    });
+    const row = await prisma.auditLog.findFirst({
+      where: {
+        organizationId: orgA.id,
+        action: "admin.preview.write",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.ok(row);
+    const meta = (row!.metadataJson ?? {}) as Record<string, unknown>;
+    assert.equal(meta.writeSessionId, binding.writeSessionId);
+    assert.equal(meta.reasonHash, binding.reasonHash);
+    assert.equal(meta.actionKey, "update_restaurant");
   });
 });

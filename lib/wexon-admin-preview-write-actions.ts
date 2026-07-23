@@ -5,16 +5,21 @@ import { redirect } from "next/navigation";
 import { getServerActionIpAddress } from "@/lib/wexon-audit";
 import {
   ADMIN_PREVIEW_WRITE_TTL_MS,
-  assertAdminPreviewWriteAllowed,
   auditAdminPreviewWriteDenied,
   auditAdminPreviewWriteSuccess,
   buildAdminPreviewWriteCapability,
   clearAdminPreviewWriteCapabilityCookie,
+  evaluateAdminPreviewDisableRequest,
+  readAdminPreviewWriteCapabilityCookie,
+  sanitizePreviewWriteReason,
   setAdminPreviewWriteCapabilityCookie,
   validatePreviewWriteEnableInput,
   verifyAdminPreviewActor,
 } from "@/lib/wexon-admin-preview-write";
-import { wexpayAdminPreviewBasePath, isAllowedWexPayRedirectPath } from "@/lib/wexon-admin-preview-path";
+import {
+  resolveSafeWexPayRedirectPath,
+  wexpayAdminPreviewBasePath,
+} from "@/lib/wexon-admin-preview-path";
 import { buildRateLimitKey, checkRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { prisma } from "@/lib/prisma";
 
@@ -25,8 +30,7 @@ function readString(formData: FormData, key: string) {
 
 function readRedirectTo(formData: FormData, organizationId: string) {
   const value = readString(formData, "redirectTo");
-  if (value && isAllowedWexPayRedirectPath(value)) return value;
-  return wexpayAdminPreviewBasePath(organizationId);
+  return resolveSafeWexPayRedirectPath(value || null, organizationId, wexpayAdminPreviewBasePath(organizationId));
 }
 
 function throwIfRedirectError(error: unknown) {
@@ -146,7 +150,9 @@ export async function enableAdminPreviewWriteAction(formData: FormData) {
         email: actor.session.email,
         organizationId: organization.id,
         actionKey: "enable_write",
-        reason,
+        reason: sanitizePreviewWriteReason(reason),
+        reasonHash: capability.reasonHash,
+        writeSessionId: capability.writeSessionId,
         writeModeExpiry: capability.expiresAt,
       });
     } catch {
@@ -171,11 +177,20 @@ export async function enableAdminPreviewWriteAction(formData: FormData) {
   redirect(redirectTo);
 }
 
+/**
+ * Disable write mode.
+ * - Never trusts form organizationId for audit tenant.
+ * - Capability org is authoritative; form org mismatch → deny.
+ * - Missing capability: clear cookie safely, no fake success audit.
+ */
 export async function disableAdminPreviewWriteAction(formData: FormData) {
-  const organizationId = readString(formData, "organizationId");
-  const redirectTo = organizationId
-    ? readRedirectTo(formData, organizationId)
+  const formOrganizationId = readString(formData, "organizationId");
+  const fallbackPath = formOrganizationId
+    ? wexpayAdminPreviewBasePath(formOrganizationId)
     : "/admin/organizations";
+  const redirectTo = formOrganizationId
+    ? readRedirectTo(formData, formOrganizationId)
+    : fallbackPath;
 
   try {
     const actor = await verifyAdminPreviewActor();
@@ -184,57 +199,62 @@ export async function disableAdminPreviewWriteAction(formData: FormData) {
       redirectWithPreviewError(redirectTo, actor.message);
     }
 
+    const capability = await readAdminPreviewWriteCapabilityCookie();
+    const decision = evaluateAdminPreviewDisableRequest({
+      formOrganizationId,
+      capability,
+      adminId: actor.session.adminId,
+      cloudflareSubject: actor.identity.subject,
+    });
+
+    if (!decision.ok) {
+      if (decision.clearCookie) {
+        await clearAdminPreviewWriteCapabilityCookie();
+      }
+      if (decision.reason === "missing_capability") {
+        // Safe cookie clear only — do NOT invent a success audit for another org.
+        if (formOrganizationId) {
+          revalidatePath(wexpayAdminPreviewBasePath(formOrganizationId));
+        }
+        redirect(redirectTo);
+      }
+      await auditAdminPreviewWriteDenied({
+        adminId: actor.session.adminId,
+        email: actor.session.email,
+        organizationId: decision.auditOrganizationId,
+        actionKey: "disable_write",
+        denialReason: decision.reason,
+        writeModeExpiry: capability?.expiresAt ?? null,
+      });
+      redirectWithPreviewError(
+        formOrganizationId ? wexpayAdminPreviewBasePath(formOrganizationId) : redirectTo,
+        "Yazma yetkisi bu organizasyon veya oturum için geçerli değil.",
+      );
+    }
+
+    const organizationId = decision.organizationId;
     await clearAdminPreviewWriteCapabilityCookie();
 
-    if (organizationId) {
-      try {
-        await auditAdminPreviewWriteSuccess({
-          action: "admin.preview.write_disabled",
-          adminId: actor.session.adminId,
-          email: actor.session.email,
-          organizationId,
-          actionKey: "disable_write",
-        });
-      } catch {
-        // Cookie already cleared — fail open for disable UX, still revalidate.
-      }
-      revalidatePath(wexpayAdminPreviewBasePath(organizationId));
+    try {
+      await auditAdminPreviewWriteSuccess({
+        action: "admin.preview.write_disabled",
+        adminId: actor.session.adminId,
+        email: actor.session.email,
+        organizationId,
+        actionKey: "disable_write",
+        reasonHash: decision.capability.reasonHash,
+        writeSessionId: decision.capability.writeSessionId,
+        writeModeExpiry: decision.capability.expiresAt,
+      });
+    } catch {
+      // Cookie already cleared — fail open for disable UX, still revalidate.
     }
+    revalidatePath(wexpayAdminPreviewBasePath(organizationId));
+    redirect(resolveSafeWexPayRedirectPath(redirectTo, organizationId, wexpayAdminPreviewBasePath(organizationId)));
   } catch (error) {
     throwIfRedirectError(error);
     await clearAdminPreviewWriteCapabilityCookie();
   }
 
   redirect(redirectTo);
-}
-
-/**
- * Used by mutation entrypoints after a successful admin preview write to emit
- * `admin.preview.write`. Failures here should be handled by the caller (rollback).
- */
-export async function recordAdminPreviewMutationAudit(input: {
-  organizationId: string;
-  actionKey: string;
-  before?: Record<string, unknown>;
-  after?: Record<string, unknown>;
-}) {
-  const allowed = await assertAdminPreviewWriteAllowed({
-    organizationId: input.organizationId,
-    actionKey: input.actionKey,
-    auditDenial: false,
-  });
-  if (!allowed.ok) {
-    throw new Error(allowed.message);
-  }
-
-  await auditAdminPreviewWriteSuccess({
-    action: "admin.preview.write",
-    adminId: allowed.session.adminId,
-    email: allowed.session.email,
-    organizationId: input.organizationId,
-    actionKey: input.actionKey,
-    writeModeExpiry: allowed.capability.expiresAt,
-    before: input.before,
-    after: input.after,
-  });
 }

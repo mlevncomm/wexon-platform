@@ -5,7 +5,7 @@
  * Mutations for admin_session require a valid capability for the target org.
  */
 
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { cookies, headers } from "next/headers";
 import {
   adminSessionCookieClearOptions,
@@ -38,7 +38,10 @@ export const ADMIN_PREVIEW_WRITE_TTL_MS = 10 * 60 * 1000;
 export const ADMIN_PREVIEW_WRITE_REASON_MIN = 8;
 export const ADMIN_PREVIEW_WRITE_REASON_MAX = 500;
 
-const CAPABILITY_VERSION = "pw1";
+/** pw2 adds writeSessionId; older pw1 cookies fail closed. */
+export const ADMIN_PREVIEW_WRITE_CAPABILITY_VERSION = "pw2";
+const CAPABILITY_VERSION = ADMIN_PREVIEW_WRITE_CAPABILITY_VERSION;
+const CAPABILITY_PART_COUNT = 9;
 
 export type AdminPreviewWriteCapability = {
   adminId: string;
@@ -47,6 +50,31 @@ export type AdminPreviewWriteCapability = {
   issuedAt: number;
   expiresAt: number;
   reasonHash: string;
+  /** Secure per-enable nonce linking enable → mutation audits. */
+  writeSessionId: string;
+};
+
+/** Bound into WexPayMutationContext so domain tx + audit share one Prisma client. */
+export type AdminPreviewWriteAuditBinding = {
+  actionKey: string;
+  adminId: string;
+  email: string;
+  reasonHash: string;
+  writeSessionId: string;
+  writeModeExpiry: number;
+  /**
+   * Optional override used by local DB regression tests to force audit failure
+   * inside the same production transaction path. Production never sets this.
+   */
+  writeAudit?: (
+    client: AuditClient,
+    input: {
+      organizationId: string;
+      binding: AdminPreviewWriteAuditBinding;
+      before?: Record<string, unknown>;
+      after?: Record<string, unknown>;
+    },
+  ) => Promise<unknown>;
 };
 
 export type AdminPreviewWriteDenialReason =
@@ -87,6 +115,10 @@ function decodePart(value: string) {
   }
 }
 
+export function createAdminPreviewWriteSessionId() {
+  return randomBytes(16).toString("hex");
+}
+
 function signingInput(payload: AdminPreviewWriteCapability) {
   return [
     CAPABILITY_VERSION,
@@ -96,6 +128,7 @@ function signingInput(payload: AdminPreviewWriteCapability) {
     String(payload.issuedAt),
     String(payload.expiresAt),
     payload.reasonHash,
+    payload.writeSessionId,
   ].join(".");
 }
 
@@ -149,6 +182,7 @@ export function buildAdminPreviewWriteCapability(input: {
   reason: string;
   now?: number;
   ttlMs?: number;
+  writeSessionId?: string;
 }): AdminPreviewWriteCapability {
   const issuedAt = input.now ?? Date.now();
   const ttlMs = Math.min(input.ttlMs ?? ADMIN_PREVIEW_WRITE_TTL_MS, ADMIN_PREVIEW_WRITE_TTL_MS);
@@ -159,6 +193,7 @@ export function buildAdminPreviewWriteCapability(input: {
     issuedAt,
     expiresAt: issuedAt + ttlMs,
     reasonHash: hashPreviewWriteReason(input.reason),
+    writeSessionId: input.writeSessionId ?? createAdminPreviewWriteSessionId(),
   };
 }
 
@@ -172,6 +207,7 @@ export function encodeAdminPreviewWriteCookieValue(payload: AdminPreviewWriteCap
     String(payload.issuedAt),
     String(payload.expiresAt),
     encodePart(payload.reasonHash),
+    encodePart(payload.writeSessionId),
     signature,
   ].join(".");
 }
@@ -182,10 +218,28 @@ export function parseAdminPreviewWriteCookieValue(
 ): AdminPreviewWriteCapability | null {
   if (!value) return null;
   const parts = value.split(".");
-  if (parts.length !== 8) return null;
-  const [version, encAdminId, encSubject, encOrgId, issuedRaw, expiresRaw, encReasonHash, signature] =
-    parts;
-  if (version !== CAPABILITY_VERSION || !encAdminId || !encSubject || !encOrgId || !encReasonHash || !signature) {
+  // Fail closed on legacy pw1 (8 parts) and any other shape.
+  if (parts.length !== CAPABILITY_PART_COUNT) return null;
+  const [
+    version,
+    encAdminId,
+    encSubject,
+    encOrgId,
+    issuedRaw,
+    expiresRaw,
+    encReasonHash,
+    encWriteSessionId,
+    signature,
+  ] = parts;
+  if (
+    version !== CAPABILITY_VERSION ||
+    !encAdminId ||
+    !encSubject ||
+    !encOrgId ||
+    !encReasonHash ||
+    !encWriteSessionId ||
+    !signature
+  ) {
     return null;
   }
 
@@ -193,11 +247,12 @@ export function parseAdminPreviewWriteCookieValue(
   const cloudflareSubject = decodePart(encSubject);
   const organizationId = decodePart(encOrgId);
   const reasonHash = decodePart(encReasonHash);
+  const writeSessionId = decodePart(encWriteSessionId);
   const issuedAt = Number(issuedRaw);
   const expiresAt = Number(expiresRaw);
   const now = options.now ?? Date.now();
 
-  if (!adminId || !cloudflareSubject || !organizationId || !reasonHash) return null;
+  if (!adminId || !cloudflareSubject || !organizationId || !reasonHash || !writeSessionId) return null;
   if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)) return null;
   if (!options.ignoreExpiry && expiresAt < now) return null;
   if (issuedAt > now + 60_000) return null;
@@ -209,6 +264,7 @@ export function parseAdminPreviewWriteCookieValue(
     issuedAt,
     expiresAt,
     reasonHash,
+    writeSessionId,
   };
 
   if (!signaturesEqual(signPayload(payload), signature)) return null;
@@ -232,12 +288,18 @@ export function sanitizeAdminPreviewAuditMetadata(
   });
 }
 
+export function sanitizePreviewWriteReason(reason: string) {
+  return reason.trim().slice(0, ADMIN_PREVIEW_WRITE_REASON_MAX);
+}
+
 export function buildAdminPreviewAuditMetadata(input: {
   adminId: string;
   email: string;
   organizationId: string;
   actionKey?: string;
   reason?: string;
+  reasonHash?: string;
+  writeSessionId?: string;
   writeModeExpiry?: number | null;
   denialReason?: string;
   before?: Record<string, unknown>;
@@ -249,7 +311,9 @@ export function buildAdminPreviewAuditMetadata(input: {
     emailMasked: maskPlatformAdminEmail(input.email),
     organizationId: input.organizationId,
     ...(input.actionKey ? { actionKey: input.actionKey } : {}),
-    ...(input.reason ? { reason: input.reason.slice(0, ADMIN_PREVIEW_WRITE_REASON_MAX) } : {}),
+    ...(input.reason ? { reason: sanitizePreviewWriteReason(input.reason) } : {}),
+    ...(input.reasonHash ? { reasonHash: input.reasonHash } : {}),
+    ...(input.writeSessionId ? { writeSessionId: input.writeSessionId } : {}),
     ...(input.writeModeExpiry != null ? { writeModeExpiry: input.writeModeExpiry } : {}),
     ...(input.denialReason ? { denialReason: input.denialReason } : {}),
     ...(input.before ? { before: input.before } : {}),
@@ -442,6 +506,8 @@ export async function auditAdminPreviewWriteSuccess(input: {
   organizationId: string;
   actionKey?: string;
   reason?: string;
+  reasonHash?: string;
+  writeSessionId?: string;
   writeModeExpiry?: number | null;
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;
@@ -453,6 +519,8 @@ export async function auditAdminPreviewWriteSuccess(input: {
     organizationId: input.organizationId,
     actionKey: input.actionKey,
     reason: input.reason,
+    reasonHash: input.reasonHash,
+    writeSessionId: input.writeSessionId,
     writeModeExpiry: input.writeModeExpiry,
     before: input.before,
     after: input.after,
@@ -471,6 +539,34 @@ export async function auditAdminPreviewWriteSuccess(input: {
     },
     input.client,
   );
+}
+
+/**
+ * Write `admin.preview.write` using the caller's transaction client.
+ * Must be invoked inside the same Prisma `$transaction` as the domain mutation.
+ */
+export async function writeAdminPreviewMutationAuditInTransaction(
+  client: AuditClient,
+  input: {
+    organizationId: string;
+    binding: AdminPreviewWriteAuditBinding;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  },
+) {
+  await auditAdminPreviewWriteSuccess({
+    action: "admin.preview.write",
+    adminId: input.binding.adminId,
+    email: input.binding.email,
+    organizationId: input.organizationId,
+    actionKey: input.binding.actionKey,
+    reasonHash: input.binding.reasonHash,
+    writeSessionId: input.binding.writeSessionId,
+    writeModeExpiry: input.binding.writeModeExpiry,
+    before: input.before,
+    after: input.after,
+    client,
+  });
 }
 
 export type AssertAdminPreviewWriteResult =
@@ -598,6 +694,54 @@ export function evaluateAdminPreviewWriteGate(input: {
     return { ok: false, reason: "organization_demo" };
   }
   return { ok: true, capability: input.capability };
+}
+
+/**
+ * Pure disable-write decision (unit + DB regressions).
+ * Form organizationId is never trusted for the audited tenant.
+ */
+export function evaluateAdminPreviewDisableRequest(input: {
+  formOrganizationId: string;
+  capability: AdminPreviewWriteCapability | null;
+  adminId: string;
+  cloudflareSubject: string;
+}):
+  | { ok: true; organizationId: string; capability: AdminPreviewWriteCapability }
+  | {
+      ok: false;
+      reason: "missing_capability" | "capability_mismatch";
+      /** Clear cookie only when capability missing or session-bound mismatch. */
+      clearCookie: boolean;
+      /** Audit organizationId when denial should be recorded (capability org). */
+      auditOrganizationId?: string;
+    } {
+  if (!input.capability) {
+    return { ok: false, reason: "missing_capability", clearCookie: true };
+  }
+  if (
+    input.capability.adminId !== input.adminId ||
+    input.capability.cloudflareSubject !== input.cloudflareSubject
+  ) {
+    return {
+      ok: false,
+      reason: "capability_mismatch",
+      clearCookie: true,
+      auditOrganizationId: input.capability.organizationId,
+    };
+  }
+  if (input.formOrganizationId && input.formOrganizationId !== input.capability.organizationId) {
+    return {
+      ok: false,
+      reason: "capability_mismatch",
+      clearCookie: false,
+      auditOrganizationId: input.capability.organizationId,
+    };
+  }
+  return {
+    ok: true,
+    organizationId: input.capability.organizationId,
+    capability: input.capability,
+  };
 }
 
 /**
