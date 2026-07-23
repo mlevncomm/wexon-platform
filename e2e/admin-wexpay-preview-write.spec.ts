@@ -185,17 +185,64 @@ test.describe.serial("admin wexpay preview write controls (PR3)", () => {
 
   test("PR3: demo cannot enable write", async ({ page }) => {
     const { email } = requireFixtures();
-    expect(fixtures.demoOrgId, "demo org fixture required").toBeTruthy();
-    await loginAdmin(page, email, password);
-    await page.goto(await previewPath(fixtures.demoOrgId!));
+    const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const product = await prisma.product.findFirstOrThrow({
+      where: { key: "wexpay", isActive: true },
+      select: { id: true },
+    });
+    const plan = await prisma.plan.findFirstOrThrow({
+      where: { productId: product.id, isActive: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+    const demoOrg = await prisma.organization.create({
+      data: {
+        name: `PR3 Demo ${stamp}`,
+        slug: `pr3-demo-${stamp}`,
+        isActive: true,
+        isDemo: true,
+      },
+      select: { id: true },
+    });
+    const demoLicense = await prisma.license.create({
+      data: {
+        organizationId: demoOrg.id,
+        productId: product.id,
+        planId: plan.id,
+        status: "ACTIVE",
+        licenseType: "MONTHLY",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+      select: { id: true },
+    });
+    await prisma.appInstallation.create({
+      data: {
+        organizationId: demoOrg.id,
+        productId: product.id,
+        licenseId: demoLicense.id,
+        status: "ACTIVE",
+      },
+    });
 
-    // Demo may still open preview; write enable must be absent or denied.
-    const banner = page.getByTestId("admin-wexpay-preview-banner");
-    if (await banner.count()) {
-      await expect(banner).toContainText(/Demo/i);
-      await expect(page.getByTestId("admin-preview-enable-write-form")).toHaveCount(0);
-    } else {
-      await expect(page.locator("body")).toContainText(/erişim|yetki|demo|reddedildi/i);
+    try {
+      await loginAdmin(page, email, password);
+      await page.goto(await previewPath(demoOrg.id));
+
+      const banner = page.getByTestId("admin-wexpay-preview-banner");
+      if (await banner.count()) {
+        await expect(banner).toContainText(/Demo/i);
+        await expect(page.getByTestId("admin-preview-enable-write-form")).toHaveCount(0);
+        await expect(page.getByTestId("admin-preview-write-mode")).toContainText(/Read-only/i);
+      } else {
+        // Product access may still deny demo tenants — write enable must remain impossible.
+        await expect(page.getByTestId("admin-preview-enable-write-form")).toHaveCount(0);
+        await expect(page.locator("body")).toContainText(/erişim|yetki|demo|reddedildi|önizleme/i);
+      }
+    } finally {
+      await prisma.appInstallation.deleteMany({ where: { organizationId: demoOrg.id } });
+      await prisma.license.deleteMany({ where: { organizationId: demoOrg.id } });
+      await prisma.organization.delete({ where: { id: demoOrg.id } }).catch(() => undefined);
     }
   });
 
