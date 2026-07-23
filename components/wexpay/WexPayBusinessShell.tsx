@@ -20,18 +20,18 @@ type TabItem = {
   branchScoped?: boolean;
 };
 
-/** Real app routes only — plan order for sidebar. */
-const tabs: TabItem[] = [
-  { label: "Genel Bakış", path: "/apps/wexpay", branchScoped: true },
-  { label: "Siparişler", path: "/apps/wexpay/orders", branchScoped: true },
-  { label: "Masalar", path: "/apps/wexpay/tables", branchScoped: true },
-  { label: "Menü", path: "/apps/wexpay/menu", branchScoped: true },
-  { label: "Mutfak", path: "/apps/wexpay/kitchen", branchScoped: true },
-  { label: "Ödemeler", path: "/apps/wexpay/payments", branchScoped: true },
-  { label: "Raporlar", path: "/apps/wexpay/reports", branchScoped: true },
-  { label: "Restoranlar", path: "/apps/wexpay/restaurants" },
-  { label: "Şubeler", path: "/apps/wexpay/branches" },
-  { label: "Paket / Lisans", path: "/apps/wexpay/settings" },
+/** Suffixes relative to basePath — plan order for sidebar. */
+const tabDefs: Array<{ label: string; suffix: string; branchScoped?: boolean }> = [
+  { label: "Genel Bakış", suffix: "", branchScoped: true },
+  { label: "Siparişler", suffix: "/orders", branchScoped: true },
+  { label: "Masalar", suffix: "/tables", branchScoped: true },
+  { label: "Menü", suffix: "/menu", branchScoped: true },
+  { label: "Mutfak", suffix: "/kitchen", branchScoped: true },
+  { label: "Ödemeler", suffix: "/payments", branchScoped: true },
+  { label: "Raporlar", suffix: "/reports", branchScoped: true },
+  { label: "Restoranlar", suffix: "/restaurants" },
+  { label: "Şubeler", suffix: "/branches" },
+  { label: "Paket / Lisans", suffix: "/settings" },
 ];
 
 type ShellFeatures = {
@@ -42,33 +42,57 @@ type ShellFeatures = {
   settings?: boolean;
 };
 
+function normalizeBasePath(basePath: string) {
+  const trimmed = basePath.replace(/\/+$/, "");
+  return trimmed || "/apps/wexpay";
+}
+
+function buildTabs(basePath: string): TabItem[] {
+  const base = normalizeBasePath(basePath);
+  return tabDefs.map((tab) => ({
+    label: tab.label,
+    path: `${base}${tab.suffix}`,
+    branchScoped: tab.branchScoped,
+  }));
+}
+
 function buildHref(
   path: string,
   branchId: string | null,
   branchScoped: boolean | undefined,
   organizationId: string | null,
+  basePath: string,
 ) {
   const params = new URLSearchParams();
-  if (organizationId) params.set("organizationId", organizationId);
+  // Admin preview encodes org in the path — avoid leaking org query on that surface.
+  if (organizationId && !normalizeBasePath(basePath).startsWith("/admin/organizations/")) {
+    params.set("organizationId", organizationId);
+  }
   if (branchScoped && branchId) params.set("branchId", branchId);
   const query = params.toString();
+  if (normalizeBasePath(basePath).startsWith("/admin/organizations/")) {
+    return query ? `${path}?${query}` : path;
+  }
   return appNavigationUrl(path, query);
 }
 
-function isActiveTab(pathname: string, tabPath: string) {
-  if (tabPath === "/apps/wexpay") return pathname === "/apps/wexpay";
+function isActiveTab(pathname: string, tabPath: string, basePath: string) {
+  const base = normalizeBasePath(basePath);
+  if (tabPath === base) return pathname === base || pathname === `${base}/`;
   return pathname === tabPath || pathname.startsWith(`${tabPath}/`);
 }
 
-function isBranchScopedPath(pathname: string) {
+function isBranchScopedPath(pathname: string, basePath: string) {
+  const base = normalizeBasePath(basePath);
   return (
-    pathname === "/apps/wexpay" ||
-    pathname.startsWith("/apps/wexpay/tables") ||
-    pathname.startsWith("/apps/wexpay/kitchen") ||
-    pathname.startsWith("/apps/wexpay/orders") ||
-    pathname.startsWith("/apps/wexpay/menu") ||
-    pathname.startsWith("/apps/wexpay/payments") ||
-    pathname.startsWith("/apps/wexpay/reports")
+    pathname === base ||
+    pathname === `${base}/` ||
+    pathname.startsWith(`${base}/tables`) ||
+    pathname.startsWith(`${base}/kitchen`) ||
+    pathname.startsWith(`${base}/orders`) ||
+    pathname.startsWith(`${base}/menu`) ||
+    pathname.startsWith(`${base}/payments`) ||
+    pathname.startsWith(`${base}/reports`)
   );
 }
 
@@ -122,6 +146,7 @@ function NavLinks({
   branchId,
   organizationId,
   features,
+  basePath,
   onNavigate,
 }: {
   pathname: string;
@@ -129,27 +154,30 @@ function NavLinks({
   branchId: string | null;
   organizationId: string | null;
   features: ShellFeatures;
+  basePath: string;
   onNavigate?: () => void;
 }) {
+  const tabs = buildTabs(basePath);
+  const settingsPath = `${normalizeBasePath(basePath)}/settings`;
+  const reportsPath = `${normalizeBasePath(basePath)}/reports`;
+  const branchesPath = `${normalizeBasePath(basePath)}/branches`;
   const visibleTabs =
-    features.settings === false
-      ? tabs.filter((tab) => tab.path !== "/apps/wexpay/settings")
-      : tabs;
+    features.settings === false ? tabs.filter((tab) => tab.path !== settingsPath) : tabs;
 
   return (
     <nav className="flex flex-col gap-0.5" aria-label="WexPay navigasyon">
       {visibleTabs.map((tab) => {
-        const active = isActiveTab(pathname, tab.path);
+        const active = isActiveTab(pathname, tab.path, basePath);
         const lockedHint =
-          tab.path === "/apps/wexpay/reports" && !features.advancedReports && !features.csvExport
+          tab.path === reportsPath && !features.advancedReports && !features.csvExport
             ? " · Temel"
-            : tab.path === "/apps/wexpay/branches" && !features.multiLocation
+            : tab.path === branchesPath && !features.multiLocation
               ? " · Tek şube"
               : "";
         return (
           <Link
             key={tab.path}
-            href={buildHref(tab.path, activeBranchId ?? branchId, tab.branchScoped, organizationId)}
+            href={buildHref(tab.path, activeBranchId ?? branchId, tab.branchScoped, organizationId, basePath)}
             onClick={onNavigate}
             className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
               active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
@@ -179,6 +207,7 @@ function MobileNavDrawer({
   packageInfo,
   dashboardHref,
   features,
+  basePath,
 }: {
   open: boolean;
   onClose: () => void;
@@ -190,6 +219,7 @@ function MobileNavDrawer({
   packageInfo: { planName: string; licenseStatus: string };
   dashboardHref: string;
   features: ShellFeatures;
+  basePath: string;
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -268,6 +298,7 @@ function MobileNavDrawer({
             branchId={branchId}
             organizationId={organizationId}
             features={features}
+            basePath={basePath}
             onNavigate={onClose}
           />
           {branches.length > 1 ? (
@@ -276,9 +307,9 @@ function MobileNavDrawer({
               <div className="flex flex-col gap-1">
                 {branches.map((branch) => {
                   const active = branch.id === (activeBranch?.id ?? branchId);
-                  const branchHref = isBranchScopedPath(pathname)
-                    ? buildHref(pathname, branch.id, true, organizationId)
-                    : buildHref("/apps/wexpay", branch.id, true, organizationId);
+                  const branchHref = isBranchScopedPath(pathname, basePath)
+                    ? buildHref(pathname, branch.id, true, organizationId, basePath)
+                    : buildHref(normalizeBasePath(basePath), branch.id, true, organizationId, basePath);
                   return (
                     <Link
                       key={branch.id}
@@ -314,6 +345,7 @@ export default function WexPayBusinessShell({
   organizationName,
   organizationId,
   isAdminPreview = false,
+  basePath = "/apps/wexpay",
   branches,
   packageInfo,
   features = { multiLocation: true, csvExport: true, advancedReports: true },
@@ -322,6 +354,8 @@ export default function WexPayBusinessShell({
   organizationName: string;
   organizationId: string;
   isAdminPreview?: boolean;
+  /** Panel route prefix — `/apps/wexpay` or admin preview base. */
+  basePath?: string;
   branches: BranchOption[];
   packageInfo: { planName: string; licenseStatus: string };
   features?: ShellFeatures;
@@ -401,9 +435,9 @@ export default function WexPayBusinessShell({
           <div className={`flex gap-2 overflow-x-auto border-t border-slate-100 py-2 ${WORKSPACE_PAGE_PADDING}`}>
             {branches.map((branch) => {
               const active = branch.id === (activeBranch?.id ?? branchId);
-              const branchHref = isBranchScopedPath(pathname)
-                ? buildHref(pathname, branch.id, true, activeOrganizationId)
-                : buildHref("/apps/wexpay", branch.id, true, activeOrganizationId);
+              const branchHref = isBranchScopedPath(pathname, basePath)
+                ? buildHref(pathname, branch.id, true, activeOrganizationId, basePath)
+                : buildHref(normalizeBasePath(basePath), branch.id, true, activeOrganizationId, basePath);
               return (
                 <Link
                   key={branch.id}
@@ -442,6 +476,7 @@ export default function WexPayBusinessShell({
                 branchId={branchId}
                 organizationId={activeOrganizationId}
                 features={features}
+                basePath={basePath}
               />
             </div>
             <ShellPackageCard
@@ -473,6 +508,7 @@ export default function WexPayBusinessShell({
         packageInfo={packageInfo}
         dashboardHref={dashboardHref}
         features={features}
+        basePath={basePath}
       />
     </div>
   );

@@ -8,7 +8,7 @@ import {
   AdminSummaryCard,
 } from "@/components/marketing/WexonAdminCards";
 import { getAdminDemoLeadFollowUpWidgetData, getAdminOverviewData } from "@/lib/wexon-admin";
-import { dashboardPreviewHref, wexpayHref } from "@/lib/wexon-organization-context";
+import { dashboardPreviewHref, wexpayAdminPreviewOrgHref } from "@/lib/wexon-organization-context";
 
 export default async function AdminPage() {
   const [{ organizations, licenses, invoices, auditLogs, wexPayAccessDecisions }, demoLeadFollowUp] = await Promise.all([
@@ -80,7 +80,7 @@ export default async function AdminPage() {
               Son müşteri: Core önizleme
             </Link>
             <Link
-              href={wexpayHref("/apps/wexpay", organizations[0].id)}
+              href={wexpayAdminPreviewOrgHref(organizations[0].id)}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50"
             >
               Son müşteri: WexPay

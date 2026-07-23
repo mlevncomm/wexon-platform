@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dashboardPreviewHref, wexpayHref } from "@/lib/wexon-organization-context";
+import { dashboardPreviewHref, wexpayAdminPreviewOrgHref } from "@/lib/wexon-organization-context";
 import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle } from "@/components/marketing/WexonAdminCards";
 import {
   AdminActionNotice,
@@ -211,7 +211,7 @@ export default async function AdminOrganizationDetailPage({
               Wexon Core paneli
             </Link>
             <Link
-              href={wexpayHref("/apps/wexpay", organization.id)}
+              href={wexpayAdminPreviewOrgHref(organization.id)}
               className="inline-flex rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/20"
             >
               WexPay operasyonları
