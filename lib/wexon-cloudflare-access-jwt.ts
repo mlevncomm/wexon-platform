@@ -202,13 +202,13 @@ export async function verifyCloudflareAccessJwtFromHeaders(
     throw new CloudflareAccessJwtError("missing_token");
   }
 
-  // Reject obvious unsigned / empty alg bypass payloads before jose.
+  // Accept RS256 only — reject RS384/RS512/ES* / none before jose.
   const headerPart = token.split(".")[0] ?? "";
   try {
     const headerJson = JSON.parse(Buffer.from(headerPart, "base64url").toString("utf8")) as {
       alg?: string;
     };
-    if (!headerJson.alg || headerJson.alg === "none" || headerJson.alg === "None") {
+    if (!headerJson.alg || headerJson.alg !== "RS256") {
       throw new CloudflareAccessJwtError("alg_rejected");
     }
   } catch (error) {
@@ -221,7 +221,7 @@ export async function verifyCloudflareAccessJwtFromHeaders(
     const { payload } = await jwtVerify(token, jwks, {
       issuer: resolved.config.issuer,
       audience: resolved.config.audience,
-      algorithms: ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"],
+      algorithms: ["RS256"],
       clockTolerance: 5,
     });
     return extractIdentity(payload);

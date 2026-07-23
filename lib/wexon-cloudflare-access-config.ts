@@ -12,6 +12,11 @@ export const CF_ACCESS_EMAIL_HEADER = "cf-access-authenticated-user-email";
 export const ADMIN_ACCESS_GENERIC_DENIED = "Yönetim paneline erişim reddedildi.";
 export const ADMIN_ACCESS_GENERIC_CONFIG = "Yönetim paneli yapılandırması eksik.";
 
+/** Canonical Cloudflare Access team host suffix (non-test runtimes). */
+export const CF_ACCESS_TEAM_DOMAIN_SUFFIX = ".cloudflareaccess.com";
+/** Local/CI test-only team domain suffix (never on Vercel production/preview). */
+export const CF_ACCESS_TEST_TEAM_DOMAIN_SUFFIX = ".example.invalid";
+
 export type CloudflareAccessConfig = {
   teamDomain: string;
   audience: string;
@@ -23,14 +28,24 @@ function trimEnv(name: string) {
   return (process.env[name] ?? "").trim();
 }
 
+function vercelDeployEnv() {
+  return (process.env.VERCEL_ENV ?? "").trim().toLowerCase();
+}
+
 /**
- * Test-only CF Access overrides.
- * Allowed when NODE_ENV=test OR WEXON_CF_ACCESS_TEST_MODE=1,
- * and NEVER when Vercel hosted production.
+ * Test-only CF Access overrides (local JWKS / minted JWTs).
+ *
+ * Allowed only for real local/CI:
+ * - `NODE_ENV=test` (CI unit/E2E), or
+ * - explicit `WEXON_CF_ACCESS_TEST_MODE=1`
+ *
+ * Never on hosted Vercel production or preview — even if the opt-in flag is set.
  */
 export function isCloudflareAccessTestMode(): boolean {
+  const vercelEnv = vercelDeployEnv();
+  if (vercelEnv === "production" || vercelEnv === "preview") return false;
   if (isHostedProduction()) return false;
-  if (process.env.VERCEL_ENV === "production") return false;
+
   if (process.env.NODE_ENV === "test") return true;
   return process.env.WEXON_CF_ACCESS_TEST_MODE === "1";
 }
@@ -40,6 +55,24 @@ export function isCloudflareAccessRequired(): boolean {
   // Test mode still verifies JWTs — against the local JWKS provider.
   // Shared-password bypass is never available.
   return true;
+}
+
+export function isCanonicalCloudflareAccessTeamDomain(teamDomain: string): boolean {
+  const host = teamDomain.trim().toLowerCase();
+  return (
+    host.endsWith(CF_ACCESS_TEAM_DOMAIN_SUFFIX) &&
+    host.length > CF_ACCESS_TEAM_DOMAIN_SUFFIX.length &&
+    !host.includes("..")
+  );
+}
+
+export function isLocalTestCloudflareAccessTeamDomain(teamDomain: string): boolean {
+  const host = teamDomain.trim().toLowerCase();
+  return (
+    host.endsWith(CF_ACCESS_TEST_TEAM_DOMAIN_SUFFIX) &&
+    host.length > CF_ACCESS_TEST_TEAM_DOMAIN_SUFFIX.length &&
+    !host.includes("..")
+  );
 }
 
 export function resolveCloudflareAccessConfig():
@@ -54,6 +87,20 @@ export function resolveCloudflareAccessConfig():
 
   // Canonical team hostname only (no user-controlled path / scheme injection).
   if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(teamDomain) || teamDomain.includes("..")) {
+    return { ok: false, reason: "invalid_team_domain" };
+  }
+
+  const testMode = isCloudflareAccessTestMode();
+  if (testMode) {
+    // Local test provider `.example.invalid` OR real Cloudflare Access host.
+    if (
+      !isLocalTestCloudflareAccessTeamDomain(teamDomain) &&
+      !isCanonicalCloudflareAccessTeamDomain(teamDomain)
+    ) {
+      return { ok: false, reason: "invalid_team_domain" };
+    }
+  } else if (!isCanonicalCloudflareAccessTeamDomain(teamDomain)) {
+    // Non-test runtime: only *.cloudflareaccess.com.
     return { ok: false, reason: "invalid_team_domain" };
   }
 

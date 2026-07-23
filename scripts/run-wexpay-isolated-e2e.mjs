@@ -35,7 +35,7 @@ const mandatoryPlatformAdminTests = [
 ];
 const mandatoryAdminIdentityTests = [
   "PR2B: CF JWT + active PlatformAdmin reaches dashboard",
-  "PR2B: shared password form no longer logs in",
+  "PR2B: password fields absent and stale password POST does not mint session",
   "PR2B: missing JWT denies admin continue",
   "PR2B: logout clears v3 session cookie",
   "PR2B: v3 cookie without JWT is denied",
@@ -74,6 +74,8 @@ function isolatedEnv() {
   return {
     DATABASE_URL: url,
     DIRECT_URL: url,
+    // Required by seed-platform-admin-e2e + shared local DB test guard.
+    WEXON_ALLOW_LOCAL_DB_TESTS: "1",
     WEXON_E2E_TARGET: "isolated",
     WEXON_E2E_CONFIRM_ISOLATED: "true",
     E2E_BASE_URL: `http://localhost:${port}`,

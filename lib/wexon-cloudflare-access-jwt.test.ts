@@ -3,7 +3,9 @@ import { after, before, describe, it } from "node:test";
 import {
   CF_ACCESS_JWT_HEADER,
   cloudflareAccessAuditSafeMeta,
+  isCloudflareAccessTestMode,
   mustIgnoreCloudflareEmailHeaderAlone,
+  resolveCloudflareAccessConfig,
   setCloudflareAccessJwksResolverForTests,
   verifyCloudflareAccessJwtFromHeaders,
   CloudflareAccessJwtError,
@@ -13,7 +15,7 @@ import {
   generateCloudflareAccessTestKeys,
   mintCloudflareAccessTestJwt,
 } from "./wexon-cloudflare-access-test";
-import { createLocalJWKSet } from "jose";
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 
 function withEnv(snapshot: Record<string, string | undefined>, fn: () => Promise<void> | void) {
   const previous = new Map<string, string | undefined>();
@@ -64,6 +66,111 @@ describe("Cloudflare Access JWT verification", () => {
       assert.equal(identity.emailNormalized, "ops@wexon.dev");
       assert.equal(identity.subject, "cf-sub-1");
     });
+  });
+
+  it("rejects RS512 signed tokens (RS256 only)", async () => {
+    await withEnv(baseEnv, async () => {
+      const { privateKey, publicKey } = await generateKeyPair("RS512", { extractable: true });
+      const privateJwk = await exportJWK(privateKey);
+      const publicJwk = await exportJWK(publicKey);
+      privateJwk.alg = "RS512";
+      privateJwk.kid = "rs512-test";
+      publicJwk.alg = "RS512";
+      publicJwk.kid = "rs512-test";
+      setCloudflareAccessJwksResolverForTests(async () => createLocalJWKSet({ keys: [publicJwk] }));
+
+      const now = Math.floor(Date.now() / 1000);
+      const token = await new SignJWT({ email: "ops@wexon.dev" })
+        .setProtectedHeader({ alg: "RS512", kid: "rs512-test", typ: "JWT" })
+        .setIssuer(`https://${baseEnv.CLOUDFLARE_ACCESS_TEAM_DOMAIN}`)
+        .setAudience(baseEnv.CLOUDFLARE_ACCESS_AUD)
+        .setSubject("cf-sub-rs512")
+        .setIssuedAt(now)
+        .setNotBefore(now)
+        .setExpirationTime(now + 3600)
+        .sign(privateKey);
+
+      await assert.rejects(
+        () => verifyCloudflareAccessJwtFromHeaders(new Headers({ [CF_ACCESS_JWT_HEADER]: token })),
+        (error: unknown) => error instanceof CloudflareAccessJwtError && error.code === "alg_rejected",
+      );
+    });
+  });
+
+  it("rejects ES256 signed tokens (RS256 only)", async () => {
+    await withEnv(baseEnv, async () => {
+      const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
+      const privateJwk = await exportJWK(privateKey);
+      const publicJwk = await exportJWK(publicKey);
+      privateJwk.alg = "ES256";
+      privateJwk.kid = "es256-test";
+      publicJwk.alg = "ES256";
+      publicJwk.kid = "es256-test";
+      setCloudflareAccessJwksResolverForTests(async () => createLocalJWKSet({ keys: [publicJwk] }));
+
+      const now = Math.floor(Date.now() / 1000);
+      const token = await new SignJWT({ email: "ops@wexon.dev" })
+        .setProtectedHeader({ alg: "ES256", kid: "es256-test", typ: "JWT" })
+        .setIssuer(`https://${baseEnv.CLOUDFLARE_ACCESS_TEAM_DOMAIN}`)
+        .setAudience(baseEnv.CLOUDFLARE_ACCESS_AUD)
+        .setSubject("cf-sub-es256")
+        .setIssuedAt(now)
+        .setNotBefore(now)
+        .setExpirationTime(now + 3600)
+        .sign(privateKey);
+
+      await assert.rejects(
+        () => verifyCloudflareAccessJwtFromHeaders(new Headers({ [CF_ACCESS_JWT_HEADER]: token })),
+        (error: unknown) => error instanceof CloudflareAccessJwtError && error.code === "alg_rejected",
+      );
+    });
+  });
+
+  it("rejects Cloudflare Access test mode on Vercel preview", async () => {
+    await withEnv(
+      {
+        ...baseEnv,
+        NODE_ENV: "development",
+        VERCEL_ENV: "preview",
+        WEXON_CF_ACCESS_TEST_MODE: "1",
+      },
+      () => {
+        assert.equal(isCloudflareAccessTestMode(), false);
+      },
+    );
+  });
+
+  it("rejects Cloudflare Access test mode on Vercel production", async () => {
+    await withEnv(
+      {
+        ...baseEnv,
+        NODE_ENV: "production",
+        VERCEL_ENV: "production",
+        WEXON_CF_ACCESS_TEST_MODE: "1",
+      },
+      () => {
+        assert.equal(isCloudflareAccessTestMode(), false);
+      },
+    );
+  });
+
+  it("rejects fake/non-Cloudflare team domain in production", async () => {
+    await withEnv(
+      {
+        NODE_ENV: "production",
+        VERCEL_ENV: "production",
+        WEXON_CF_ACCESS_TEST_MODE: undefined,
+        CLOUDFLARE_ACCESS_TEAM_DOMAIN: "evil.example.com",
+        CLOUDFLARE_ACCESS_AUD: "aud",
+        WEXON_CF_ACCESS_TEST_PUBLIC_JWKS: undefined,
+      },
+      () => {
+        assert.equal(isCloudflareAccessTestMode(), false);
+        const resolved = resolveCloudflareAccessConfig();
+        assert.equal(resolved.ok, false);
+        if (!resolved.ok) assert.equal(resolved.reason, "invalid_team_domain");
+      },
+    );
   });
 
   it("rejects expired tokens", async () => {

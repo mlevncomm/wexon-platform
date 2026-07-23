@@ -224,6 +224,18 @@ export function isProductionLikeEnv(env: EnvMap) {
   return env.NODE_ENV === "production" || env.VERCEL_ENV === "production";
 }
 
+/** Hosted Vercel preview — must not accept CF Access test JWT/JWKS opt-ins. */
+export function isPreviewDeployEnv(env: EnvMap) {
+  return (env.VERCEL_ENV ?? "").trim().toLowerCase() === "preview";
+}
+
+/** CF Access test material — forbidden on production and preview deployments. */
+export const CF_ACCESS_TEST_FORBIDDEN_ENVS = [
+  "WEXON_CF_ACCESS_TEST_MODE",
+  "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+  "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
+] as const;
+
 export type ValidateDeployEnvironmentOptions = {
   strictPsp?: boolean;
   /** Force https + non-localhost APP_URL even when not production-like */
@@ -294,6 +306,15 @@ export function validateDeployEnvironment(
         issues.push({
           code: "forbidden_env",
           message: `${name} must be unset in production.`,
+        });
+      }
+    }
+  } else if (isPreviewDeployEnv(env)) {
+    for (const name of CF_ACCESS_TEST_FORBIDDEN_ENVS) {
+      if (isSet(env, name)) {
+        issues.push({
+          code: "forbidden_env",
+          message: `${name} must be unset in preview.`,
         });
       }
     }

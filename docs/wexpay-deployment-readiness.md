@@ -10,19 +10,20 @@ This document describes how to prepare a **Vercel production** deploy for Wexon/
 |----------|------|
 | `DATABASE_URL` | Runtime / serverless pooler connection (e.g. Supabase pooler) |
 | `DIRECT_URL` | Direct Postgres for Prisma migrate and admin tooling |
-| `ADMIN_SESSION_SECRET` | Admin session HMAC secret (≥32 chars) |
+| `ADMIN_SESSION_SECRET` | Admin session HMAC secret (≥32 chars, non-placeholder) |
 | `CLOUDFLARE_ACCESS_TEAM_DOMAIN` | Cloudflare Access team hostname (issuer/JWKS) |
 | `CLOUDFLARE_ACCESS_AUD` | Cloudflare Access admin application audience |
 | `ADMIN_EMAILS` | Rollback-only (not authorization after PR2B) |
 | `ADMIN_LOGIN_PASSWORD` | Rollback-only (not authorization after PR2B) |
-| `ADMIN_SESSION_SECRET` | Signed admin session (≥32, non-placeholder) |
 | `CUSTOMER_SESSION_SECRET` | Signed customer session (≥32, non-placeholder) |
 | `API_KEY_HASH_SECRET` | **Required** — API key hashing (≥32, no fallback) |
 | `NEXT_PUBLIC_APP_URL` | Canonical HTTPS public origin (no localhost) |
 | `MAINTENANCE_MODE` | Explicit `true` / `false` |
 | `WEXPAY_PAYTR_ENABLE_API` | **Must be `false`** for this readiness stage |
 
-Forbidden in production (must be unset): `CUSTOMER_DEV_LOGIN_PASSWORD`, `WEXON_E2E_RELAX_RATE_LIMIT`, `WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT`, `WEXON_PUBLIC_ASSIST_COOLDOWN_MS`.
+Forbidden in production (must be unset): `CUSTOMER_DEV_LOGIN_PASSWORD`, `WEXON_E2E_RELAX_RATE_LIMIT`, `WEXON_E2E_FORCE_PUBLIC_QR_RATE_LIMIT`, `WEXON_PUBLIC_ASSIST_COOLDOWN_MS`, `WEXON_CF_ACCESS_TEST_MODE`, `WEXON_CF_ACCESS_TEST_PRIVATE_JWK`, `WEXON_CF_ACCESS_TEST_PUBLIC_JWKS`.
+
+Forbidden in preview (must be unset): `WEXON_CF_ACCESS_TEST_MODE`, `WEXON_CF_ACCESS_TEST_PRIVATE_JWK`, `WEXON_CF_ACCESS_TEST_PUBLIC_JWKS`.
 
 PSP optional until virtual POS: `WEXPAY_CREDENTIAL_ENCRYPTION_KEY` (use `production:check:psp` when enabling).
 

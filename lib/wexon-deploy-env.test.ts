@@ -105,11 +105,40 @@ describe("deploy environment validation", () => {
   });
 
   it("forbids CF Access test mode envs in production-like env", () => {
-    const report = validateDeployEnvironment(
-      baseEnv({ WEXON_CF_ACCESS_TEST_MODE: "1" }),
-    );
-    assert.equal(report.ok, false);
-    assert.ok(report.issues.some((i) => i.code === "forbidden_env"));
+    for (const name of [
+      "WEXON_CF_ACCESS_TEST_MODE",
+      "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+      "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
+    ] as const) {
+      const report = validateDeployEnvironment(baseEnv({ [name]: "1" }));
+      assert.equal(report.ok, false, name);
+      assert.ok(
+        report.issues.some((i) => i.code === "forbidden_env" && i.message.includes(name)),
+        name,
+      );
+    }
+  });
+
+  it("forbids CF Access test mode envs in preview env", () => {
+    for (const name of [
+      "WEXON_CF_ACCESS_TEST_MODE",
+      "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+      "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
+    ] as const) {
+      const report = validateDeployEnvironment(
+        baseEnv({
+          NODE_ENV: "development",
+          VERCEL_ENV: "preview",
+          NEXT_PUBLIC_APP_URL: "https://preview.example.com",
+          [name]: name === "WEXON_CF_ACCESS_TEST_MODE" ? "1" : '{"keys":[]}',
+        }),
+      );
+      assert.equal(report.ok, false, name);
+      assert.ok(
+        report.issues.some((i) => i.code === "forbidden_env" && i.message.includes(name)),
+        name,
+      );
+    }
   });
 
   it("masks secrets in messages", () => {

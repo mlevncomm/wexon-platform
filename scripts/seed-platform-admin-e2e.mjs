@@ -1,29 +1,58 @@
 #!/usr/bin/env node
 /**
  * Upsert an ACTIVE PlatformAdmin for local/CI admin E2E.
+ * Fail-closed: only runs against loopback `_test`/`_e2e` DBs with
+ * `WEXON_ALLOW_LOCAL_DB_TESTS=1` (see lib/wexon-local-db-test-guard.ts).
  * Uses E2E_ADMIN_EMAIL / ADMIN_EMAILS — never for production cutover.
+ *
+ * Prefer: `node --import tsx scripts/seed-platform-admin-e2e.mjs`
  */
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { register } from "node:module";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import dotenv from "dotenv";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Allow plain `node scripts/seed-platform-admin-e2e.mjs` to import the TS guard.
+try {
+  register("tsx/esm", pathToFileURL(join(root, "package.json")));
+} catch {
+  // Already registered via `node --import tsx`, or tsx unavailable (guard import will fail loudly).
+}
 
 function loadLocalEnvFile(fileName, { override = false } = {}) {
   const fullPath = resolve(process.cwd(), fileName);
   if (!existsSync(fullPath)) return;
   const parsed = dotenv.parse(readFileSync(fullPath));
   for (const [key, value] of Object.entries(parsed)) {
+    // Never override caller/CI-injected env (especially DATABASE_URL / DIRECT_URL).
     if (override || !process.env[key]) process.env[key] = value;
   }
 }
 
 loadLocalEnvFile(".env");
-loadLocalEnvFile(".env.local", { override: true });
+loadLocalEnvFile(".env.local");
 
-if (process.env.VERCEL_ENV === "production") {
-  throw new Error("Refusing to seed PlatformAdmin E2E fixture on Vercel production.");
+// Guard MUST run before any Prisma import/client/query.
+const { assertLocalDbTestGuard } = await import(
+  pathToFileURL(join(root, "lib/wexon-local-db-test-guard.ts")).href
+);
+
+let allowed;
+try {
+  allowed = assertLocalDbTestGuard(process.env);
+} catch (error) {
+  console.error(
+    error instanceof Error ? error.message : "[db-test-guard] seed PlatformAdmin E2E reddedildi.",
+  );
+  process.exit(1);
 }
+
+console.error(
+  `[seed-platform-admin-e2e] guard OK: host=${allowed.host} database=${allowed.database}`,
+);
 
 const email =
   process.env.E2E_ADMIN_EMAIL?.trim() ||
@@ -36,11 +65,16 @@ if (!email) {
 }
 
 const emailNormalized = email.trim().toLowerCase();
-const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+// Prefer DIRECT_URL for admin tooling when present; both already passed the guard.
+const databaseUrl = (process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "").trim();
 if (!databaseUrl) {
-  throw new Error("DIRECT_URL or DATABASE_URL required");
+  console.error("[seed-platform-admin-e2e] DIRECT_URL or DATABASE_URL required");
+  process.exit(1);
 }
 
+// Prisma only after guard passes.
+const { PrismaClient } = await import("@prisma/client");
+const { PrismaPg } = await import("@prisma/adapter-pg");
 const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 
 async function main() {

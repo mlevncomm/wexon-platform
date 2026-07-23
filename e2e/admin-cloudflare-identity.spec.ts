@@ -32,7 +32,9 @@ test.describe.serial("admin cloudflare identity (PR2B)", () => {
     await expect(page.locator("body")).not.toContainText(/ADMIN_LOGIN_PASSWORD|ADMIN_SESSION_SECRET|eyJhbGciOi/i);
   });
 
-  test("PR2B: shared password form no longer logs in", async ({ page }) => {
+  test("PR2B: password fields absent and stale password POST does not mint session", async ({
+    page,
+  }) => {
     requireAdminEmail();
     expect(password, "shared password env present for negative test").toBeTruthy();
 
@@ -41,7 +43,8 @@ test.describe.serial("admin cloudflare identity (PR2B)", () => {
     await expect(page.locator('input[name="password"]')).toHaveCount(0);
     await expect(page.locator('input[name="email"]')).toHaveCount(0);
 
-    // Stale password POST path (loginAdminAction) must hard-deny.
+    // Evidence: a raw form POST with shared password must not mint admin session cookies.
+    // Deterministic Server Action hard-deny is covered by unit tests (loginAdminAction).
     const response = await page.request.post("/admin/login", {
       form: {
         email: "pr4-isolated-admin@example.test",
@@ -50,11 +53,13 @@ test.describe.serial("admin cloudflare identity (PR2B)", () => {
       },
       maxRedirects: 0,
     });
-    // Server action / form posts typically redirect; never mint v3.
     const cookies = await page.context().cookies();
     expect(cookieByName(cookies, "wexon_admin_session_v3")).toBeNull();
     expect(cookieByName(cookies, "wexon_admin_session_v2")).toBeNull();
-    void response;
+    expect(cookieByName(cookies, "wexon_admin_session")).toBeNull();
+    // Must not land on an authenticated admin surface.
+    const location = response.headers()["location"] ?? "";
+    expect(location).not.toMatch(/\/admin\/?$/);
   });
 
   test("PR2B: missing JWT denies admin continue", async ({ page }) => {

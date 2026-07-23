@@ -1,6 +1,6 @@
 /**
  * Test-only Cloudflare Access JWT/JWKS helpers (local + CI).
- * Must never activate on Vercel production (see isCloudflareAccessTestMode).
+ * Must never activate on Vercel production or preview (see isCloudflareAccessTestMode).
  */
 
 import { exportJWK, generateKeyPair, SignJWT, type JWK, type JSONWebKeySet } from "jose";
