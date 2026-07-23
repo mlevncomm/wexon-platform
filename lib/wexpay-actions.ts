@@ -30,6 +30,11 @@ import {
   type WexPayMutationContext,
 } from "@/lib/wexpay-service";
 import { writeAuditFailure } from "@/lib/wexon-audit";
+import { isAllowedWexPayRedirectPath } from "@/lib/wexon-admin-preview-path";
+import {
+  assertAdminPreviewWriteAllowed,
+  auditAdminPreviewWriteSuccess,
+} from "@/lib/wexon-admin-preview-write";
 import { resolveWexPaySessionContext, WexPayAccessError } from "@/lib/wexpay-tenant";
 import {
   parseBranchCreate,
@@ -87,7 +92,36 @@ function revalidateWexPayOperations() {
 
 function readRedirect(formData: FormData, fallback: string) {
   const value = formData.get("redirectTo");
-  return typeof value === "string" && value.startsWith("/apps/wexpay") ? value : fallback;
+  return typeof value === "string" && isAllowedWexPayRedirectPath(value) ? value : fallback;
+}
+
+async function auditAdminPreviewMutationIfNeeded(
+  context: WexPayMutationContext | undefined,
+  actionKey: string,
+) {
+  if (!context || context.actor.type !== "admin_session") return;
+
+  const allowed = await assertAdminPreviewWriteAllowed({
+    organizationId: context.organizationId,
+    actionKey,
+    auditDenial: false,
+  });
+  if (!allowed.ok) {
+    throw new WexPayAccessError(allowed.message, "role");
+  }
+
+  try {
+    await auditAdminPreviewWriteSuccess({
+      action: "admin.preview.write",
+      adminId: allowed.session.adminId,
+      email: allowed.session.email,
+      organizationId: context.organizationId,
+      actionKey,
+      writeModeExpiry: allowed.capability.expiresAt,
+    });
+  } catch {
+    throw new WexPayAccessError("Denetim kaydı yazılamadı; işlem iptal edildi.", "role");
+  }
 }
 
 function throwIfRedirectError(error: unknown) {
@@ -194,6 +228,7 @@ export async function createRestaurantAction(formData: FormData) {
     const input = parseRestaurantCreate(formData);
     context = await getManageContext();
     await createRestaurant(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_restaurant");
     revalidatePath(RESTAURANTS_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -209,6 +244,7 @@ export async function updateRestaurantAction(formData: FormData) {
     const input = parseRestaurantUpdate(formData);
     context = await getManageContext();
     await updateRestaurant(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_restaurant");
     revalidatePath(RESTAURANTS_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -226,6 +262,7 @@ export async function createBranchAction(formData: FormData) {
     const input = parseBranchCreate(formData);
     context = await getManageContext();
     await createBranch(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_branch");
     revalidatePath(BRANCHES_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -241,6 +278,7 @@ export async function updateBranchAction(formData: FormData) {
     const input = parseBranchUpdate(formData);
     context = await getManageContext();
     await updateBranch(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_branch");
     revalidatePath(BRANCHES_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -258,6 +296,7 @@ export async function createTableAction(formData: FormData) {
     const input = parseTableCreate(formData);
     context = await getManageContext();
     await createTable(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_table");
     revalidatePath(TABLES_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -273,6 +312,7 @@ export async function createTablesBulkAction(formData: FormData) {
     const input = parseTableBulkCreate(formData);
     context = await getManageContext();
     await createTablesBulk(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_tables_bulk");
     revalidatePath(TABLES_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -288,6 +328,7 @@ export async function updateTableAction(formData: FormData) {
     const input = parseTableUpdate(formData);
     context = await getManageContext();
     await updateTable(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_table");
     revalidatePath(TABLES_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -303,6 +344,7 @@ export async function closeTableAction(formData: FormData) {
     const input = parseTableClose(formData);
     context = await getCapabilityContext({ cashier: true });
     await closeTable(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "close_table");
     revalidateWexPayOperations();
   } catch (error) {
     throwIfRedirectError(error);
@@ -318,6 +360,7 @@ export async function markReceiptPrintedAction(formData: FormData) {
     const input = parseTableReceiptPrinted(formData);
     context = await getCapabilityContext({ cashier: true });
     await markReceiptPrinted(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "mark_receipt_printed");
     revalidateWexPayOperations();
   } catch (error) {
     throwIfRedirectError(error);
@@ -335,6 +378,7 @@ export async function createCategoryAction(formData: FormData) {
     const input = parseCategoryCreate(formData);
     context = await getManageContext();
     await createCategory(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_category");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -350,6 +394,7 @@ export async function updateCategoryAction(formData: FormData) {
     const input = parseCategoryUpdate(formData);
     context = await getManageContext();
     await updateCategory(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_category");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -367,6 +412,7 @@ export async function createProductAction(formData: FormData) {
     const input = parseProductCreate(formData);
     context = await getManageContext();
     await createProduct(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_product");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -382,6 +428,7 @@ export async function updateProductAction(formData: FormData) {
     const input = parseProductUpdate(formData);
     context = await getManageContext();
     await updateProduct(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_product");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -397,6 +444,7 @@ export async function createModifierGroupAction(formData: FormData) {
     const input = parseModifierGroupCreate(formData);
     context = await getManageContext();
     await createModifierGroup(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_modifier_group");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -412,6 +460,7 @@ export async function updateModifierGroupAction(formData: FormData) {
     const input = parseModifierGroupUpdate(formData);
     context = await getManageContext();
     await updateModifierGroup(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_modifier_group");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -427,6 +476,7 @@ export async function createModifierOptionAction(formData: FormData) {
     const input = parseModifierOptionCreate(formData);
     context = await getManageContext();
     await createModifierOption(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_modifier_option");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -442,6 +492,7 @@ export async function updateModifierOptionAction(formData: FormData) {
     const input = parseModifierOptionUpdate(formData);
     context = await getManageContext();
     await updateModifierOption(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_modifier_option");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -457,6 +508,7 @@ export async function setProductModifierGroupsAction(formData: FormData) {
     const input = parseProductModifierLinks(formData);
     context = await getManageContext();
     await setProductModifierGroups(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "set_product_modifier_groups");
     revalidatePath(MENU_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -474,6 +526,7 @@ export async function createOrderAction(formData: FormData) {
     const input = parseOrderCreate(formData);
     context = await getCapabilityContext({ cashier: true });
     await createOrder(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_order");
     revalidatePath(ORDERS_PATH);
     revalidatePath(TABLES_PATH);
   } catch (error) {
@@ -490,6 +543,7 @@ export async function updateOrderStatusAction(formData: FormData) {
     const input = parseOrderStatusUpdate(formData);
     context = await getCapabilityContext({ kitchen: true });
     await updateOrderStatus(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_order_status");
     revalidateWexPayOperations();
   } catch (error) {
     throwIfRedirectError(error);
@@ -507,6 +561,7 @@ export async function createPaymentAction(formData: FormData) {
     const input = parsePaymentCreate(formData);
     context = await getCapabilityContext({ cashier: true });
     const result = await createPayment(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "create_payment");
     revalidatePath(PAYMENTS_PATH);
     revalidatePath(TABLES_PATH);
     if (result.externalCheckoutUrl) {
@@ -532,6 +587,7 @@ export async function regeneratePaytrCheckoutAction(formData: FormData) {
     }
     context = await getCapabilityContext({ cashier: true });
     const result = await regeneratePaytrCheckout(context, { paymentId: paymentId.trim() });
+    await auditAdminPreviewMutationIfNeeded(context, "regenerate_paytr_checkout");
     revalidatePath(PAYMENTS_PATH);
     revalidatePath(TABLES_PATH);
     const separator = redirectTo.includes("?") ? "&" : "?";
@@ -552,6 +608,7 @@ export async function updatePaymentAction(formData: FormData) {
     const input = parsePaymentUpdate(formData);
     context = await getCapabilityContext({ cashier: true });
     await updatePayment(context, input);
+    await auditAdminPreviewMutationIfNeeded(context, "update_payment");
     revalidatePath(PAYMENTS_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -585,6 +642,7 @@ export async function upsertProviderCredentialAction(formData: FormData) {
       primarySecret: prepared.primarySecret,
       isActive: true,
     });
+    await auditAdminPreviewMutationIfNeeded(context, "upsert_provider_credential");
     revalidatePath(SETTINGS_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -600,6 +658,7 @@ export async function deactivateProviderCredentialAction(formData: FormData) {
     const input = parseProviderCredentialDeactivate(formData);
     context = await getCapabilityContext({ settings: true });
     await deactivateWexPayProviderCredential(credentialAuditContext(context), input);
+    await auditAdminPreviewMutationIfNeeded(context, "deactivate_provider_credential");
     revalidatePath(SETTINGS_PATH);
   } catch (error) {
     throwIfRedirectError(error);
@@ -615,6 +674,7 @@ export async function testProviderCredentialAction(formData: FormData) {
     const input = parseProviderCredentialTest(formData);
     context = await getCapabilityContext({ settings: true });
     const result = await testProviderCredential(credentialAuditContext(context), input);
+    await auditAdminPreviewMutationIfNeeded(context, "test_provider_credential");
     revalidatePath(SETTINGS_PATH);
     const separator = redirectTo.includes("?") ? "&" : "?";
     const status = result.ok ? "ok" : "warn";

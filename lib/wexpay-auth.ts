@@ -1,10 +1,17 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
+import {
+  adminPreviewHasValidWriteCapability,
+  isAdminPreviewHostAllowed,
+} from "@/lib/wexon-admin-preview-write";
+import { wexpayAdminPreviewHref } from "@/lib/wexon-admin-preview-path";
 import { assertCustomerDashboardAccess, getCustomerSession } from "@/lib/wexon-customer-auth";
 import type { DashboardOrganizationSelector } from "@/lib/wexon-core-dashboard";
 import { findSelectedOrganization } from "@/lib/wexon-core-dashboard";
 import { requireProductAccess } from "@/lib/wexon-core-access";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
+import { isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
 import { prisma } from "@/lib/prisma";
 import { customerLoginUrl } from "@/lib/wexon/urls";
 
@@ -62,6 +69,7 @@ async function buildAllowedWexPayAccess(input: {
   mode: WexPayAccessMode;
   user: { id: string; email: string } | null;
   membership: { role: string } | null;
+  adminWriteAllowed?: boolean;
 }) {
   const coreDecision = await requireProductAccess({
     organizationId: input.organizationId,
@@ -109,15 +117,29 @@ async function buildAllowedWexPayAccess(input: {
   }
 
   const branches = organization.restaurants.flatMap((restaurant) => restaurant.branches);
-  const canManage =
-    input.mode === "admin_preview" ? true : input.membership ? canManageWexPay(input.membership.role) : false;
   const role = input.mode === "admin_preview" ? "ADMIN" : input.membership?.role ?? "VIEWER";
-  const canOperateKitchen =
-    input.mode === "admin_preview" ? true : canOperateKitchenWexPay(role);
-  const canOperateCashier =
-    input.mode === "admin_preview" ? true : canOperateCashierWexPay(role);
-  const canConfigureSettings =
-    input.mode === "admin_preview" ? true : canConfigureWexPaySettings(role);
+
+  let canManage = false;
+  let canOperateKitchen = false;
+  let canOperateCashier = false;
+  let canConfigureSettings = false;
+
+  if (input.mode === "admin_preview") {
+    // Admin preview: canAccess=true (allowed), manage flags only with write capability.
+    // Demo org never gets write flags.
+    const writeAllowed =
+      !organization.isDemo &&
+      Boolean(input.adminWriteAllowed);
+    canManage = writeAllowed;
+    canOperateKitchen = writeAllowed;
+    canOperateCashier = writeAllowed;
+    canConfigureSettings = writeAllowed;
+  } else if (input.membership) {
+    canManage = canManageWexPay(input.membership.role);
+    canOperateKitchen = canOperateKitchenWexPay(role);
+    canOperateCashier = canOperateCashierWexPay(role);
+    canConfigureSettings = canConfigureWexPaySettings(role);
+  }
 
   return {
     allowed: true as const,
@@ -132,6 +154,7 @@ async function buildAllowedWexPayAccess(input: {
     entitlementMap: coreDecision.entitlementMap,
     coreAccess: coreDecision,
     branches,
+    canAccess: true as const,
     canManage,
     canOperateKitchen,
     canOperateCashier,
@@ -187,12 +210,26 @@ export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSe
       redirect("/unauthorized");
     }
 
-    return buildAllowedWexPayAccess({
-      organizationId: selected.organization.id,
-      mode: "admin_preview",
-      user: null,
+    // getWexPayAccess is the /apps/wexpay gate. Admin preview belongs on the
+    // admin host only — redirect when possible; otherwise deny (no write).
+    const headerStore = await headers();
+    const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
+    const productionWexon = isWexonProductionDeployment();
+    const onAdminHost = isAdminPreviewHostAllowed(host, productionWexon);
+
+    if (onAdminHost) {
+      redirect(wexpayAdminPreviewHref(selected.organization.id));
+    }
+
+    // Cross-host legacy (app/core): admin session must not open manage on these hosts.
+    return {
+      allowed: false as const,
+      reason: "role" as const,
+      mode: "admin_preview" as const,
+      access: { user: null, organizationId: selected.organization.id },
       membership: null,
-    });
+      organization: selected.organization,
+    };
   }
 
   const nextParams = new URLSearchParams();
@@ -200,6 +237,51 @@ export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSe
   if (selector?.organizationSlug) nextParams.set("organizationSlug", selector.organizationSlug);
   const nextPath = nextParams.toString() ? `/apps/wexpay?${nextParams.toString()}` : "/apps/wexpay";
   redirect(customerLoginUrl({ next: nextPath }));
+}
+
+/**
+ * Admin-host preview access for `/admin/organizations/:id/wexpay-preview`.
+ * Defaults to read-only; write flags require a valid short-lived capability.
+ */
+export async function getWexPayAdminPreviewAccess(organizationId: string) {
+  const adminSession = await getAdminSession();
+  if (!adminSession) {
+    return {
+      allowed: false as const,
+      reason: "role" as const,
+      mode: "admin_preview" as const,
+      access: { user: null, organizationId },
+      membership: null,
+      organization: null,
+    };
+  }
+
+  const headerStore = await headers();
+  const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
+  if (!isAdminPreviewHostAllowed(host, isWexonProductionDeployment())) {
+    return {
+      allowed: false as const,
+      reason: "role" as const,
+      mode: "admin_preview" as const,
+      access: { user: null, organizationId },
+      membership: null,
+      organization: null,
+    };
+  }
+
+  const writeAllowed = await adminPreviewHasValidWriteCapability({
+    organizationId,
+    adminId: adminSession.adminId,
+    cloudflareSubject: adminSession.cloudflareSubject,
+  });
+
+  return buildAllowedWexPayAccess({
+    organizationId,
+    mode: "admin_preview",
+    user: null,
+    membership: null,
+    adminWriteAllowed: writeAllowed,
+  });
 }
 
 export async function assertWexPayAccess(explicitSelector?: DashboardOrganizationSelector) {

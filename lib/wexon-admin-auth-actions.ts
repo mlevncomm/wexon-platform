@@ -11,6 +11,7 @@ import {
   establishAdminSessionFromCloudflareAccess,
   isAdminAccessHostAllowed,
 } from "@/lib/wexon-admin-auth";
+import { clearAdminPreviewWriteCapabilityCookie } from "@/lib/wexon-admin-preview-write";
 import { clearCustomerSessionCookie } from "@/lib/wexon-customer-auth";
 import { defaultAdminPostLoginPath, safeAdminNextPath } from "@/lib/wexon-admin-login-next";
 import {
@@ -159,6 +160,7 @@ export async function loginAdminAction(formData: FormData) {
 
 export async function logoutAdminAction() {
   adminDebug("logout:start");
+  await clearAdminPreviewWriteCapabilityCookie();
   await clearAdminSessionCookie();
   await clearCustomerSessionCookie();
   await clearActiveOrganizationCookie();
