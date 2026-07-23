@@ -99,41 +99,78 @@ test.describe.serial("admin wexpay preview write controls (PR3)", () => {
 
   test("PR3: other-tenant mutation fails with Org A capability", async ({ page }) => {
     const { email, orgId } = requireFixtures();
-    expect(fixtures.inactiveWexPayOrgId || fixtures.demoOrgId, "second org for cross-tenant").toBeTruthy();
-    const otherOrgId = fixtures.inactiveWexPayOrgId ?? fixtures.demoOrgId!;
-
-    await loginAdmin(page, email, password);
-    await page.goto(await previewPath(orgId));
-    const org = await prisma.organization.findUniqueOrThrow({
-      where: { id: orgId },
-      select: { slug: true },
+    const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const product = await prisma.product.findFirstOrThrow({
+      where: { key: "wexpay", isActive: true },
+      select: { id: true },
     });
-    await page.getByTestId("admin-preview-slug").fill(org.slug);
-    await page.getByTestId("admin-preview-reason").fill("cross tenant deny check");
-    await page.getByTestId("admin-preview-enable-write").click();
-    await expect(page.getByTestId("admin-preview-write-mode")).toContainText(/Write-enabled/i, {
-      timeout: 15_000,
+    const plan = await prisma.plan.findFirstOrThrow({
+      where: { productId: product.id, isActive: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+    const otherOrg = await prisma.organization.create({
+      data: {
+        name: `PR3 Other ${stamp}`,
+        slug: `pr3-other-${stamp}`,
+        isActive: true,
+        isDemo: false,
+      },
+      select: { id: true },
+    });
+    const otherLicense = await prisma.license.create({
+      data: {
+        organizationId: otherOrg.id,
+        productId: product.id,
+        planId: plan.id,
+        status: "ACTIVE",
+        licenseType: "MONTHLY",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+      select: { id: true },
+    });
+    await prisma.appInstallation.create({
+      data: {
+        organizationId: otherOrg.id,
+        productId: product.id,
+        licenseId: otherLicense.id,
+        status: "ACTIVE",
+      },
     });
 
-    // Switching org must not inherit write — banner should be read-only on other org.
-    await page.goto(await previewPath(otherOrgId, "/restaurants"));
-    await expect(page.getByTestId("admin-wexpay-preview-banner")).toBeVisible();
-    // Demo/inactive may deny access entirely; if preview loads, write must be read-only.
-    const writeMode = page.getByTestId("admin-preview-write-mode");
-    if (await writeMode.count()) {
-      await expect(writeMode).toContainText(/Read-only/i);
-    }
+    try {
+      await loginAdmin(page, email, password);
+      await page.goto(await previewPath(orgId));
+      const org = await prisma.organization.findUniqueOrThrow({
+        where: { id: orgId },
+        select: { slug: true },
+      });
+      await page.getByTestId("admin-preview-slug").fill(org.slug);
+      await page.getByTestId("admin-preview-reason").fill("cross tenant deny check");
+      await page.getByTestId("admin-preview-enable-write").click();
+      await expect(page.getByTestId("admin-preview-write-mode")).toContainText(/Write-enabled/i, {
+        timeout: 15_000,
+      });
 
-    const before = await prisma.restaurant.count({ where: { organizationId: otherOrgId } });
-    if (await page.getByTestId("admin-preview-create-restaurant").count()) {
-      const stamp = Date.now().toString(36);
+      // Switching org must not inherit write — other tenant stays read-only.
+      await page.goto(await previewPath(otherOrg.id, "/restaurants"));
+      await expect(page.getByTestId("admin-wexpay-preview-banner")).toBeVisible();
+      await expect(page.getByTestId("admin-preview-write-mode")).toContainText(/Read-only/i);
+
+      const before = await prisma.restaurant.count({ where: { organizationId: otherOrg.id } });
       await page.getByTestId("admin-preview-create-restaurant").locator('input[name="name"]').fill(`XTenant ${stamp}`);
       await page.getByTestId("admin-preview-create-restaurant").locator('input[name="slug"]').fill(`xtenant-${stamp}`);
       await page.getByTestId("admin-preview-create-restaurant").getByRole("button", { name: /Restoran oluştur/i }).click();
       await page.waitForTimeout(1500);
+      const after = await prisma.restaurant.count({ where: { organizationId: otherOrg.id } });
+      expect(after).toBe(before);
+    } finally {
+      await prisma.appInstallation.deleteMany({ where: { organizationId: otherOrg.id } });
+      await prisma.license.deleteMany({ where: { organizationId: otherOrg.id } });
+      await prisma.restaurant.deleteMany({ where: { organizationId: otherOrg.id } });
+      await prisma.organization.delete({ where: { id: otherOrg.id } }).catch(() => undefined);
     }
-    const after = await prisma.restaurant.count({ where: { organizationId: otherOrgId } });
-    expect(after).toBe(before);
   });
 
   test("PR3: sticky banner on preview screens", async ({ page }) => {
