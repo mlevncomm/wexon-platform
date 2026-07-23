@@ -7,7 +7,7 @@ import { EXPECTED_PUBLIC_TABLE_COUNT } from "@/lib/wexon-db-backup-guards";
 assertLocalDbTestGuard(process.env);
 
 describe("ActivationFeeLedger RLS security (db)", () => {
-  it("public schema has 40 tables and ActivationFeeLedger RLS is enabled", async () => {
+  it("public schema has 41 tables and ActivationFeeLedger RLS is enabled", async () => {
     const tables = await prisma.$queryRaw<
       Array<{ table_name: string; rls: boolean }>
     >`
@@ -19,7 +19,7 @@ describe("ActivationFeeLedger RLS security (db)", () => {
     `;
 
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 40);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 41);
 
     for (const name of [
       "ActivationFeeLedger",
@@ -29,6 +29,7 @@ describe("ActivationFeeLedger RLS security (db)", () => {
       "StaffInvite",
       "MenuImportJob",
       "MenuImportRowError",
+      "PlatformAdmin",
     ]) {
       const row = tables.find((t) => t.table_name === name);
       assert.ok(row, `${name} must exist`);
@@ -47,7 +48,7 @@ describe("ActivationFeeLedger RLS security (db)", () => {
     assert.ok(roleNames.has("authenticated"), "authenticated role must exist (create before migrate in CI)");
     assert.ok(roleNames.has("wexon_app"), "wexon_app role must exist");
 
-    for (const table of ["ActivationFeeLedger", "StaffInvite"]) {
+    for (const table of ["ActivationFeeLedger", "StaffInvite", "PlatformAdmin"]) {
       const priv = await prisma.$queryRawUnsafe<
         Array<{
           anon_select: boolean;
@@ -92,18 +93,22 @@ describe("ActivationFeeLedger RLS security (db)", () => {
     assert.equal(role[0]!.rolcanlogin, false);
     assert.equal(role[0]!.rolbypassrls, false);
 
-    const policy = await prisma.$queryRaw<Array<{ polname: string }>>`
-      SELECT pol.polname
-      FROM pg_policy pol
-      JOIN pg_class c ON c.oid = pol.polrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public'
-        AND c.relname = 'ActivationFeeLedger'
-        AND pol.polname = 'wexon_app_all'
-    `;
-    assert.equal(policy.length, 1);
+    for (const table of ["ActivationFeeLedger", "PlatformAdmin"]) {
+      const policy = await prisma.$queryRawUnsafe<Array<{ polname: string }>>(
+        `SELECT pol.polname
+         FROM pg_policy pol
+         JOIN pg_class c ON c.oid = pol.polrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname = '${table}'
+           AND pol.polname = 'wexon_app_all'`,
+      );
+      assert.equal(policy.length, 1, `${table} wexon_app_all policy`);
+    }
 
     const count = await prisma.activationFeeLedger.count();
     assert.ok(Number.isFinite(count));
+    const platformAdminCount = await prisma.platformAdmin.count();
+    assert.ok(Number.isFinite(platformAdminCount));
   });
 });
