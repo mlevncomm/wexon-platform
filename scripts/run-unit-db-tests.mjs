@@ -56,6 +56,10 @@ const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "--test
   env: {
     ...process.env,
     WEXPAY_CREDENTIAL_ENCRYPTION_KEY: credentialEncryptionKey,
+    // PayTR callback URL builders require a public origin in local DB tests.
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN:
+      process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
   },
 });
 

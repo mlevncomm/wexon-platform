@@ -74,6 +74,10 @@ function actorRole(context: WexPayMutationContext): string | null {
 
 function assertManage(context: WexPayMutationContext) {
   if (context.canManage) return;
+  // Admin preview: canManage is the sole authority (role "ADMIN" must not bypass).
+  if (context.actor.type === "admin_session") {
+    throw new WexPayAccessError("Bu işlem için yetkiniz yok.", "role");
+  }
   const role = actorRole(context);
   if (role && canManageWexPay(role)) return;
   throw new WexPayAccessError("Bu işlem için yetkiniz yok.", "role");
@@ -81,6 +85,9 @@ function assertManage(context: WexPayMutationContext) {
 
 function assertKitchenOperate(context: WexPayMutationContext) {
   if (context.canManage) return;
+  if (context.actor.type === "admin_session") {
+    throw new WexPayAccessError("Mutfak işlemi için yetkiniz yok.", "role");
+  }
   const role = actorRole(context);
   if (role && canOperateKitchenWexPay(role)) return;
   throw new WexPayAccessError("Mutfak işlemi için yetkiniz yok.", "role");
@@ -88,6 +95,9 @@ function assertKitchenOperate(context: WexPayMutationContext) {
 
 function assertCashierOperate(context: WexPayMutationContext) {
   if (context.canManage) return;
+  if (context.actor.type === "admin_session") {
+    throw new WexPayAccessError("Kasa işlemi için yetkiniz yok.", "role");
+  }
   const role = actorRole(context);
   if (role && canOperateCashierWexPay(role)) return;
   throw new WexPayAccessError("Kasa işlemi için yetkiniz yok.", "role");
