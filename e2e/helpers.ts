@@ -143,6 +143,36 @@ export async function expectSessionCookieSecureFlags(page: Page, name: string) {
   return cookie!;
 }
 
+/** Admin session cookies must be host-only v2 (no Domain=.wexon.dev). */
+export async function expectAdminSessionCookieHostOnly(page: Page) {
+  const cookie = await expectSessionCookieSecureFlags(page, "wexon_admin_session_v2");
+  const domain = (cookie.domain || "").replace(/^\./, "");
+  const pageHost = new URL(page.url()).hostname;
+  expect(cookie.domain?.startsWith(".") ?? false, "admin cookie must not use Domain=.wexon.dev").toBe(false);
+  if (pageHost === "localhost" || pageHost === "127.0.0.1") {
+    expect(["localhost", "127.0.0.1"]).toContain(domain || pageHost);
+  }
+  // Legacy cookie must not grant a parallel session.
+  const legacy = cookieByName(await page.context().cookies(), "wexon_admin_session");
+  expect(!legacy || !legacy.value, "legacy wexon_admin_session must be absent or empty").toBeTruthy();
+  return cookie;
+}
+
+/** Seed necessary-only cookie consent so the marketing banner does not block E2E clicks. */
+export async function seedCookieConsentRejected(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "wexon_cookie_consent",
+      JSON.stringify({
+        necessary: true,
+        analytics: false,
+        marketing: false,
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+  });
+}
+
 export async function fillDemoRequestForm(
   page: Page,
   input: {

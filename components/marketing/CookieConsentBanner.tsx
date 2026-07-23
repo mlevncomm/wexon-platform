@@ -42,6 +42,7 @@ export default function CookieConsentBanner() {
     setManaging(false);
   }, []);
 
+  // SSR / pre-hydration: null. Admin host/path suppression lives in CookieConsentGate.
   if (stored === SSR_SNAPSHOT || stored) return null;
 
   return (

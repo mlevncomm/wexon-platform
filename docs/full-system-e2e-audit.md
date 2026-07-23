@@ -84,7 +84,7 @@ Env aliases documented in `.env.example`: `E2E_BASE_URL`, `E2E_PUBLIC_ORIGIN`, `
 ## 8. Remaining manual checks (production)
 
 1. **Cloudflare Access**: Visit `https://admin.wexon.dev` unauthenticated → Access login → then Wexon admin login. Verify with `npm run cloudflare:access:verify` (token in shell only).
-2. **Cross-subdomain session**: Login on `www.wexon.dev/login`, confirm `wexon_customer_session` / admin cookie `Domain=.wexon.dev`, then open `core.wexon.dev` and `app.wexon.dev` without re-login; logout clears all.
+2. **Cross-subdomain customer session**: Login on `www.wexon.dev/login`, confirm `wexon_customer_session` uses `Domain=.wexon.dev`, then open `core.wexon.dev` and `app.wexon.dev` without re-login. Admin sessions are **host-only** on `admin.wexon.dev` (not shared across subdomains).
 3. **Canonical redirect**: `https://wexon.dev/*` → `https://www.wexon.dev/*`.
 4. **Responsive spot-check** on real phone for hero + demo form + admin CRM table.
 5. **Do not** enable `WEXON_E2E_RELAX_RATE_LIMIT` on production hosts.

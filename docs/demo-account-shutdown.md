@@ -101,5 +101,5 @@ npm run audit:demo-accounts
 Customer and admin logout now clear:
 
 - `wexon_customer_session`
-- `wexon_admin_session`
+- `wexon_admin_session_v2` (legacy `wexon_admin_session` ignored)
 - `wexon_active_organization_id`
