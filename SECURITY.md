@@ -46,13 +46,18 @@ monitoring, backups, and fast incident response.
 
 - Admin and customer sessions are HTTP-only cookies.
 - Production session secrets must be at least 32 characters and non-placeholder.
-- Current admin shared-password auth is MVP-only. Before broader production use,
-  replace it with per-admin credentials and MFA.
-- Admin sessions use host-only cookie `wexon_admin_session_v2` on `admin.wexon.dev`
-  (not shared via `Domain=.wexon.dev`). Legacy `wexon_admin_session` is ignored.
-  After deploy, admins must sign in once on `admin.wexon.dev`.
-  Unified public login must not mint admin cookies. Production `loginAdminAction`
-  rejects non-admin hosts before credential checks.
+- Admin authorization (PR2B): Cloudflare Access JWT (`Cf-Access-Jwt-Assertion`) is
+  verified on every admin access check (signature via JWKS, issuer, audience, exp, nbf).
+  ACTIVE `PlatformAdmin` rows authorize access; first login binds `cloudflareSubject`.
+  Shared `ADMIN_LOGIN_PASSWORD` / `ADMIN_EMAILS` are **not** authorization sources
+  (kept in env for rollback only).
+- Admin sessions use host-only cookie `wexon_admin_session_v3` on `admin.wexon.dev`
+  (not shared via `Domain=.wexon.dev`). Prior `wexon_admin_session_v2` and legacy
+  `wexon_admin_session` are ignored. After deploy, admins must sign in once on
+  `admin.wexon.dev`. Session cookie alone is insufficient in production — a verified
+  Cloudflare JWT is required again on each admin request.
+  Unified public login must not mint admin cookies. Production continue-login
+  rejects non-admin hosts before identity work.
 
 ## Rate limiting
 

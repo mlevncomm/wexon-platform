@@ -166,8 +166,8 @@ export function decidePlatformAdminActiveStatus(input: {
 export type PlatformAdminReadiness = {
   activeCount: number;
   recommendAtLeastTwo: boolean;
-  cloudflareIdentity: "PR2B'de bağlanacak";
-  sharedPasswordTransitional: true;
+  cloudflareIdentity: "Aktif (JWT + subject)";
+  sharedPasswordTransitional: false;
   message: string;
 };
 
@@ -176,11 +176,11 @@ export function evaluatePlatformAdminReadiness(activeCount: number): PlatformAdm
   return {
     activeCount,
     recommendAtLeastTwo,
-    cloudflareIdentity: "PR2B'de bağlanacak",
-    sharedPasswordTransitional: true,
+    cloudflareIdentity: "Aktif (JWT + subject)",
+    sharedPasswordTransitional: false,
     message: recommendAtLeastTwo
-      ? "En az 2 aktif platform yöneticisi önerilir. Paylaşılan admin şifresi geçiş sürecinde hâlâ kullanılmaktadır."
-      : "Paylaşılan admin şifresi geçiş sürecinde hâlâ kullanılmaktadır. Cloudflare kimliği PR2B'de bağlanacak.",
+      ? "En az 2 aktif platform yöneticisi önerilir. Erişim Cloudflare Access JWT + PlatformAdmin eşleşmesi ile sağlanır."
+      : "Erişim Cloudflare Access JWT + PlatformAdmin eşleşmesi ile sağlanır. Paylaşılan admin şifresi yetkilendirme için kullanılmaz.",
   };
 }
 

@@ -10,8 +10,11 @@ This document describes how to prepare a **Vercel production** deploy for Wexon/
 |----------|------|
 | `DATABASE_URL` | Runtime / serverless pooler connection (e.g. Supabase pooler) |
 | `DIRECT_URL` | Direct Postgres for Prisma migrate and admin tooling |
-| `ADMIN_EMAILS` | Allowlisted admin emails |
-| `ADMIN_LOGIN_PASSWORD` | Admin bootstrap password (min 12, no placeholders) |
+| `ADMIN_SESSION_SECRET` | Admin session HMAC secret (≥32 chars) |
+| `CLOUDFLARE_ACCESS_TEAM_DOMAIN` | Cloudflare Access team hostname (issuer/JWKS) |
+| `CLOUDFLARE_ACCESS_AUD` | Cloudflare Access admin application audience |
+| `ADMIN_EMAILS` | Rollback-only (not authorization after PR2B) |
+| `ADMIN_LOGIN_PASSWORD` | Rollback-only (not authorization after PR2B) |
 | `ADMIN_SESSION_SECRET` | Signed admin session (≥32, non-placeholder) |
 | `CUSTOMER_SESSION_SECRET` | Signed customer session (≥32, non-placeholder) |
 | `API_KEY_HASH_SECRET` | **Required** — API key hashing (≥32, no fallback) |

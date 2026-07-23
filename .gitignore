@@ -13,6 +13,7 @@
 # testing
 /coverage
 /e2e/.fixtures.json
+/e2e/.cf-access-test-keys.json
 /e2e/.wexpay-run.json
 /e2e/.cleanup-report.json
 /e2e/.cleanup-report-*.json

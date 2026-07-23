@@ -9,6 +9,7 @@ import {
   isMaintenanceExemptRoute,
   isProductionWexonHost,
   isPublicRootHost,
+  isWexonProductionDeployment,
   MAINTENANCE_ENTRY_PATH,
   normalizeHost,
   publicPanelCanonicalTarget,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/wexon-canonical-host";
 import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
 import { ADMIN_SESSION_COOKIE } from "@/lib/wexon-admin-session-cookie";
+import { CF_ACCESS_JWT_HEADER } from "@/lib/wexon-cloudflare-access-config";
 
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
 const MAINTENANCE_MODE_ENABLED = process.env.MAINTENANCE_MODE === "true";
@@ -29,6 +31,25 @@ function adminProxyDebug(label: string, data?: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "production") {
     console.log("[WEXON_ADMIN_DEBUG]", label, data ?? {});
   }
+}
+
+/** Coarse presence check only — signature/claims verified in assertAdminAccess. */
+function hasCloudflareAccessJwtAssertion(request: NextRequest) {
+  const token =
+    request.headers.get(CF_ACCESS_JWT_HEADER) ??
+    request.headers.get("Cf-Access-Jwt-Assertion") ??
+    request.headers.get("CF-Access-JWT-Assertion");
+  return Boolean(token && token.trim());
+}
+
+function hasUsableAdminSessionCookie(request: NextRequest) {
+  const adminSessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+  if (!adminSessionCookie) return false;
+  // Production Wexon: cookie alone is insufficient — CF JWT must also be present.
+  if (isWexonProductionDeployment() && !hasCloudflareAccessJwtAssertion(request)) {
+    return false;
+  }
+  return true;
 }
 
 function stripAdminPrefix(pathname: string) {
@@ -74,15 +95,18 @@ function handleAdminHost(request: NextRequest) {
   const originalPathname = url.pathname;
   const { search } = url;
   const adminSessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+  const authed = hasUsableAdminSessionCookie(request);
 
   adminProxyDebug("admin-host:request", {
     originalPathname,
     method: request.method,
     hasAdminCookie: Boolean(adminSessionCookie),
+    hasCfJwt: hasCloudflareAccessJwtAssertion(request),
+    authed,
   });
 
   if (request.method === "GET" && originalPathname === "/") {
-    if (!adminSessionCookie) {
+    if (!authed) {
       url.pathname = "/login";
       url.search = "";
       adminProxyDebug("admin-host:redirect_root_login", { to: url.pathname });
@@ -95,7 +119,7 @@ function handleAdminHost(request: NextRequest) {
   }
 
   if (originalPathname === "/login" || originalPathname.startsWith("/login/")) {
-    if (adminSessionCookie && request.method === "GET") {
+    if (authed && request.method === "GET") {
       url.pathname = "/";
       url.search = "";
       adminProxyDebug("admin-host:redirect_login_authed", { to: url.pathname });
@@ -129,7 +153,7 @@ function handleAdminHost(request: NextRequest) {
       : NextResponse.next();
   }
 
-  if (!adminSessionCookie && routedPathname.startsWith("/admin")) {
+  if (!authed && routedPathname.startsWith("/admin")) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.search = "";
@@ -238,6 +262,7 @@ export function proxy(request: NextRequest) {
   const shouldRewrite = routedUrl.pathname !== originalPathname;
   const { pathname, search } = routedUrl;
   const adminSessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+  const adminAuthed = hasUsableAdminSessionCookie(request);
   const customerSessionCookie = request.cookies.get(CUSTOMER_SESSION_COOKIE)?.value;
 
   adminProxyDebug("proxy:request", {
@@ -249,6 +274,8 @@ export function proxy(request: NextRequest) {
     method: request.method,
     isLogin: pathname === "/admin/login",
     hasAdminCookie: Boolean(adminSessionCookie),
+    hasCfJwt: hasCloudflareAccessJwtAssertion(request),
+    adminAuthed,
     hasCustomerCookie: Boolean(customerSessionCookie),
   });
 
@@ -273,20 +300,20 @@ export function proxy(request: NextRequest) {
     return shouldRewrite ? NextResponse.rewrite(routedUrl) : NextResponse.next();
   }
 
-  if (pathname.startsWith("/admin") && !adminSessionCookie) {
+  if (pathname.startsWith("/admin") && !adminAuthed) {
     const nextPath = `${pathname}${search}`;
     const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, nextPath, "");
     adminProxyDebug("proxy:redirect_login", { from: pathname, to: loginTarget });
     return redirectTo(request, loginTarget);
   }
 
-  if (pathname.startsWith("/dashboard") && !customerSessionCookie && !adminSessionCookie) {
+  if (pathname.startsWith("/dashboard") && !customerSessionCookie && !adminAuthed) {
     const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, `${pathname}${search}`, "");
     adminProxyDebug("proxy:redirect_dashboard_login", { from: pathname, to: loginTarget });
     return redirectTo(request, loginTarget);
   }
 
-  if (pathname.startsWith("/apps/wexpay") && !customerSessionCookie && !adminSessionCookie) {
+  if (pathname.startsWith("/apps/wexpay") && !customerSessionCookie && !adminAuthed) {
     const loginTarget = resolveUnauthenticatedLoginRedirect(host, surface, `${pathname}${search}`, "");
     adminProxyDebug("proxy:redirect_wexpay_login", { from: pathname, to: loginTarget });
     return redirectTo(request, loginTarget);

@@ -205,6 +205,16 @@ async function prepare() {
     },
   });
 
+  run("node", ["scripts/seed-platform-admin-e2e.mjs"], {
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.DATABASE_URL,
+      DIRECT_URL: process.env.DIRECT_URL,
+      WEXON_E2E_TARGET: "isolated",
+      WEXON_E2E_CONFIRM_ISOLATED: "true",
+    },
+  });
+
   console.log("[e2e-db] fixture prepare complete");
 }
 
