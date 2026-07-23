@@ -40,6 +40,8 @@ export type WexPaySessionActor =
       type: "admin_session";
       email: string;
       role: "ADMIN";
+      adminId: string;
+      cloudflareSubject: string;
     };
 
 export type WexPaySessionContext = {
@@ -150,7 +152,13 @@ export async function resolveWexPaySessionContext(
     return {
       ok: true,
       organizationId,
-      actor: { type: "admin_session", email: adminSession.email, role: "ADMIN" },
+      actor: {
+        type: "admin_session",
+        email: adminSession.email,
+        role: "ADMIN",
+        adminId: adminSession.adminId,
+        cloudflareSubject: adminSession.cloudflareSubject,
+      },
       role: "ADMIN",
       // Deny-by-default: manage flags only when a short-lived write capability is valid.
       canManage: writeAllowed,

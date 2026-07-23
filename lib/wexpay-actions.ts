@@ -146,8 +146,10 @@ async function bindAdminPreviewWriteIfNeeded(
     ...context,
     adminPreviewWrite: {
       actionKey,
+      organizationId: allowed.capability.organizationId,
       adminId: allowed.session.adminId,
       email: allowed.session.email,
+      cloudflareSubject: allowed.capability.cloudflareSubject,
       reasonHash: allowed.capability.reasonHash,
       writeSessionId: allowed.capability.writeSessionId,
       writeModeExpiry: allowed.capability.expiresAt,

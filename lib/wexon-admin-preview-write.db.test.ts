@@ -1,13 +1,23 @@
 /**
  * DB-backed admin preview write-control tests (PR3).
  * Gated by assertLocalDbTestGuard — remote/prod targets fail closed.
+ *
+ * Service hard-deny cases call real production service functions
+ * (not only evaluate* helpers) and assert DB unchanged on deny.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
+import { PaymentStatus } from ".prisma/client";
 import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
-import { createRestaurant, type WexPayMutationContext } from "@/lib/wexpay-service";
+import {
+  __setAdminPreviewMutationAuditWriterForTests,
+  createBranch,
+  createRestaurant,
+  updatePayment,
+  type WexPayMutationContext,
+} from "@/lib/wexpay-service";
 import { WexPayAccessError } from "@/lib/wexpay-tenant";
 import {
   buildAdminPreviewWriteCapability,
@@ -25,6 +35,10 @@ const suffix = randomUUID().slice(0, 8);
 const createdOrgIds: string[] = [];
 const createdRestaurantIds: string[] = [];
 
+const ADMIN_ID = "admin_1";
+const ADMIN_SUBJECT = "cf-1";
+const ADMIN_EMAIL = `preview+${suffix}@wexon.test`;
+
 function withSecret<T>(fn: () => T): T {
   const previous = process.env.ADMIN_SESSION_SECRET;
   process.env.ADMIN_SESSION_SECRET = `db-test-preview-secret-${suffix}`;
@@ -40,6 +54,11 @@ function adminContext(
   organizationId: string,
   canManage: boolean,
   adminPreviewWrite?: WexPayMutationContext["adminPreviewWrite"],
+  actorOverrides: Partial<{
+    adminId: string;
+    email: string;
+    cloudflareSubject: string;
+  }> = {},
 ): WexPayMutationContext {
   return {
     organizationId,
@@ -50,7 +69,13 @@ function adminContext(
       product_limit: 500,
       feature_multi_location: true,
     },
-    actor: { type: "admin_session", email: `preview+${suffix}@wexon.test`, role: "ADMIN" },
+    actor: {
+      type: "admin_session",
+      email: actorOverrides.email ?? ADMIN_EMAIL,
+      role: "ADMIN",
+      adminId: actorOverrides.adminId ?? ADMIN_ID,
+      cloudflareSubject: actorOverrides.cloudflareSubject ?? ADMIN_SUBJECT,
+    },
     ipAddress: "127.0.0.1",
     adminPreviewWrite: adminPreviewWrite ?? null,
   };
@@ -88,15 +113,17 @@ function previewBinding(
 ) {
   return withSecret(() => {
     const capability = buildAdminPreviewWriteCapability({
-      adminId: "admin_1",
-      cloudflareSubject: "cf-1",
+      adminId: ADMIN_ID,
+      cloudflareSubject: ADMIN_SUBJECT,
       organizationId,
       reason,
     });
     return {
       actionKey,
-      adminId: "admin_1",
-      email: `preview+${suffix}@wexon.test`,
+      organizationId,
+      adminId: ADMIN_ID,
+      email: ADMIN_EMAIL,
+      cloudflareSubject: ADMIN_SUBJECT,
       reasonHash: capability.reasonHash,
       writeSessionId: capability.writeSessionId,
       writeModeExpiry: capability.expiresAt,
@@ -171,6 +198,7 @@ describe("admin preview write controls (db)", () => {
   });
 
   after(async () => {
+    __setAdminPreviewMutationAuditWriterForTests(null);
     if (createdRestaurantIds.length) {
       await prisma.restaurant.deleteMany({ where: { id: { in: createdRestaurantIds } } });
     }
@@ -196,22 +224,167 @@ describe("admin preview write controls (db)", () => {
     assert.equal(after, before);
   });
 
-  it("production-path createRestaurant audit failure rolls back domain mutation", async () => {
+  it("service hard-deny: admin_session canManage=true without binding is denied and DB unchanged", async () => {
     const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
-    const binding = previewBinding(orgA.id, "create_restaurant", "rollback reason path", {
-      writeAudit: async () => {
-        throw new Error("audit_failed");
-      },
+    await assert.rejects(
+      () =>
+        createRestaurant(adminContext(orgA.id, true, null), {
+          name: `NoBind ${suffix}`,
+          slug: `no-bind-${suffix}`,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+    const after = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    assert.equal(after, before);
+    const leaked = await prisma.restaurant.findFirst({
+      where: { organizationId: orgA.id, slug: `no-bind-${suffix}` },
     });
+    assert.equal(leaked, null);
+  });
 
+  it("service hard-deny: Org A binding + Org B context is denied and DB unchanged", async () => {
+    const beforeB = await prisma.restaurant.count({ where: { organizationId: orgB.id } });
+    const binding = previewBinding(orgA.id, "create_restaurant");
+    await assert.rejects(
+      () =>
+        createRestaurant(adminContext(orgB.id, true, binding), {
+          name: `CrossOrg ${suffix}`,
+          slug: `cross-org-${suffix}`,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+    const afterB = await prisma.restaurant.count({ where: { organizationId: orgB.id } });
+    assert.equal(afterB, beforeB);
+    const leaked = await prisma.restaurant.findFirst({
+      where: { organizationId: orgB.id, slug: `cross-org-${suffix}` },
+    });
+    assert.equal(leaked, null);
+  });
+
+  it("service hard-deny: create_restaurant binding cannot call create_branch (action mismatch)", async () => {
+    const restaurant = await createRestaurant(
+      adminContext(orgA.id, true, previewBinding(orgA.id, "create_restaurant")),
+      {
+        name: `Mismatch Host ${suffix}`,
+        slug: `mismatch-host-${suffix}`,
+      },
+    );
+    createdRestaurantIds.push(restaurant.id);
+
+    const beforeBranches = await prisma.branch.count({
+      where: { restaurant: { organizationId: orgA.id } },
+    });
+    await assert.rejects(
+      () =>
+        createBranch(adminContext(orgA.id, true, previewBinding(orgA.id, "create_restaurant")), {
+          restaurantId: restaurant.id,
+          name: `Mismatch Branch ${suffix}`,
+          slug: `mismatch-branch-${suffix}`,
+          address: null,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+    const afterBranches = await prisma.branch.count({
+      where: { restaurant: { organizationId: orgA.id } },
+    });
+    assert.equal(afterBranches, beforeBranches);
+  });
+
+  it("service hard-deny: create_restaurant binding cannot call update_payment (action mismatch)", async () => {
+    await assert.rejects(
+      () =>
+        updatePayment(adminContext(orgA.id, true, previewBinding(orgA.id, "create_restaurant")), {
+          paymentId: randomUUID(),
+          status: PaymentStatus.PAID,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+  });
+
+  it("service hard-deny: expired binding is denied and DB unchanged", async () => {
+    const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    const binding = previewBinding(orgA.id, "create_restaurant", "expired binding reason", {
+      writeModeExpiry: Date.now() - 1_000,
+    });
     await assert.rejects(
       () =>
         createRestaurant(adminContext(orgA.id, true, binding), {
-          name: `AuditFail Real ${suffix}`,
-          slug: `audit-fail-real-${suffix}`,
+          name: `Expired ${suffix}`,
+          slug: `expired-${suffix}`,
         }),
-      (error: unknown) => error instanceof Error && error.message.includes("audit_failed"),
+      (error: unknown) => error instanceof WexPayAccessError,
     );
+    const after = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    assert.equal(after, before);
+  });
+
+  it("service hard-deny: actor adminId mismatch is denied and DB unchanged", async () => {
+    const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    const binding = previewBinding(orgA.id, "create_restaurant");
+    await assert.rejects(
+      () =>
+        createRestaurant(adminContext(orgA.id, true, binding, { adminId: "other-admin" }), {
+          name: `AdminIdMismatch ${suffix}`,
+          slug: `adminid-mismatch-${suffix}`,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+    assert.equal(await prisma.restaurant.count({ where: { organizationId: orgA.id } }), before);
+  });
+
+  it("service hard-deny: actor cloudflareSubject mismatch is denied and DB unchanged", async () => {
+    const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    const binding = previewBinding(orgA.id, "create_restaurant");
+    await assert.rejects(
+      () =>
+        createRestaurant(
+          adminContext(orgA.id, true, binding, { cloudflareSubject: "other-subject" }),
+          {
+            name: `SubjectMismatch ${suffix}`,
+            slug: `subject-mismatch-${suffix}`,
+          },
+        ),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+    assert.equal(await prisma.restaurant.count({ where: { organizationId: orgA.id } }), before);
+  });
+
+  it("service hard-deny: actor email mismatch is denied and DB unchanged", async () => {
+    const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    const binding = previewBinding(orgA.id, "create_restaurant");
+    await assert.rejects(
+      () =>
+        createRestaurant(
+          adminContext(orgA.id, true, binding, { email: `other+${suffix}@wexon.test` }),
+          {
+            name: `EmailMismatch ${suffix}`,
+            slug: `email-mismatch-${suffix}`,
+          },
+        ),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+    assert.equal(await prisma.restaurant.count({ where: { organizationId: orgA.id } }), before);
+  });
+
+  it("production-path createRestaurant audit failure rolls back domain mutation", async () => {
+    const before = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
+    const binding = previewBinding(orgA.id, "create_restaurant", "rollback reason path");
+    __setAdminPreviewMutationAuditWriterForTests(async () => {
+      throw new Error("audit_failed");
+    });
+
+    try {
+      await assert.rejects(
+        () =>
+          createRestaurant(adminContext(orgA.id, true, binding), {
+            name: `AuditFail Real ${suffix}`,
+            slug: `audit-fail-real-${suffix}`,
+          }),
+        (error: unknown) => error instanceof Error && error.message.includes("audit_failed"),
+      );
+    } finally {
+      __setAdminPreviewMutationAuditWriterForTests(null);
+    }
 
     const after = await prisma.restaurant.count({ where: { organizationId: orgA.id } });
     assert.equal(after, before);
@@ -262,15 +435,15 @@ describe("admin preview write controls (db)", () => {
   it("Org A capability denies Org B mutation at gate", async () => {
     withSecret(() => {
       const capability = buildAdminPreviewWriteCapability({
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: orgA.id,
         reason: "support write window",
       });
       const forB = evaluateAdminPreviewWriteGate({
         capability,
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: orgB.id,
         organization: { isActive: true, isDemo: false },
       });
@@ -282,16 +455,16 @@ describe("admin preview write controls (db)", () => {
   it("Org A capability + Org B disable request denied", async () => {
     withSecret(() => {
       const capability = buildAdminPreviewWriteCapability({
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: orgA.id,
         reason: "support write window",
       });
       const decision = evaluateAdminPreviewDisableRequest({
         formOrganizationId: orgB.id,
         capability,
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
       });
       assert.equal(decision.ok, false);
       if (!decision.ok) {
@@ -305,15 +478,15 @@ describe("admin preview write controls (db)", () => {
   it("demo write enable gate always denied", async () => {
     withSecret(() => {
       const capability = buildAdminPreviewWriteCapability({
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: demoOrg.id,
         reason: "attempt demo write",
       });
       const gate = evaluateAdminPreviewWriteGate({
         capability,
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: demoOrg.id,
         organization: { isActive: true, isDemo: true },
       });
@@ -336,15 +509,15 @@ describe("admin preview write controls (db)", () => {
   it("inactive organization denied", async () => {
     withSecret(() => {
       const capability = buildAdminPreviewWriteCapability({
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: inactiveOrg.id,
         reason: "support write window",
       });
       const gate = evaluateAdminPreviewWriteGate({
         capability,
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: inactiveOrg.id,
         organization: { isActive: false, isDemo: false },
       });
@@ -376,8 +549,8 @@ describe("admin preview write controls (db)", () => {
     const reason = "db test enable reason";
     const capability = withSecret(() =>
       buildAdminPreviewWriteCapability({
-        adminId: "admin_1",
-        cloudflareSubject: "cf-1",
+        adminId: ADMIN_ID,
+        cloudflareSubject: ADMIN_SUBJECT,
         organizationId: orgA.id,
         reason,
       }),
@@ -389,7 +562,7 @@ describe("admin preview write controls (db)", () => {
       entityId: orgA.id,
       source: "admin_preview_write",
       metadata: {
-        adminId: "admin_1",
+        adminId: ADMIN_ID,
         emailMasked: "a***@wexon.dev",
         actionKey: "enable_write",
         reason,

@@ -47,6 +47,9 @@ function isDatabaseUnavailable(error: unknown) {
   );
 }
 
+let ownerUserId = "";
+let staffUserId = "";
+
 function manageContext(organizationId: string, tableLimit = 50): WexPayMutationContext {
   return {
     organizationId,
@@ -57,7 +60,13 @@ function manageContext(organizationId: string, tableLimit = 50): WexPayMutationC
       product_limit: 500,
       feature_multi_location: true,
     },
-    actor: { type: "admin_session", email: `lock-test-${suffix}@wexon.test`, role: "ADMIN" },
+    // Concurrency/limit suites exercise customer manage path (not admin preview).
+    actor: {
+      type: "customer_session",
+      userId: ownerUserId,
+      email: `lock-test-${suffix}@wexon.test`,
+      role: "OWNER",
+    },
     ipAddress: "127.0.0.1",
   };
 }
@@ -74,7 +83,7 @@ function staffCashierContext(organizationId: string): WexPayMutationContext {
     },
     actor: {
       type: "customer_session",
-      userId: `staff-${suffix}`,
+      userId: staffUserId,
       email: `staff-lock-${suffix}@wexon.test`,
       role: "STAFF",
     },
@@ -206,6 +215,26 @@ async function accountSnapshot(tableId: string) {
 describe("wexpay payment concurrency + modifiers (db)", () => {
   before(async () => {
     try {
+      const owner = await prisma.user.create({
+        data: {
+          email: `lock-owner+${suffix}@wexon.test`,
+          name: "Lock Owner",
+          passwordHash: "unused",
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const staff = await prisma.user.create({
+        data: {
+          email: `lock-staff+${suffix}@wexon.test`,
+          name: "Lock Staff",
+          passwordHash: "unused",
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      ownerUserId = owner.id;
+      staffUserId = staff.id;
       fixture = await seedFixture();
     } catch (error) {
       if (isDatabaseUnavailable(error)) {
@@ -217,6 +246,11 @@ describe("wexpay payment concurrency + modifiers (db)", () => {
 
   after(async () => {
     if (fixture) await cleanupFixture(fixture);
+    if (ownerUserId || staffUserId) {
+      await prisma.user.deleteMany({
+        where: { id: { in: [ownerUserId, staffUserId].filter(Boolean) } },
+      });
+    }
   });
 
   it("allows only one of two concurrent 100 TRY manual payments on a 100 balance", async () => {

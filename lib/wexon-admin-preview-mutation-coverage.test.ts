@@ -54,5 +54,34 @@ describe("admin preview mutation coverage registry", () => {
     assert.match(source, /function runInTransactionWithPreviewAudit/);
     assert.match(source, /writeAdminPreviewMutationAuditInTransaction/);
     assert.ok(source.includes("runInTransactionWithPreviewAudit(context,"));
+    assert.match(source, /assertAdminPreviewServiceWriteAllowed/);
+    assert.equal(source.includes("writeAudit ??"), false);
+    assert.equal(source.includes("adminPreviewWrite.writeAudit"), false);
+  });
+
+  it("coverage registry pure_db action keys match service runtime keys (no drift)", () => {
+    const source = readFileSync(new URL("./wexpay-service.ts", import.meta.url), "utf8");
+    const runtimeKeys = new Set<string>();
+    for (const match of source.matchAll(
+      /runInTransactionWithPreviewAudit\(\s*context,\s*"([a-z0-9_]+)"\s*,/g,
+    )) {
+      runtimeKeys.add(match[1]!);
+    }
+    const registryKeys = [...listAdminPreviewPureDbActionKeys()].sort();
+    const runtimeSorted = [...runtimeKeys].sort();
+    assert.deepEqual(
+      runtimeSorted,
+      registryKeys,
+      "ADMIN_PREVIEW_MUTATION_COVERAGE pure_db keys must equal runInTransactionWithPreviewAudit runtime keys",
+    );
+    for (const actionKey of registryKeys) {
+      assert.match(
+        source,
+        new RegExp(
+          `(?:assertManage|assertKitchenOperate|assertCashierOperate)\\(context, "${actionKey}"\\)`,
+        ),
+        `missing service assert for ${actionKey}`,
+      );
+    }
   });
 });

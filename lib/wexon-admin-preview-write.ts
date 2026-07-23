@@ -57,24 +57,14 @@ export type AdminPreviewWriteCapability = {
 /** Bound into WexPayMutationContext so domain tx + audit share one Prisma client. */
 export type AdminPreviewWriteAuditBinding = {
   actionKey: string;
+  /** Verified capability organization — must match mutation context.organizationId. */
+  organizationId: string;
   adminId: string;
   email: string;
+  cloudflareSubject: string;
   reasonHash: string;
   writeSessionId: string;
   writeModeExpiry: number;
-  /**
-   * Optional override used by local DB regression tests to force audit failure
-   * inside the same production transaction path. Production never sets this.
-   */
-  writeAudit?: (
-    client: AuditClient,
-    input: {
-      organizationId: string;
-      binding: AdminPreviewWriteAuditBinding;
-      before?: Record<string, unknown>;
-      after?: Record<string, unknown>;
-    },
-  ) => Promise<unknown>;
 };
 
 export type AdminPreviewWriteDenialReason =
