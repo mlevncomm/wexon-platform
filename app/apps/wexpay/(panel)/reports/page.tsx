@@ -1,5 +1,6 @@
 import WexPayReportsBoard from "@/components/wexpay/WexPayReportsBoard";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
+import { isWexPayFeatureEnabled } from "@/lib/wexpay-entitlements";
 import {
   getBranchDailyReport,
   getOpenTablesSummary,
@@ -68,6 +69,11 @@ export default async function WexPayReportsPage({ searchParams }: { searchParams
       topProducts={topProducts}
       openTables={openTables}
       tableStatusRows={tableStatusRows}
+      canExportCsv={isWexPayFeatureEnabled(access.entitlementMap, "feature_csv_export")}
+      hasAdvancedReports={
+        isWexPayFeatureEnabled(access.entitlementMap, "feature_advanced_reports") ||
+        isWexPayFeatureEnabled(access.entitlementMap, "feature_reporting_advanced")
+      }
     />
   );
 }

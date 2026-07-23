@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { PaymentStatus } from ".prisma/client";
 import {
   parseModifierGroupCreate,
   parseModifierOptionCreate,
+  parsePaymentCreate,
+  parsePaymentCreatePayload,
   parseTableBulkCreate,
   PUBLIC_NOTE_MAX_LENGTH,
   validateOrderItems,
@@ -166,5 +169,54 @@ describe("parseModifierGroupCreate / option create", () => {
       form({ groupId: "g1", name: "Extra cheese", priceDelta: "12,5" }),
     );
     assert.deepEqual(parsed, { groupId: "g1", name: "Extra cheese", priceDelta: 12.5 });
+  });
+});
+
+describe("parsePaymentCreate status allowlist", () => {
+  it("forces PayTR create to PENDING and ignores UI status", () => {
+    const parsed = parsePaymentCreate(
+      form({
+        branchId: "br_1",
+        tableId: "t1",
+        amount: "50",
+        provider: "paytr",
+        status: "PAID",
+      }),
+    );
+    assert.equal(parsed.status, PaymentStatus.PENDING);
+    assert.equal(parsed.provider, "paytr");
+  });
+
+  it("allows manual PAID/PARTIAL and rejects FAILED/REFUNDED/PENDING", () => {
+    assert.equal(
+      parsePaymentCreate(form({ branchId: "br_1", tableId: "t1", amount: "10", status: "PAID" }))
+        .status,
+      PaymentStatus.PAID,
+    );
+    assert.equal(
+      parsePaymentCreate(form({ branchId: "br_1", tableId: "t1", amount: "10", status: "PARTIAL" }))
+        .status,
+      PaymentStatus.PARTIAL,
+    );
+    for (const status of ["FAILED", "REFUNDED", "PENDING"]) {
+      assert.throws(
+        () =>
+          parsePaymentCreate(
+            form({ branchId: "br_1", tableId: "t1", amount: "10", provider: "manual", status }),
+          ),
+        WexPayValidationError,
+      );
+      assert.throws(
+        () =>
+          parsePaymentCreatePayload({
+            branchId: "br_1",
+            tableId: "t1",
+            amount: 10,
+            provider: "manual",
+            status,
+          }),
+        WexPayValidationError,
+      );
+    }
   });
 });

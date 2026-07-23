@@ -66,20 +66,18 @@ export default function WexPayProviderCredentialsPanel({
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
           <p className="text-sm font-black text-amber-900">Sanal POS API bilgileri şifrelenemiyor</p>
           <p className="mt-2 text-sm font-medium leading-relaxed text-amber-800/90">
-            Sanal POS bağlantısı kaydetmek için sunucuda{" "}
-            <code className="font-mono text-xs">WEXPAY_CREDENTIAL_ENCRYPTION_KEY</code> (32 byte) tanımlı olmalıdır.
-            Manuel tahsilat akışı bu anahtar olmadan çalışmaya devam eder; sanal POS entegrasyonu için gerekir.
+            Sanal POS bağlantısı kaydetmek için sunucuda güvenli şifreleme anahtarı tanımlı olmalıdır. Manuel
+            tahsilat akışı bu anahtar olmadan çalışmaya devam eder; sanal POS entegrasyonu için gerekir.
           </p>
         </div>
       ) : null}
 
       {!paytrApiEnabled ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <p className="text-sm font-black text-slate-900">PayTR canlı token üretimi kapalı</p>
+          <p className="text-sm font-black text-slate-900">Çevrimiçi ödeme (PayTR) henüz canlı değil</p>
           <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-            Sunucuda <code className="font-mono text-xs">WEXPAY_PAYTR_ENABLE_API=true</code> olmadan operasyon ve QR
-            checkout PayTR token üretmez. Yapılandırma kontrolü ödeme oluşturmaz ve PayTR ağına istek göndermez;
-            yalnızca yerel alanları doğrular.
+            Canlı sanal POS token üretimi bu ortamda kapalı. Bağlantı kaydı ve yapılandırma kontrolü çalışır; müşteri
+            QR checkout’u PayTR’ye yönlendirilmez. Manuel tahsilat akışı etkilenmez. iyzico ve Param yakında.
           </p>
         </div>
       ) : null}

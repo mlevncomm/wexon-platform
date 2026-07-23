@@ -16,16 +16,30 @@ export function canManageWexPay(role: string) {
   return ["OWNER", "ADMIN", "MANAGER"].includes(role);
 }
 
+/** Kitchen status transitions — STAFF included for floor operations. */
+export function canOperateKitchenWexPay(role: string) {
+  return ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(role);
+}
+
+/** Cashier / payment mutations — STAFF included for limited kasa ops. */
+export function canOperateCashierWexPay(role: string) {
+  return ["OWNER", "ADMIN", "MANAGER", "STAFF"].includes(role);
+}
+
+/** Provider credentials + sensitive settings — OWNER/ADMIN only. */
+export function canConfigureWexPaySettings(role: string) {
+  return ["OWNER", "ADMIN"].includes(role);
+}
+
 const organizationTreeInclude = {
   restaurants: {
     include: {
       branches: {
-        include: {
-          tables: true,
-          products: true,
-          categories: { include: { products: true } },
-          orders: true,
-          payments: true,
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          createdAt: true,
         },
         orderBy: { createdAt: "asc" as const },
       },
@@ -95,12 +109,15 @@ async function buildAllowedWexPayAccess(input: {
   }
 
   const branches = organization.restaurants.flatMap((restaurant) => restaurant.branches);
-  const tables = branches.flatMap((branch) => branch.tables);
-  const menuProducts = branches.flatMap((branch) => branch.categories.flatMap((category) => category.products));
-  const orders = branches.flatMap((branch) => branch.orders);
-  const payments = branches.flatMap((branch) => branch.payments);
   const canManage =
     input.mode === "admin_preview" ? true : input.membership ? canManageWexPay(input.membership.role) : false;
+  const role = input.mode === "admin_preview" ? "ADMIN" : input.membership?.role ?? "VIEWER";
+  const canOperateKitchen =
+    input.mode === "admin_preview" ? true : canOperateKitchenWexPay(role);
+  const canOperateCashier =
+    input.mode === "admin_preview" ? true : canOperateCashierWexPay(role);
+  const canConfigureSettings =
+    input.mode === "admin_preview" ? true : canConfigureWexPaySettings(role);
 
   return {
     allowed: true as const,
@@ -115,11 +132,10 @@ async function buildAllowedWexPayAccess(input: {
     entitlementMap: coreDecision.entitlementMap,
     coreAccess: coreDecision,
     branches,
-    tables,
-    menuProducts,
-    orders,
-    payments,
     canManage,
+    canOperateKitchen,
+    canOperateCashier,
+    canConfigureSettings,
   };
 }
 

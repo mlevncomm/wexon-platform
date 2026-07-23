@@ -66,6 +66,8 @@ function isolatedEnv() {
     ADMIN_LOGIN_PASSWORD: adminPassword,
     E2E_ADMIN_PASSWORD: adminPassword,
     ADMIN_SESSION_SECRET: randomBytes(32).toString("base64url"),
+    CUSTOMER_SESSION_SECRET: randomBytes(32).toString("base64url"),
+    API_KEY_HASH_SECRET: randomBytes(32).toString("base64url"),
     NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
     NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN: `http://localhost:${port}`,
   };
@@ -98,6 +100,7 @@ async function runOnce(label) {
       "e2e/wexpay-pricing-parity.spec.ts",
       "e2e/wexpay-final-closure.spec.ts",
       "e2e/wexpay-pr4-full-journey.spec.ts",
+      "e2e/wexpay-package-role-gates.spec.ts",
       "e2e/core-canonical-routing.spec.ts",
       "--reporter=list",
     ],

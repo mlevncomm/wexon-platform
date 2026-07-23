@@ -10,7 +10,9 @@ import {
   WexPayPanel,
   WexPaySurface,
 } from "@/components/wexpay/WexPayBusinessUI";
+import { WexPayFeatureHint } from "@/components/wexpay/WexPayFeatureLocked";
 import { createBranchAction, updateBranchAction } from "@/lib/wexpay-actions";
+import { isWexPayFeatureEnabled } from "@/lib/wexpay-entitlements";
 import { listOrgBranches, listOrgRestaurants } from "@/lib/wexpay-read";
 import { resolveWexPaySessionContext } from "@/lib/wexpay-tenant";
 
@@ -23,10 +25,16 @@ export default async function WexPayBranchesPage({ searchParams }: { searchParam
   const { wexpayError, restaurantId } = await searchParams;
   const restaurants = await listOrgRestaurants(context.organizationId);
   const selectedRestaurantId = restaurants.some((r) => r.id === restaurantId) ? restaurantId : undefined;
-  const branches = await listOrgBranches(context.organizationId, selectedRestaurantId);
+  const [branches, allBranches] = await Promise.all([
+    listOrgBranches(context.organizationId, selectedRestaurantId),
+    listOrgBranches(context.organizationId),
+  ]);
   const redirectTo = selectedRestaurantId
     ? `/apps/wexpay/branches?restaurantId=${selectedRestaurantId}`
     : "/apps/wexpay/branches";
+  const multiLocationEnabled = isWexPayFeatureEnabled(context.entitlementMap, "feature_multi_location");
+  const activeBranchCount = allBranches.filter((branch) => branch.isActive).length;
+  const canCreateBranch = context.canManage && (multiLocationEnabled || activeBranchCount === 0);
 
   if (restaurants.length === 0) {
     return (
@@ -94,7 +102,14 @@ export default async function WexPayBranchesPage({ searchParams }: { searchParam
         )}
       </WexPayPanel>
 
-      {context.canManage && (
+      {context.canManage && !canCreateBranch ? (
+        <WexPayFeatureHint>
+          Çoklu şube (multi-location) paketinizde kapalı. Mevcut şubeyi yönetebilirsiniz; ek şube için paketi
+          yükseltin.
+        </WexPayFeatureHint>
+      ) : null}
+
+      {canCreateBranch && (
         <WexPayPanel title="Yeni şube oluştur">
           <form action={createBranchAction} className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <input type="hidden" name="redirectTo" value={redirectTo} />

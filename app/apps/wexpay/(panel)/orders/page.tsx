@@ -68,7 +68,7 @@ export default async function WexPayOrdersPage({ searchParams }: { searchParams:
     <WexPayPage>
       {wexpayError && <WexPayErrorNotice message={wexpayError} />}
 
-      <WexPayOrdersBoard orders={orderRows} canManage={context.canManage} redirectTo={redirectTo} />
+      <WexPayOrdersBoard orders={orderRows} canManage={context.canOperateKitchen} redirectTo={redirectTo} />
 
       {context.canManage &&
         (tables.length === 0 || products.length === 0 ? (

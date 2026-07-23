@@ -9,6 +9,7 @@ import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { getEntitlementUsage } from "@/lib/wexpay-read";
 import { coreEntitlementNumber } from "@/lib/wexon-core-access";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
+import { appNavigationUrl } from "@/lib/wexon/urls";
 import { dashboardPreviewHref } from "@/lib/wexon-organization-context";
 
 const SETTINGS_PATH = "/apps/wexpay/settings";
@@ -18,6 +19,27 @@ type SearchParams = Promise<{ wexpayError?: string; wexpayTest?: string; wexpayT
 export default async function WexPaySettingsPage({ searchParams }: { searchParams: SearchParams }) {
   const access = await getWexPayAccess();
   if (!access.allowed) return null;
+
+  // OWNER/ADMIN only — do not run credential queries for unauthorized roles.
+  if (!access.canConfigureSettings) {
+    return (
+      <WexPayPanel
+        eyebrow="Yetkisiz"
+        title="Ayarlara erişim yok"
+        description="Sanal POS kimlik bilgileri ve paket ayarları yalnızca sahip veya yönetici tarafından görüntülenebilir."
+      >
+        <Link
+          href={appNavigationUrl(
+            "/apps/wexpay",
+            `organizationId=${encodeURIComponent(access.organization.id)}`,
+          )}
+          className="inline-flex rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"
+        >
+          Operasyon paneline dön
+        </Link>
+      </WexPayPanel>
+    );
+  }
 
   const { wexpayError, wexpayTest, wexpayTestMsg, wexpayTestDetails } = await searchParams;
   const usage = await getEntitlementUsage(access.organization.id, access.entitlementMap);
@@ -90,7 +112,7 @@ export default async function WexPaySettingsPage({ searchParams }: { searchParam
       >
         <WexPayProviderCredentialsPanel
           credentials={providerCredentials}
-          canManage={access.canManage}
+          canManage={access.canConfigureSettings}
           encryptionAvailable={encryptionAvailable}
           paytrApiEnabled={process.env.WEXPAY_PAYTR_ENABLE_API === "true"}
           redirectTo={SETTINGS_PATH}

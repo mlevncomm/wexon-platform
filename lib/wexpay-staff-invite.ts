@@ -10,6 +10,7 @@ import {
 } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
+import { isEntitlementEnabled } from "@/lib/wexon-core-access";
 import {
   buildStaffInviteEmailContent,
   resolveEmailTransportConfig,
@@ -185,6 +186,17 @@ export async function createStaffInvite(input: {
           actorUserId: input.actorUserId,
           roles: [MembershipRole.OWNER, MembershipRole.ADMIN],
         });
+
+        if (
+          !isEntitlementEnabled(access.entitlementMap, "feature_advanced_roles") &&
+          input.role !== MembershipRole.STAFF &&
+          input.role !== MembershipRole.VIEWER
+        ) {
+          throw new StaffInviteError(
+            "ADVANCED_ROLES_REQUIRED",
+            "Paketinizde gelişmiş roller kapalı. Yalnızca Personel veya Görüntüleyici davet edebilirsiniz.",
+          );
+        }
 
         const existingUser = await tx.user.findUnique({
           where: { email },

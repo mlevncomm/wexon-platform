@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { ActivationStepKey, type MembershipRole } from ".prisma/client";
 import type { ActivationPaymentProviderSafeMetadata } from "@/lib/wexpay-activation-payment-provider";
 import type { ActivationValidationSafeMetadata } from "@/lib/wexpay-activation-validation";
+import { isWexPayFeatureEnabled } from "@/lib/wexpay-entitlements";
 
 type SearchParams = Promise<{ organizationId?: string; organizationSlug?: string }>;
 
@@ -209,6 +210,7 @@ export default async function ActivationWizardPage({ searchParams }: { searchPar
         latestValidationSummary={latestValidationSummary}
         paytrApiEnabled={process.env.WEXPAY_PAYTR_ENABLE_API === "true"}
         isProductionEnvironment={process.env.VERCEL_ENV === "production"}
+        advancedRolesEnabled={isWexPayFeatureEnabled(wexPayAccess.entitlementMap, "feature_advanced_roles")}
       />
     </div>
   );

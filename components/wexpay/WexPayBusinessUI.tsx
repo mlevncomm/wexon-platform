@@ -402,7 +402,7 @@ export function PillButton({
   );
 }
 
-export function DemoInput({
+export function WexPayField({
   label,
   name,
   type = "text",
@@ -440,7 +440,10 @@ export function DemoInput({
   );
 }
 
-export function DemoSelect({
+/** @deprecated Use WexPayField */
+export const DemoInput = WexPayField;
+
+export function WexPaySelect({
   label,
   name,
   defaultValue,
@@ -474,24 +477,33 @@ export function DemoSelect({
   );
 }
 
-export function DemoPrimaryButton({ children, className = "" }: { children: ReactNode; className?: string }) {
+/** @deprecated Use WexPaySelect */
+export const DemoSelect = WexPaySelect;
+
+export function WexPayPrimaryButton({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <button
       type="submit"
-      className={`w-full rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-500/25 sm:w-auto ${className}`}
+      className={`min-h-12 w-full rounded-2xl bg-[#10b981] px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-500/25 transition-all hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-500/25 sm:w-auto ${className}`}
     >
       {children}
     </button>
   );
 }
 
-export function DemoSecondaryButton({ children, className = "" }: { children: ReactNode; className?: string }) {
+/** @deprecated Use WexPayPrimaryButton */
+export const DemoPrimaryButton = WexPayPrimaryButton;
+
+export function WexPaySecondaryButton({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <button
       type="submit"
-      className={`w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-900 shadow-sm shadow-slate-900/5 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 sm:w-auto ${className}`}
+      className={`min-h-12 w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-900 shadow-sm shadow-slate-900/5 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 sm:w-auto ${className}`}
     >
       {children}
     </button>
   );
 }
+
+/** @deprecated Use WexPaySecondaryButton */
+export const DemoSecondaryButton = WexPaySecondaryButton;

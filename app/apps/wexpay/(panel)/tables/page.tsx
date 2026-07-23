@@ -94,9 +94,10 @@ export default async function WexPayTablesPage({ searchParams }: { searchParams:
       <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl bg-slate-100" />}>
         <WexPayCashierWorkspace
           tables={cashierTables}
-          canManage={context.canManage}
+          canManage={context.canOperateCashier}
           activeBranchId={activeBranch.id}
           activeBranchName={activeBranch.name}
+          organizationId={context.organizationId}
           redirectTo={redirectTo}
           products={productOptions}
           notifications={notifications}
