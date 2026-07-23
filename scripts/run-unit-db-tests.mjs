@@ -45,6 +45,7 @@ const files = [
   "lib/wexpay-menu-import.db.test.ts",
   "lib/wexon-platform-admin.db.test.ts",
   "lib/wexon-platform-admin-cloudflare-bind.db.test.ts",
+  "lib/wexon-admin-preview-write.db.test.ts",
 ];
 
 const credentialEncryptionKey = randomBytes(32).toString("hex");
