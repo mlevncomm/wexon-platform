@@ -1,0 +1,127 @@
+import Link from "next/link";
+import WexPayProviderCredentialsPanel from "@/components/wexpay/WexPayProviderCredentialsPanel";
+import { InfoRow, WexPayErrorNotice, WexPayPanel, WexPayPanelGrid } from "@/components/wexpay/WexPayBusinessUI";
+import {
+  isProviderCredentialEncryptionAvailable,
+  listOrganizationProviderCredentials,
+} from "@/lib/wexpay-provider-credentials";
+import { getWexPayAdminPreviewAccess } from "@/lib/wexpay-auth";
+import { wexpayAdminPreviewBasePath } from "@/lib/wexon-admin-preview-path";
+import { getEntitlementUsage } from "@/lib/wexpay-read";
+import { coreEntitlementNumber } from "@/lib/wexon-core-access";
+import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
+import { dashboardPreviewHref } from "@/lib/wexon-organization-context";
+
+type SearchParams = Promise<{ wexpayError?: string; wexpayTest?: string; wexpayTestMsg?: string; wexpayTestDetails?: string }>;
+
+export default async function WexPaySettingsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams  }) {
+  const { id: organizationId } = await params;
+  const basePath = wexpayAdminPreviewBasePath(organizationId);
+  const SETTINGS_PATH = `${basePath}/settings`;
+  const access = await getWexPayAdminPreviewAccess(organizationId);
+  if (!access.allowed) return null;
+
+  // Admin preview may view settings read-only; mutations still require write capability.
+  const { wexpayError, wexpayTest, wexpayTestMsg, wexpayTestDetails } = await searchParams;
+  const usage = await getEntitlementUsage(access.organization.id, access.entitlementMap);
+  const providerCredentials = await listOrganizationProviderCredentials(access.organization.id);
+  const encryptionAvailable = isProviderCredentialEncryptionAvailable();
+
+  return (
+    <WexPayPanelGrid className="xl:grid-cols-2">
+      {wexpayError ? (
+        <div className="xl:col-span-2">
+          <WexPayErrorNotice message={wexpayError} />
+        </div>
+      ) : null}
+      {wexpayTest && wexpayTestMsg ? (
+        <div className="xl:col-span-2">
+          <div
+            className={`rounded-2xl border px-4 py-4 ${
+              wexpayTest === "ok"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-amber-200 bg-amber-50 text-amber-900"
+            }`}
+          >
+            <p className="text-sm font-black">{decodeURIComponent(wexpayTestMsg)}</p>
+            {wexpayTestDetails ? (
+              <p className="mt-2 text-xs font-medium leading-relaxed opacity-90">
+                {decodeURIComponent(wexpayTestDetails)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <WexPayPanel
+        eyebrow="Aktif paket"
+        title={access.license.plan.name}
+        headerAction={
+          <span className="rounded-full border border-emerald-300/30 bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-100">
+            {formatCoreStatus(access.license.status)}
+          </span>
+        }
+      >
+        <div className="grid min-w-0 gap-3">
+          <InfoRow label="Organizasyon" value={access.organization.name} />
+          <InfoRow label="Paket" value={access.license.plan.name} />
+          <InfoRow label="Lisans durumu" value={formatCoreStatus(access.license.status)} />
+          <InfoRow label="Kurulum durumu" value={formatCoreStatus(access.installation.status)} />
+          <InfoRow
+            label="Kullanıcı rolü"
+            value={access.mode === "admin_preview" ? "Admin önizleme" : formatCoreStatus(access.membership?.role ?? "VIEWER")}
+          />
+          <InfoRow label="Yönetim yetkisi" value={access.canManage ? "Var" : "Yok"} />
+        </div>
+      </WexPayPanel>
+
+      <WexPayPanel eyebrow="Ayarlar" title="Kullanım limitleri">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          {usage.map((row) => {
+            const limit = coreEntitlementNumber(access.entitlementMap, row.key);
+            const limitLabel = limit === null ? "Sınırsız" : String(limit);
+            return <InfoRow key={row.key} label={row.label} value={`${row.used} / ${limitLabel}`} />;
+          })}
+        </div>
+      </WexPayPanel>
+
+      <WexPayPanel
+        eyebrow="Ödeme altyapısı"
+        title="Sanal POS bağlantısı"
+        description="WexPay para tutmaz. Restoran kendi PayTR, iyzico veya Param sanal POS anlaşmasını yapar; WexPay yalnızca API bağlantısı ve operasyon kaydı sağlar. API bilgileri şifreli saklanır; plaintext secret gösterilmez."
+        className="xl:col-span-2"
+      >
+        <WexPayProviderCredentialsPanel
+          credentials={providerCredentials}
+          canManage={access.canConfigureSettings}
+          encryptionAvailable={encryptionAvailable}
+          paytrApiEnabled={process.env.WEXPAY_PAYTR_ENABLE_API === "true"}
+          redirectTo={SETTINGS_PATH}
+        />
+      </WexPayPanel>
+
+      <WexPayPanel eyebrow="Ayarlar" title="Paket açıklaması" className="xl:col-span-2">
+        <p className="max-w-4xl text-sm font-medium leading-relaxed text-slate-600">
+          QR menü ve temel operasyon tüm WexPay paketlerinde bulunur. Limitler, raporlama, yetki, destek ve
+          entegrasyon seviyesi Wexon Core entitlement kararından gelir. Wexon abonelik faturalandırması (BillingPayment)
+          ile restoran operasyon tahsilat kayıtları (Payment) ayrı tutulur; WexPay restoran müşterisinden para toplamaz.
+        </p>
+      </WexPayPanel>
+
+      <WexPayPanel
+        eyebrow="Ayarlar"
+        title="Lisans işlemleri"
+        description="Lisans ve abonelik yönetimi Wexon Core panelinden yapılır."
+        className="xl:col-span-2"
+        headerAction={
+          <Link
+            href={dashboardPreviewHref(access.organization.id)}
+            className="inline-flex rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+          >
+            Wexon Core paneli
+          </Link>
+        }
+      />
+    </WexPayPanelGrid>
+  );
+}

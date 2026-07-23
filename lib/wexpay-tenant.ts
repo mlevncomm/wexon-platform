@@ -1,6 +1,11 @@
 import type { Prisma } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
+import {
+  adminPreviewHasValidWriteCapability,
+  assertAdminPreviewWriteAllowed,
+  auditAdminPreviewWriteDenied,
+} from "@/lib/wexon-admin-preview-write";
 import { getCustomerSession } from "@/lib/wexon-customer-auth";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
 import { canAccessWexPay, canManageWexPay, canOperateCashierWexPay, canOperateKitchenWexPay, canConfigureWexPaySettings } from "@/lib/wexpay-auth";
@@ -35,6 +40,8 @@ export type WexPaySessionActor =
       type: "admin_session";
       email: string;
       role: "ADMIN";
+      adminId: string;
+      cloudflareSubject: string;
     };
 
 export type WexPaySessionContext = {
@@ -102,7 +109,17 @@ export async function resolveWexPaySessionContext(
       return { ok: false, reason: decision.reason, message: decision.message };
     }
 
-    if (decision.organization.isDemo && (options.manage || options.kitchen || options.cashier || options.settings)) {
+    const wantsMutation = Boolean(options.manage || options.kitchen || options.cashier || options.settings);
+
+    // Demo is always read-only for admin preview — never grant write.
+    if (decision.organization.isDemo && wantsMutation) {
+      await auditAdminPreviewWriteDenied({
+        adminId: adminSession.adminId,
+        email: adminSession.email,
+        organizationId,
+        actionKey: "resolve_session_demo_mutation",
+        denialReason: "organization_demo",
+      });
       return {
         ok: false,
         reason: "role",
@@ -110,15 +127,44 @@ export async function resolveWexPaySessionContext(
       };
     }
 
+    let writeAllowed = false;
+    if (wantsMutation) {
+      const writeGate = await assertAdminPreviewWriteAllowed({
+        organizationId,
+        actionKey: "resolve_session_mutation",
+      });
+      if (!writeGate.ok) {
+        return {
+          ok: false,
+          reason: "role",
+          message: writeGate.message,
+        };
+      }
+      writeAllowed = true;
+    } else {
+      writeAllowed = await adminPreviewHasValidWriteCapability({
+        organizationId,
+        adminId: adminSession.adminId,
+        cloudflareSubject: adminSession.cloudflareSubject,
+      });
+    }
+
     return {
       ok: true,
       organizationId,
-      actor: { type: "admin_session", email: adminSession.email, role: "ADMIN" },
+      actor: {
+        type: "admin_session",
+        email: adminSession.email,
+        role: "ADMIN",
+        adminId: adminSession.adminId,
+        cloudflareSubject: adminSession.cloudflareSubject,
+      },
       role: "ADMIN",
-      canManage: true,
-      canOperateKitchen: true,
-      canOperateCashier: true,
-      canConfigureSettings: true,
+      // Deny-by-default: manage flags only when a short-lived write capability is valid.
+      canManage: writeAllowed,
+      canOperateKitchen: writeAllowed,
+      canOperateCashier: writeAllowed,
+      canConfigureSettings: writeAllowed,
       entitlementMap: decision.entitlementMap,
     };
   }

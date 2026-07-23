@@ -258,6 +258,10 @@ export async function createAdminSessionCookie(input: {
     value,
     adminSessionCookieOptions(new Date(payload.expiresAt)),
   );
+
+  // Never inherit a previous admin's write capability across login.
+  const { clearAdminPreviewWriteCapabilityCookie } = await import("@/lib/wexon-admin-preview-write");
+  await clearAdminPreviewWriteCapabilityCookie();
 }
 
 export async function clearAdminSessionCookie() {
@@ -270,6 +274,9 @@ export async function clearAdminSessionCookie() {
 
   cookieStore.set(ADMIN_SESSION_COOKIE, "", adminSessionCookieClearOptions());
   clearPriorAdminCookies(cookieStore);
+
+  const { clearAdminPreviewWriteCapabilityCookie } = await import("@/lib/wexon-admin-preview-write");
+  await clearAdminPreviewWriteCapabilityCookie();
 }
 
 /**

@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import type { DashboardOrganizationSelector } from "@/lib/wexon-core-dashboard";
 import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl } from "@/lib/wexon/urls";
+import { wexpayAdminPreviewHref } from "@/lib/wexon-admin-preview-path";
 
 export const ACTIVE_ORGANIZATION_COOKIE = "wexon_active_organization_id";
 export const ACTIVE_ORGANIZATION_HEADER = "x-wexon-active-organization-id";
@@ -93,4 +94,13 @@ export function dashboardPreviewHref(organizationId: string, path = "/dashboard"
 export function wexpayHref(path = "/apps/wexpay", organizationId?: string | null, branchId?: string | null) {
   const params = buildOrganizationSearchParams(organizationId ? { organizationId } : undefined, branchId ? { branchId } : undefined);
   return appNavigationUrl(path, params.toString());
+}
+
+/** Admin-host-only WexPay preview URL (replaces cross-host wexpayHref for admin links). */
+export function wexpayAdminPreviewOrgHref(
+  organizationId: string,
+  subpath = "",
+  branchId?: string | null,
+) {
+  return wexpayAdminPreviewHref(organizationId, subpath, branchId ? { branchId } : undefined);
 }

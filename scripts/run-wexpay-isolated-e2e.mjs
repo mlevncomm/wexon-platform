@@ -41,6 +41,17 @@ const mandatoryAdminIdentityTests = [
   "PR2B: v3 cookie without JWT is denied",
   "PR2B: admin root redirect keeps PR48 default",
 ];
+const mandatoryAdminPreviewWriteTests = [
+  "PR3: CF JWT + session v3 opens admin preview read-only",
+  "PR3: backend mutation forbidden while read-only",
+  "PR3: correct slug/reason enables write; same-tenant mutation succeeds",
+  "PR3: other-tenant mutation fails with Org A capability",
+  "PR3: sticky banner on preview screens",
+  "PR3: demo cannot enable write",
+  "PR3: disable write works",
+  "PR3: logout clears capability",
+  "PR3: app/core legacy admin preview does not grant write",
+];
 
 function run(cmd, args, env = {}) {
   console.log(`[isolated-e2e] $ ${cmd} ${args.join(" ")}`);
@@ -134,6 +145,7 @@ async function runOnce(label) {
       "e2e/core-canonical-routing.spec.ts",
       "e2e/admin-platform-admins.spec.ts",
       "e2e/admin-cloudflare-identity.spec.ts",
+      "e2e/admin-wexpay-preview-write.spec.ts",
       "--reporter=list",
     ],
     {
@@ -162,8 +174,8 @@ async function runOnce(label) {
     throw new Error(`[isolated-e2e] ${label}: ${failed} failed test(s)`);
   }
   // Includes activation, auth/tenant, pricing, workspace, final closure, routing,
-  // PlatformAdmin management, and PR2B Cloudflare identity specs.
-  const MIN_ISOLATED_PASSES = 41;
+  // PlatformAdmin management, PR2B Cloudflare identity, and PR3 admin preview write specs.
+  const MIN_ISOLATED_PASSES = 50;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
@@ -173,6 +185,7 @@ async function runOnce(label) {
     ...mandatoryPr4Tests,
     ...mandatoryPlatformAdminTests,
     ...mandatoryAdminIdentityTests,
+    ...mandatoryAdminPreviewWriteTests,
   ]) {
     const resultLine = combined
       .split(/\r?\n/)

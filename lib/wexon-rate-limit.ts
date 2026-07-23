@@ -59,6 +59,8 @@ export const RATE_LIMITS = {
   staffInviteResend: { limit: 10, windowMs: 15 * 60 * 1000 },
   staffInviteAccept: { limit: 30, windowMs: 15 * 60 * 1000 },
   menuImportUpload: { limit: 20, windowMs: 15 * 60 * 1000 },
+  /** Admin preview write-mode enable attempts (slug + reason). */
+  adminPreviewWriteEnable: { limit: 8, windowMs: 15 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 export function buildRateLimitKey(scope: string, identifier: string) {

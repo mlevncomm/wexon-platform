@@ -2,6 +2,10 @@ import { randomUUID } from "crypto";
 import { NotificationType, OrderStatus, PaymentStatus, MenuModifierSelectionType, type Prisma, ReceiptStatus, TableStatus } from ".prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/wexon-audit";
+import {
+  type AdminPreviewWriteAuditBinding,
+} from "@/lib/wexon-admin-preview-write";
+import * as adminPreviewWriteAudit from "@/lib/wexon-admin-preview-write";
 import { assertEntitlementLimit, type CoreEntitlementMap } from "@/lib/wexon-core-access";
 import { calculateTableAccount, closeTableBlockReason, filterTableSessionRecords, type TableAccountSnapshot } from "@/lib/wexpay-account";
 import {
@@ -54,7 +58,13 @@ import { generatePaytrMerchantOid } from "@/lib/wexpay-paytr-adapter";
 
 export type WexPayMutationActor =
   | { type: "customer_session"; userId: string; email: string; role: string }
-  | { type: "admin_session"; email: string; role: string }
+  | {
+      type: "admin_session";
+      email: string;
+      role: string;
+      adminId: string;
+      cloudflareSubject: string;
+    }
   | { type: "api_key"; apiKeyId: string; scopes: string[] };
 
 export type WexPayMutationContext = {
@@ -63,7 +73,43 @@ export type WexPayMutationContext = {
   entitlementMap: CoreEntitlementMap;
   canManage: boolean;
   ipAddress?: string | null;
+  /**
+   * When set (admin_preview write capability), domain mutation commits only if
+   * `admin.preview.write` audit succeeds in the same Prisma transaction.
+   * Required for admin_session manage/kitchen/cashier mutations.
+   */
+  adminPreviewWrite?: AdminPreviewWriteAuditBinding | null;
 };
+
+type AdminPreviewMutationAuditWriter = (
+  client: Parameters<typeof adminPreviewWriteAudit.writeAdminPreviewMutationAuditInTransaction>[0],
+  input: Parameters<typeof adminPreviewWriteAudit.writeAdminPreviewMutationAuditInTransaction>[1],
+) => Promise<unknown>;
+
+/**
+ * Test-only seam for forcing audit failure inside the production transaction path.
+ * Production never accepts arbitrary audit writers via mutation context.
+ */
+let adminPreviewMutationAuditWriterForTests: AdminPreviewMutationAuditWriter | null = null;
+
+export function __setAdminPreviewMutationAuditWriterForTests(
+  writer: AdminPreviewMutationAuditWriter | null,
+) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Admin preview audit writer override is forbidden in production.");
+  }
+  if (process.env.NODE_ENV !== "test" && process.env.WEXON_ALLOW_LOCAL_DB_TESTS !== "1") {
+    throw new Error("Admin preview audit writer override requires NODE_ENV=test or local DB guard.");
+  }
+  adminPreviewMutationAuditWriterForTests = writer;
+}
+
+function resolveAdminPreviewMutationAuditWriter(): AdminPreviewMutationAuditWriter {
+  return (
+    adminPreviewMutationAuditWriterForTests ??
+    adminPreviewWriteAudit.writeAdminPreviewMutationAuditInTransaction
+  );
+}
 
 function actorRole(context: WexPayMutationContext): string | null {
   if (context.actor.type === "customer_session" || context.actor.type === "admin_session") {
@@ -72,21 +118,79 @@ function actorRole(context: WexPayMutationContext): string | null {
   return null;
 }
 
-function assertManage(context: WexPayMutationContext) {
+/**
+ * Service-layer hard-deny for admin_session mutations.
+ * canManage alone is never sufficient — binding presence, org, actionKey,
+ * expiry, and actor identity must all match.
+ */
+function assertAdminPreviewServiceWriteAllowed(
+  context: WexPayMutationContext,
+  expectedActionKey: string,
+  deniedMessage: string,
+) {
+  if (context.actor.type !== "admin_session") return;
+
+  if (!context.canManage) {
+    throw new WexPayAccessError(deniedMessage, "role");
+  }
+
+  const binding = context.adminPreviewWrite;
+  if (!binding) {
+    throw new WexPayAccessError(deniedMessage, "role");
+  }
+  if (binding.organizationId !== context.organizationId) {
+    throw new WexPayAccessError(deniedMessage, "role");
+  }
+  if (binding.actionKey !== expectedActionKey) {
+    throw new WexPayAccessError(deniedMessage, "role");
+  }
+  if (!(binding.writeModeExpiry > Date.now())) {
+    throw new WexPayAccessError(deniedMessage, "role");
+  }
+  if (
+    binding.adminId !== context.actor.adminId ||
+    binding.email !== context.actor.email ||
+    binding.cloudflareSubject !== context.actor.cloudflareSubject
+  ) {
+    throw new WexPayAccessError(deniedMessage, "role");
+  }
+}
+
+function assertManage(context: WexPayMutationContext, expectedActionKey: string) {
+  if (context.actor.type === "admin_session") {
+    assertAdminPreviewServiceWriteAllowed(context, expectedActionKey, "Bu işlem için yetkiniz yok.");
+    return;
+  }
   if (context.canManage) return;
   const role = actorRole(context);
   if (role && canManageWexPay(role)) return;
   throw new WexPayAccessError("Bu işlem için yetkiniz yok.", "role");
 }
 
-function assertKitchenOperate(context: WexPayMutationContext) {
+function assertKitchenOperate(context: WexPayMutationContext, expectedActionKey: string) {
+  if (context.actor.type === "admin_session") {
+    assertAdminPreviewServiceWriteAllowed(
+      context,
+      expectedActionKey,
+      "Mutfak işlemi için yetkiniz yok.",
+    );
+    return;
+  }
   if (context.canManage) return;
   const role = actorRole(context);
   if (role && canOperateKitchenWexPay(role)) return;
   throw new WexPayAccessError("Mutfak işlemi için yetkiniz yok.", "role");
 }
 
-function assertCashierOperate(context: WexPayMutationContext) {
+function assertCashierOperate(context: WexPayMutationContext, expectedActionKey: string) {
+  if (context.actor.type === "admin_session") {
+    assertAdminPreviewServiceWriteAllowed(
+      context,
+      expectedActionKey,
+      "Kasa işlemi için yetkiniz yok.",
+    );
+    return;
+  }
   if (context.canManage) return;
   const role = actorRole(context);
   if (role && canOperateCashierWexPay(role)) return;
@@ -115,6 +219,7 @@ function auditActorMeta(context: WexPayMutationContext) {
     return {
       actorType: "admin_session",
       admin_preview: true,
+      adminId: context.actor.adminId,
       email: context.actor.email,
       role: context.actor.role,
     };
@@ -189,6 +294,42 @@ function generateTableQrCode() {
 
 function runInTransaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>) {
   return prisma.$transaction(work);
+}
+
+/**
+ * Operator mutations: run domain work then `admin.preview.write` on the same tx
+ * client when the actor is admin_session. Fail-closed on actionKey / binding
+ * mismatch BEFORE the transaction starts. Audit failure rolls back.
+ * Public/webhook helpers that lack preview binding keep using `runInTransaction`.
+ * Production never accepts arbitrary audit writers via mutation context.
+ */
+function runInTransactionWithPreviewAudit<T>(
+  context: WexPayMutationContext,
+  expectedActionKey: string,
+  work: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  if (context.actor.type === "admin_session") {
+    assertAdminPreviewServiceWriteAllowed(
+      context,
+      expectedActionKey,
+      "Bu işlem için yetkiniz yok.",
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const result = await work(tx);
+    if (context.actor.type === "admin_session") {
+      const binding = context.adminPreviewWrite;
+      if (!binding || binding.actionKey !== expectedActionKey) {
+        throw new WexPayAccessError("Bu işlem için yetkiniz yok.", "role");
+      }
+      await resolveAdminPreviewMutationAuditWriter()(tx, {
+        organizationId: context.organizationId,
+        binding,
+      });
+    }
+    return result;
+  });
 }
 
 async function getTableAccountSnapshot(tx: TenantDb, tableId: string): Promise<TableAccountSnapshot> {
@@ -274,10 +415,10 @@ export async function createRestaurant(
   context: WexPayMutationContext,
   input: { name: string; slug: string },
 ) {
-  assertManage(context);
+  assertManage(context, "create_restaurant");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_restaurant", async (tx) => {
       const restaurant = await tx.restaurant.create({
         data: {
           organizationId: context.organizationId,
@@ -308,9 +449,9 @@ export async function updateRestaurant(
   context: WexPayMutationContext,
   input: { restaurantId: string; name: string; isActive?: boolean },
 ) {
-  assertManage(context);
+  assertManage(context, "update_restaurant");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "update_restaurant", async (tx) => {
     await assertRestaurantInOrg(tx, context.organizationId, input.restaurantId);
 
     const restaurant = await tx.restaurant.update({
@@ -340,10 +481,10 @@ export async function createBranch(
   context: WexPayMutationContext,
   input: { restaurantId: string; name: string; slug: string; address: string | null },
 ) {
-  assertManage(context);
+  assertManage(context, "create_branch");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_branch", async (tx) => {
       await lockWexPayOrgBranchLimit(tx, context.organizationId);
       await assertRestaurantInOrg(tx, context.organizationId, input.restaurantId);
 
@@ -388,9 +529,9 @@ export async function updateBranch(
   context: WexPayMutationContext,
   input: { branchId: string; name: string; address: string | null; isActive?: boolean },
 ) {
-  assertManage(context);
+  assertManage(context, "update_branch");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "update_branch", async (tx) => {
     await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
     const existing = await tx.branch.findFirstOrThrow({
@@ -442,10 +583,10 @@ export async function createTable(
   context: WexPayMutationContext,
   input: { branchId: string; label: string; seats: number },
 ) {
-  assertManage(context);
+  assertManage(context, "create_table");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_table", async (tx) => {
       // Lock order: org table-limit only (see lib/wexpay-locks.ts).
       await lockWexPayOrgTableLimit(tx, context.organizationId);
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
@@ -485,10 +626,10 @@ export async function createTablesBulk(
   context: WexPayMutationContext,
   input: { branchId: string; prefix: string; count: number; seats: number; startNumber: number },
 ) {
-  assertManage(context);
+  assertManage(context, "create_tables_bulk");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_tables_bulk", async (tx) => {
       // Lock order: org table-limit only (shared with createTable — see lib/wexpay-locks.ts).
       await lockWexPayOrgTableLimit(tx, context.organizationId);
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
@@ -542,10 +683,10 @@ export async function updateTable(
   context: WexPayMutationContext,
   input: { tableId: string; label: string; seats?: number; isActive?: boolean },
 ) {
-  assertManage(context);
+  assertManage(context, "update_table");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "update_table", async (tx) => {
       await assertTableInOrg(tx, context.organizationId, input.tableId);
 
       const table = await tx.restaurantTable.update({
@@ -575,9 +716,9 @@ export async function updateTable(
 }
 
 export async function closeTable(context: WexPayMutationContext, input: { tableId: string }) {
-  assertCashierOperate(context);
+  assertCashierOperate(context, "close_table");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "close_table", async (tx) => {
     const existing = await assertTableInOrg(tx, context.organizationId, input.tableId);
     // Lock order: table account only (see lib/wexpay-locks.ts).
     await lockWexPayTableAccount(tx, existing.id);
@@ -634,9 +775,9 @@ export async function closeTable(context: WexPayMutationContext, input: { tableI
 }
 
 export async function markReceiptPrinted(context: WexPayMutationContext, input: { tableId: string }) {
-  assertCashierOperate(context);
+  assertCashierOperate(context, "mark_receipt_printed");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "mark_receipt_printed", async (tx) => {
     const existing = await assertTableInOrg(tx, context.organizationId, input.tableId);
     const account = await getTableAccountSnapshot(tx, existing.id);
 
@@ -693,10 +834,10 @@ export async function createCategory(
   context: WexPayMutationContext,
   input: { branchId: string; name: string },
 ) {
-  assertManage(context);
+  assertManage(context, "create_category");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_category", async (tx) => {
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
       const last = await tx.menuCategory.findFirst({
@@ -734,10 +875,10 @@ export async function updateCategory(
   context: WexPayMutationContext,
   input: { categoryId: string; name: string; sortOrder?: number; isActive?: boolean },
 ) {
-  assertManage(context);
+  assertManage(context, "update_category");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "update_category", async (tx) => {
       await assertCategoryInOrg(tx, context.organizationId, input.categoryId);
 
       const category = await tx.menuCategory.update({
@@ -782,9 +923,9 @@ export async function createProduct(
     isPopular: boolean;
   },
 ) {
-  assertManage(context);
+  assertManage(context, "create_product");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "create_product", async (tx) => {
     await lockWexPayOrgProductLimit(tx, context.organizationId);
     await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
@@ -847,9 +988,9 @@ export async function updateProduct(
     isPopular?: boolean;
   },
 ) {
-  assertManage(context);
+  assertManage(context, "update_product");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "update_product", async (tx) => {
     const existing = await assertProductInOrg(tx, context.organizationId, input.productId);
 
     if (input.categoryId) {
@@ -900,10 +1041,10 @@ export async function createModifierGroup(
     maxSelect: number;
   },
 ) {
-  assertManage(context);
+  assertManage(context, "create_modifier_group");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_modifier_group", async (tx) => {
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
       const last = await tx.menuModifierGroup.findFirst({
@@ -961,10 +1102,10 @@ export async function updateModifierGroup(
     isActive?: boolean;
   },
 ) {
-  assertManage(context);
+  assertManage(context, "update_modifier_group");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "update_modifier_group", async (tx) => {
       await assertModifierGroupInOrg(tx, context.organizationId, input.groupId);
 
       const group = await tx.menuModifierGroup.update({
@@ -1009,10 +1150,10 @@ export async function createModifierOption(
   context: WexPayMutationContext,
   input: { groupId: string; name: string; priceDelta: number },
 ) {
-  assertManage(context);
+  assertManage(context, "create_modifier_option");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_modifier_option", async (tx) => {
       await assertModifierGroupInOrg(tx, context.organizationId, input.groupId);
 
       const last = await tx.menuModifierOption.findFirst({
@@ -1057,10 +1198,10 @@ export async function updateModifierOption(
     isActive?: boolean;
   },
 ) {
-  assertManage(context);
+  assertManage(context, "update_modifier_option");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "update_modifier_option", async (tx) => {
       await assertModifierOptionInOrg(tx, context.organizationId, input.optionId);
 
       const option = await tx.menuModifierOption.update({
@@ -1098,9 +1239,9 @@ export async function setProductModifierGroups(
   context: WexPayMutationContext,
   input: { productId: string; groupIds: string[] },
 ) {
-  assertManage(context);
+  assertManage(context, "set_product_modifier_groups");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "set_product_modifier_groups", async (tx) => {
     const product = await assertProductInOrg(tx, context.organizationId, input.productId);
 
     if (input.groupIds.length > 0) {
@@ -1284,10 +1425,10 @@ export async function createOrder(
   context: WexPayMutationContext,
   input: { branchId: string; tableId: string; note: string | null; items: OrderItemInput[] },
 ) {
-  assertCashierOperate(context);
+  assertCashierOperate(context, "create_order");
 
   try {
-    return await runInTransaction(async (tx) => {
+    return await runInTransactionWithPreviewAudit(context, "create_order", async (tx) => {
       await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
       const table = await assertTableInOrg(tx, context.organizationId, input.tableId);
@@ -1349,9 +1490,9 @@ export async function updateOrderStatus(
   context: WexPayMutationContext,
   input: { orderId: string; status: OrderStatus },
 ) {
-  assertKitchenOperate(context);
+  assertKitchenOperate(context, "update_order_status");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "update_order_status", async (tx) => {
     const existing = await assertOrderInOrg(tx, context.organizationId, input.orderId);
     const now = new Date();
 
@@ -1426,7 +1567,7 @@ export async function createPayment(
     receiptRequested?: boolean;
   },
 ): Promise<CreatePaymentResult> {
-  assertCashierOperate(context);
+  assertCashierOperate(context, "create_payment");
 
   const { key: providerKey, adapter } = await resolveWexPayPaymentProvider(input.provider);
   const receiptRequested = Boolean(input.receiptRequested);
@@ -1446,7 +1587,7 @@ export async function createPayment(
 
   // Phase 1 — lock table, validate remaining, persist payment (PENDING for external PSP).
   // External PayTR HTTP must NOT run inside this transaction.
-  const reserved = await runInTransaction(async (tx) => {
+  const reserved = await runInTransactionWithPreviewAudit(context, "create_payment", async (tx) => {
     await assertBranchInOrg(tx, context.organizationId, input.branchId);
 
     const table = await tx.restaurantTable.findFirst({
@@ -1760,7 +1901,7 @@ export async function regeneratePaytrCheckout(
   context: WexPayMutationContext,
   input: { paymentId: string },
 ): Promise<{ paymentId: string; externalCheckoutUrl: string; providerRef: string }> {
-  assertCashierOperate(context);
+  assertCashierOperate(context, "regenerate_paytr_checkout");
 
   const existing = await assertPaymentInOrg(prisma, context.organizationId, input.paymentId);
   if (existing.provider !== "paytr" || existing.status !== PaymentStatus.PENDING) {
@@ -1809,9 +1950,9 @@ export async function updatePayment(
   context: WexPayMutationContext,
   input: { paymentId: string; status: PaymentStatus },
 ) {
-  assertCashierOperate(context);
+  assertCashierOperate(context, "update_payment");
 
-  return runInTransaction(async (tx) => {
+  return runInTransactionWithPreviewAudit(context, "update_payment", async (tx) => {
     const existing = await assertPaymentInOrg(tx, context.organizationId, input.paymentId);
 
     // Lock order: table account only (see lib/wexpay-locks.ts).
