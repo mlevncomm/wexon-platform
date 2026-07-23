@@ -284,25 +284,51 @@ describe("resolvePostLoginDestination", () => {
     );
   });
 
-  it("defaults admin login to applications in production", () => {
+  it("defaults admin login to admin root in production", () => {
     assert.equal(
       resolvePostLoginDestination(undefined, { isAdmin: true, productionWexon: true }),
-      "https://admin.wexon.dev/applications",
+      "https://admin.wexon.dev/",
     );
     assert.equal(
       resolvePostLoginDestination("/", { isAdmin: true, productionWexon: true }),
-      "https://admin.wexon.dev/applications",
+      "https://admin.wexon.dev/",
     );
     assert.equal(
       resolvePostLoginDestination("/admin", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/",
+    );
+  });
+
+  it("preserves safe admin next=/applications in production", () => {
+    assert.equal(
+      resolvePostLoginDestination("/applications", { isAdmin: true, productionWexon: true }),
       "https://admin.wexon.dev/applications",
     );
   });
 
-  it("maps admin subdomain relative next paths in production", () => {
+  it("keeps admin post-login on admin host even if next points at other surfaces", () => {
     assert.equal(
-      resolvePostLoginDestination("/applications", { isAdmin: true, productionWexon: true }),
-      "https://admin.wexon.dev/applications",
+      resolvePostLoginDestination("/apps/wexpay/tables", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/",
+    );
+    assert.equal(
+      resolvePostLoginDestination("/dashboard/billing", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/",
+    );
+  });
+
+  it("rejects open redirects for admin post-login", () => {
+    assert.equal(
+      resolvePostLoginDestination("https://evil.example", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/",
+    );
+    assert.equal(
+      resolvePostLoginDestination("//evil.example", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/",
+    );
+    assert.equal(
+      resolvePostLoginDestination("/%2f%2fevil.example", { isAdmin: true, productionWexon: true }),
+      "https://admin.wexon.dev/",
     );
   });
 
