@@ -1,17 +1,29 @@
-import { headers } from "next/headers";
+"use client";
+
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import CookieConsentBanner from "@/components/marketing/CookieConsentBanner";
-import { isAdminHost, normalizeHost, resolveHostSurface } from "@/lib/wexon-canonical-host";
 
 /**
- * Server gate: never mount the marketing cookie banner on the admin host.
- * Local `/admin` paths are additionally suppressed client-side in CookieConsentBanner
- * to avoid hydration mismatches (pathname is not always available in root layout headers).
+ * Client-only gate so root layout does not call `headers()` (avoids forcing
+ * the entire app into dynamic rendering). Hydration-safe: renders nothing
+ * until mounted, then hides on admin host / local `/admin` paths.
  */
-export default async function CookieConsentGate() {
-  const headerStore = await headers();
-  const host = normalizeHost(headerStore.get("host") ?? headerStore.get("x-forwarded-host"));
+export default function CookieConsentGate() {
+  const pathname = usePathname() ?? "";
+  const [hostname, setHostname] = useState<string | null>(null);
 
-  if (isAdminHost(host) || resolveHostSurface(host) === "admin") {
+  useEffect(() => {
+    setHostname(window.location.hostname.toLowerCase());
+  }, []);
+
+  const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
+  if (isAdminPath) return null;
+
+  // Wait for mount before host-based decisions (production admin host uses `/login`).
+  if (hostname === null) return null;
+
+  if (hostname === "admin.wexon.dev" || hostname.startsWith("admin.")) {
     return null;
   }
 

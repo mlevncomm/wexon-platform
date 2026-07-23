@@ -8,6 +8,12 @@ import {
   PRODUCTION_ROOT_HOST,
   resolveHostSurface,
 } from "@/lib/wexon-canonical-host";
+import {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_COOKIE_LEGACY,
+} from "@/lib/wexon-admin-session-cookie";
+
+export { ADMIN_SESSION_COOKIE, ADMIN_SESSION_COOKIE_LEGACY } from "@/lib/wexon-admin-session-cookie";
 
 /**
  * Admin session auth (MVP).
@@ -18,16 +24,20 @@ import {
  * - MFA (TOTP/WebAuthn) for privileged operations
  * - Session rotation, device binding, and Cloudflare Access identity binding
  *
- * PR1 hardening: host-only admin cookies, production admin-host gate, 2h TTL,
+ * PR1 hardening: host-only v2 admin cookies, production admin-host gate, 2h TTL,
  * timing-safe shared-password compare. Shared password remains until PR2.
+ *
+ * Cookie migration: only `ADMIN_SESSION_COOKIE` (v2) is accepted. Legacy
+ * `ADMIN_SESSION_COOKIE_LEGACY` is cleared on login/logout and never grants access.
+ * Operators should expect a one-time re-login on `admin.wexon.dev` after deploy.
  */
 
-export const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 /** Absolute admin session lifetime (no idle refresh in PR1). */
 export const ADMIN_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const SESSION_COOKIE_PATH = "/";
 
 export const ADMIN_LOGIN_GENERIC_ERROR = "E-posta veya şifre hatalı.";
+export const ADMIN_PRODUCTION_LOGIN_URL = `https://admin.${PRODUCTION_ROOT_HOST}/login`;
 
 export type AdminSession = {
   email: string;
@@ -93,7 +103,7 @@ export function adminSessionCookieClearOptions(): AdminSessionCookieOptions {
   return adminSessionCookieOptions(new Date(0));
 }
 
-/** Legacy Domain=.wexon.dev clear options for migrating pre-PR1 cookies. */
+/** Legacy Domain=.wexon.dev clear options (legacy cookie name only). */
 export function adminSessionCookieLegacyDomainClearOptions(): AdminSessionCookieOptions {
   return {
     ...adminSessionCookieClearOptions(),
@@ -109,6 +119,11 @@ export function isAdminAccessHostAllowed(host: string | null | undefined, produc
   if (!productionWexon) return true;
   const normalized = normalizeHost(host);
   return resolveHostSurface(normalized) === "admin" || isAdminHost(normalized);
+}
+
+export async function readRequestHost() {
+  const headerStore = await headers();
+  return headerStore.get("host") ?? headerStore.get("x-forwarded-host");
 }
 
 function signSession(email: string, expiresAt: number) {
@@ -175,7 +190,11 @@ function parseSessionCookie(value: string | undefined): AdminSession | null {
 export async function getAdminSession() {
   const cookieStore = await cookies();
   const value = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
-  adminDebug("session:get", { hasCookie: Boolean(value), cookieLength: value?.length ?? 0 });
+  adminDebug("session:get", {
+    hasCookie: Boolean(value),
+    cookieLength: value?.length ?? 0,
+    cookieName: ADMIN_SESSION_COOKIE,
+  });
   return parseSessionCookie(value);
 }
 
@@ -184,8 +203,7 @@ async function adminLoginRedirectPath() {
     return "/admin/login";
   }
 
-  const headerStore = await headers();
-  const host = normalizeHost(headerStore.get("host") ?? headerStore.get("x-forwarded-host"));
+  const host = normalizeHost(await readRequestHost());
   if (resolveHostSurface(host) === "admin") {
     return "/login";
   }
@@ -196,8 +214,7 @@ async function adminLoginRedirectPath() {
 export async function assertAdminAccess() {
   adminDebug("assert:start");
   const productionWexon = isWexonProductionDeployment();
-  const headerStore = await headers();
-  const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
+  const host = await readRequestHost();
 
   if (!isAdminAccessHostAllowed(host, productionWexon)) {
     adminDebug("assert:redirect", { to: "login", reason: "wrong_host", host: normalizeHost(host) });
@@ -214,6 +231,13 @@ export async function assertAdminAccess() {
   return session;
 }
 
+function clearLegacyDomainCookie(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+) {
+  // Separate cookie name from v2 — never double-set the same name with two scopes.
+  cookieStore.set(ADMIN_SESSION_COOKIE_LEGACY, "", adminSessionCookieLegacyDomainClearOptions());
+}
+
 export async function createAdminSessionCookie(email: string) {
   const normalizedEmail = email.trim().toLowerCase();
   const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
@@ -227,7 +251,12 @@ export async function createAdminSessionCookie(email: string) {
     expiresAt,
     maxAgeMs: ADMIN_SESSION_TTL_MS,
     hostOnly: true,
+    cookieName: ADMIN_SESSION_COOKIE,
   });
+
+  if (isWexonProductionDeployment()) {
+    clearLegacyDomainCookie(cookieStore);
+  }
 
   cookieStore.set(
     ADMIN_SESSION_COOKIE,
@@ -238,11 +267,20 @@ export async function createAdminSessionCookie(email: string) {
 
 export async function clearAdminSessionCookie() {
   const cookieStore = await cookies();
-  adminDebug("session:cookie_clear", { path: SESSION_COOKIE_PATH, hostOnly: true });
-  // Clear host-only cookie (current PR1 shape).
+  adminDebug("session:cookie_clear", {
+    path: SESSION_COOKIE_PATH,
+    hostOnly: true,
+    cookieName: ADMIN_SESSION_COOKIE,
+  });
+
+  // Clear active v2 host-only cookie.
   cookieStore.set(ADMIN_SESSION_COOKIE, "", adminSessionCookieClearOptions());
-  // Also clear legacy Domain=.wexon.dev cookie if present from pre-PR1 sessions.
+
+  // Clear legacy cookie under a different name (no same-name dual-scope sets).
   if (isWexonProductionDeployment()) {
-    cookieStore.set(ADMIN_SESSION_COOKIE, "", adminSessionCookieLegacyDomainClearOptions());
+    clearLegacyDomainCookie(cookieStore);
+  } else {
+    // Local/preview only ever used host-only cookies; expire legacy name host-only.
+    cookieStore.set(ADMIN_SESSION_COOKIE_LEGACY, "", adminSessionCookieClearOptions());
   }
 }

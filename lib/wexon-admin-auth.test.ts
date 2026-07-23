@@ -2,6 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   ADMIN_LOGIN_GENERIC_ERROR,
+  ADMIN_PRODUCTION_LOGIN_URL,
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_COOKIE_LEGACY,
   ADMIN_SESSION_TTL_MS,
   adminSessionCookieClearOptions,
   adminSessionCookieLegacyDomainClearOptions,
@@ -10,6 +13,10 @@ import {
   isAdminEmailAllowed,
   securePasswordEqual,
 } from "./wexon-admin-auth";
+import {
+  ADMIN_SESSION_COOKIE as SHARED_COOKIE,
+  ADMIN_SESSION_COOKIE_LEGACY as SHARED_LEGACY,
+} from "./wexon-admin-session-cookie";
 
 function withEnv(snapshot: Record<string, string | undefined>, fn: () => void) {
   const previous = new Map<string, string | undefined>();
@@ -29,6 +36,16 @@ function withEnv(snapshot: Record<string, string | undefined>, fn: () => void) {
     }
   }
 }
+
+describe("admin session cookie names", () => {
+  it("uses versioned v2 name for active sessions", () => {
+    assert.equal(ADMIN_SESSION_COOKIE, "wexon_admin_session_v2");
+    assert.equal(ADMIN_SESSION_COOKIE_LEGACY, "wexon_admin_session");
+    assert.equal(SHARED_COOKIE, ADMIN_SESSION_COOKIE);
+    assert.equal(SHARED_LEGACY, ADMIN_SESSION_COOKIE_LEGACY);
+    assert.notEqual(ADMIN_SESSION_COOKIE, ADMIN_SESSION_COOKIE_LEGACY);
+  });
+});
 
 describe("ADMIN_SESSION_TTL_MS", () => {
   it("is 2 hours absolute", () => {
@@ -106,6 +123,7 @@ describe("isAdminAccessHostAllowed", () => {
     assert.equal(isAdminAccessHostAllowed("core.wexon.dev", true), false);
     assert.equal(isAdminAccessHostAllowed("app.wexon.dev", true), false);
     assert.equal(isAdminAccessHostAllowed("wexon.dev", true), false);
+    assert.equal(isAdminAccessHostAllowed("wexon-platform-abc.vercel.app", true), false);
   });
 });
 
@@ -122,5 +140,11 @@ describe("ADMIN_LOGIN_GENERIC_ERROR", () => {
   it("does not leak allowlist or env names", () => {
     assert.match(ADMIN_LOGIN_GENERIC_ERROR, /e-posta veya şifre/i);
     assert.doesNotMatch(ADMIN_LOGIN_GENERIC_ERROR, /ADMIN_|allowlist|yetki listesi/i);
+  });
+});
+
+describe("ADMIN_PRODUCTION_LOGIN_URL", () => {
+  it("points at admin.wexon.dev login", () => {
+    assert.equal(ADMIN_PRODUCTION_LOGIN_URL, "https://admin.wexon.dev/login");
   });
 });

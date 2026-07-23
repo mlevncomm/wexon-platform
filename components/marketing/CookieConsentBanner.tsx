@@ -31,15 +31,6 @@ function getServerSnapshot() {
   return SSR_SNAPSHOT;
 }
 
-/** Local `/admin` surface + admin subdomain — hide marketing consent UI. */
-function isAdminSurfaceClient() {
-  if (typeof window === "undefined") return false;
-  const { hostname, pathname } = window.location;
-  const host = hostname.toLowerCase();
-  if (host === "admin.wexon.dev" || host.startsWith("admin.")) return true;
-  return pathname === "/admin" || pathname.startsWith("/admin/");
-}
-
 export default function CookieConsentBanner() {
   const stored = useSyncExternalStore(subscribeConsent, getConsentSnapshot, getServerSnapshot);
   const [managing, setManaging] = useState(false);
@@ -51,9 +42,8 @@ export default function CookieConsentBanner() {
     setManaging(false);
   }, []);
 
-  // SSR and pre-hydration always null (SSR_SNAPSHOT) — admin path check runs only after hydrate.
+  // SSR / pre-hydration: null. Admin host/path suppression lives in CookieConsentGate.
   if (stored === SSR_SNAPSHOT || stored) return null;
-  if (isAdminSurfaceClient()) return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] p-0 sm:p-5 sm:pb-6">

@@ -20,8 +20,8 @@ import {
   type HostSurface,
 } from "@/lib/wexon-canonical-host";
 import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
+import { ADMIN_SESSION_COOKIE } from "@/lib/wexon-admin-session-cookie";
 
-const ADMIN_SESSION_COOKIE = "wexon_admin_session";
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
 const MAINTENANCE_MODE_ENABLED = process.env.MAINTENANCE_MODE === "true";
 

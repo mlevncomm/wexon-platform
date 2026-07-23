@@ -1,17 +1,25 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getServerActionIpAddress, writeAuditFailure } from "@/lib/wexon-audit";
 import {
   ADMIN_LOGIN_GENERIC_ERROR,
+  ADMIN_PRODUCTION_LOGIN_URL,
   adminDebug,
   clearAdminSessionCookie,
   createAdminSessionCookie,
+  isAdminAccessHostAllowed,
   isAdminEmailAllowed,
   securePasswordEqual,
 } from "@/lib/wexon-admin-auth";
 import { clearCustomerSessionCookie } from "@/lib/wexon-customer-auth";
-import { isWexonProductionDeployment, resolvePostLoginDestination, safeNextPath as canonicalSafeNextPath } from "@/lib/wexon-canonical-host";
+import {
+  isWexonProductionDeployment,
+  normalizeHost,
+  resolvePostLoginDestination,
+  safeNextPath as canonicalSafeNextPath,
+} from "@/lib/wexon-canonical-host";
 import { clearActiveOrganizationCookie } from "@/lib/wexon-organization-context";
 import { unifiedLoginUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
@@ -83,10 +91,26 @@ function redirectLoginError(
 
 export async function loginAdminAction(formData: FormData) {
   adminDebug("login:start");
+  const productionWexon = isWexonProductionDeployment();
+  const headerStore = await headers();
+  const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
+
+  // Host gate MUST run before reading credentials into rate limits or password checks.
+  if (!isAdminAccessHostAllowed(host, productionWexon)) {
+    adminDebug("login:wrong_host", { host: normalizeHost(host) });
+    writeAuditFailure({
+      action: "admin.auth.wrong_host",
+      message: "wrong_host",
+      level: "WARN",
+      source: "admin_auth",
+      metadata: { host: normalizeHost(host), reason: "wrong_host" },
+    });
+    redirect(ADMIN_PRODUCTION_LOGIN_URL);
+  }
+
   const email = readString(formData, "email").toLowerCase();
   const password = readString(formData, "password");
   const nextPath = safeAdminNextPath(readString(formData, "next") || "/applications");
-  const productionWexon = isWexonProductionDeployment();
   const ipAddress = await getServerActionIpAddress();
 
   const ipLimit = enforceRateLimit("admin.login.ip", ipAddress, RATE_LIMITS.adminLoginIp);

@@ -83,6 +83,7 @@ test.describe.serial("auth journey", () => {
     await loginUnified(page, email!, password);
     await expect(page).toHaveURL(/\/(login|dashboard\/login)/);
     const cookies = await page.context().cookies();
+    expect(cookieByName(cookies, "wexon_admin_session_v2")).toBeNull();
     expect(cookieByName(cookies, "wexon_admin_session")).toBeNull();
   });
 
@@ -109,8 +110,10 @@ test.describe.serial("auth journey", () => {
       page.getByRole("menuitem", { name: /Çıkış yap/i }).click(),
     ]);
     const cookies = await page.context().cookies();
-    const adminCookie = cookieByName(cookies, "wexon_admin_session");
-    expect(!adminCookie || !adminCookie.value, "admin cookie should be cleared").toBeTruthy();
+    const adminCookie = cookieByName(cookies, "wexon_admin_session_v2");
+    const legacyCookie = cookieByName(cookies, "wexon_admin_session");
+    expect(!adminCookie || !adminCookie.value, "v2 admin cookie should be cleared").toBeTruthy();
+    expect(!legacyCookie || !legacyCookie.value, "legacy admin cookie should be cleared").toBeTruthy();
   });
 
   test("cookie consent banner is hidden on admin routes", async ({ page }) => {
