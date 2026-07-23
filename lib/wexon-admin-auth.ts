@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
@@ -11,46 +11,68 @@ import {
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_COOKIE_LEGACY,
+  ADMIN_SESSION_COOKIE_V2,
 } from "@/lib/wexon-admin-session-cookie";
+import {
+  ADMIN_SESSION_TTL_MS,
+  adminSessionCookieClearOptions,
+  adminSessionCookieLegacyDomainClearOptions,
+  adminSessionCookieOptions,
+} from "@/lib/wexon-admin-auth-cookie-options";
+import {
+  ADMIN_ACCESS_GENERIC_DENIED,
+  cloudflareAccessAuditSafeMeta,
+  verifyCloudflareAccessJwtFromHeaders,
+} from "@/lib/wexon-cloudflare-access-jwt";
+import {
+  buildAdminSessionV3Payload,
+  encodeAdminSessionV3CookieValue,
+  parseAdminSessionV3CookieValue,
+} from "@/lib/wexon-admin-session-v3";
+import { maskPlatformAdminEmail } from "@/lib/wexon-platform-admin";
+import {
+  assertActivePlatformAdminMatchesIdentity,
+  resolvePlatformAdminForCloudflareAccess,
+} from "@/lib/wexon-platform-admin-cloudflare-bind";
+import { runWithTransactionRetry } from "@/lib/wexon-active-owner";
 
-export { ADMIN_SESSION_COOKIE, ADMIN_SESSION_COOKIE_LEGACY } from "@/lib/wexon-admin-session-cookie";
+export {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_COOKIE_LEGACY,
+  ADMIN_SESSION_COOKIE_V2,
+} from "@/lib/wexon-admin-session-cookie";
+export {
+  ADMIN_SESSION_TTL_MS,
+  adminSessionCookieClearOptions,
+  adminSessionCookieLegacyDomainClearOptions,
+  adminSessionCookieOptions,
+} from "@/lib/wexon-admin-auth-cookie-options";
+export type { AdminSessionCookieOptions } from "@/lib/wexon-admin-auth-cookie-options";
 
 /**
- * Admin session auth (MVP).
+ * Admin session auth (PR2B).
  *
- * PRODUCTION NOTE: A shared `ADMIN_LOGIN_PASSWORD` plus an email allowlist is
- * not sufficient for production admin access. Target architecture (PR2):
- * - Per-admin user records with unique password hashes (argon2/bcrypt)
- * - MFA (TOTP/WebAuthn) for privileged operations
- * - Session rotation, device binding, and Cloudflare Access identity binding
+ * Production / all runtimes:
+ * - Cloudflare Access JWT verified on every admin access check
+ * - ACTIVE PlatformAdmin match (+ first-login subject bind)
+ * - Host-only session cookie `wexon_admin_session_v3`
  *
- * PR1 hardening: host-only v2 admin cookies, production admin-host gate, 2h TTL,
- * timing-safe shared-password compare. Shared password remains until PR2.
+ * Shared `ADMIN_LOGIN_PASSWORD` / `ADMIN_EMAILS` are NOT authorization sources.
+ * Keep those env vars set for emergency rollback only (see docs).
  *
- * Cookie migration: only `ADMIN_SESSION_COOKIE` (v2) is accepted. Legacy
- * `ADMIN_SESSION_COOKIE_LEGACY` is cleared on login/logout and never grants access.
- * Operators should expect a one-time re-login on `admin.wexon.dev` after deploy.
+ * Cookie migration: only `ADMIN_SESSION_COOKIE` (v3) is accepted. v2 + legacy
+ * are cleared on login/logout and never grant access.
  */
 
-/** Absolute admin session lifetime (no idle refresh in PR1). */
-export const ADMIN_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
-const SESSION_COOKIE_PATH = "/";
-
-export const ADMIN_LOGIN_GENERIC_ERROR = "E-posta veya şifre hatalı.";
+export const ADMIN_LOGIN_GENERIC_ERROR = ADMIN_ACCESS_GENERIC_DENIED;
 export const ADMIN_PRODUCTION_LOGIN_URL = `https://admin.${PRODUCTION_ROOT_HOST}/login`;
 
 export type AdminSession = {
+  adminId: string;
   email: string;
+  cloudflareSubject: string;
+  issuedAt: number;
   expiresAt: number;
-};
-
-export type AdminSessionCookieOptions = {
-  httpOnly: true;
-  sameSite: "lax";
-  secure: boolean;
-  path: string;
-  expires: Date;
-  domain?: string;
 };
 
 export function adminDebug(label: string, data?: Record<string, unknown>) {
@@ -59,6 +81,9 @@ export function adminDebug(label: string, data?: Record<string, unknown>) {
   }
 }
 
+/**
+ * @deprecated PR2B — not an authorization source. Retained for rollback tooling / tests only.
+ */
 function getAdminEmails() {
   return (process.env.ADMIN_EMAILS ?? "")
     .split(",")
@@ -66,49 +91,21 @@ function getAdminEmails() {
     .filter(Boolean);
 }
 
-function getSessionSecret() {
-  const secret = process.env.ADMIN_SESSION_SECRET;
-  if (!secret) {
-    throw new Error("Admin oturum yapılandırması eksik.");
-  }
-  return secret;
-}
-
+/**
+ * @deprecated PR2B — do not use for authorization. Kept for rollback / unit coverage only.
+ */
 export function isAdminEmailAllowed(email: string) {
   return getAdminEmails().includes(email.trim().toLowerCase());
 }
 
 /**
- * Timing-safe shared-password compare (temporary until PR2 per-admin hashes).
- * Hashes both sides with SHA-256 so digest lengths always match.
+ * Timing-safe string compare helper (legacy shared-password tests / rollback tooling).
+ * Not used by production admin authorization after PR2B.
  */
 export function securePasswordEqual(provided: string, expected: string) {
   const providedDigest = createHash("sha256").update(provided, "utf8").digest();
   const expectedDigest = createHash("sha256").update(expected, "utf8").digest();
   return timingSafeEqual(providedDigest, expectedDigest);
-}
-
-/** Host-only admin cookie options — never sets Domain (not shared across *.wexon.dev). */
-export function adminSessionCookieOptions(expires: Date): AdminSessionCookieOptions {
-  return {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: SESSION_COOKIE_PATH,
-    expires,
-  };
-}
-
-export function adminSessionCookieClearOptions(): AdminSessionCookieOptions {
-  return adminSessionCookieOptions(new Date(0));
-}
-
-/** Legacy Domain=.wexon.dev clear options (legacy cookie name only). */
-export function adminSessionCookieLegacyDomainClearOptions(): AdminSessionCookieOptions {
-  return {
-    ...adminSessionCookieClearOptions(),
-    domain: `.${PRODUCTION_ROOT_HOST}`,
-  };
 }
 
 /**
@@ -126,68 +123,34 @@ export async function readRequestHost() {
   return headerStore.get("host") ?? headerStore.get("x-forwarded-host");
 }
 
-function signSession(email: string, expiresAt: number) {
-  return createHmac("sha256", getSessionSecret()).update(`${email}.${expiresAt}`).digest("hex");
+function clearPriorAdminCookies(cookieStore: Awaited<ReturnType<typeof cookies>>) {
+  cookieStore.set(ADMIN_SESSION_COOKIE_V2, "", adminSessionCookieClearOptions());
+  if (isWexonProductionDeployment()) {
+    cookieStore.set(ADMIN_SESSION_COOKIE_LEGACY, "", adminSessionCookieLegacyDomainClearOptions());
+  } else {
+    cookieStore.set(ADMIN_SESSION_COOKIE_LEGACY, "", adminSessionCookieClearOptions());
+  }
 }
 
-function encodeCookieEmail(email: string) {
-  return Buffer.from(email, "utf8").toString("base64url");
-}
-
-function decodeCookieEmail(value: string) {
-  try {
-    return Buffer.from(value, "base64url").toString("utf8");
-  } catch {
+/**
+ * Parse v3 cookie only. v2/legacy values are ignored (never authorize).
+ */
+export function parseAdminSessionCookieValue(value: string | undefined): AdminSession | null {
+  const parsed = parseAdminSessionV3CookieValue(value);
+  if (!parsed) {
+    adminDebug("session:parse", { hasCookie: Boolean(value), accepted: false });
     return null;
   }
-}
-
-function verifySignature(email: string, expiresAt: number, signature: string) {
-  const expected = signSession(email, expiresAt);
-  const expectedBuffer = Buffer.from(expected, "hex");
-  const signatureBuffer = Buffer.from(signature, "hex");
-
-  if (expectedBuffer.length !== signatureBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(expectedBuffer, signatureBuffer);
-}
-
-function parseSessionCookie(value: string | undefined): AdminSession | null {
-  if (!value) {
-    adminDebug("session:parse", { hasCookie: false });
-    return null;
-  }
-
-  const [encodedEmail, expiresAtValue, signature] = value.split(".");
-  const email = encodedEmail ? decodeCookieEmail(encodedEmail) : null;
-  const expiresAt = Number(expiresAtValue);
-
-  if (!email || !expiresAt || !signature) {
-    adminDebug("session:parse", { hasCookie: true, cookieLength: value.length, hasParts: false });
-    return null;
-  }
-
-  const expired = expiresAt < Date.now();
-  const allowed = isAdminEmailAllowed(email);
-  const signatureValid = verifySignature(email, expiresAt, signature);
-
   adminDebug("session:parse", {
     hasCookie: true,
-    cookieLength: value.length,
-    email,
-    expired,
-    allowed,
-    signatureValid,
+    accepted: true,
+    emailMasked: maskPlatformAdminEmail(parsed.email),
+    expired: parsed.expiresAt < Date.now(),
   });
-
-  if (expired || !allowed || !signatureValid) return null;
-
-  return { email, expiresAt };
+  return parsed;
 }
 
-export async function getAdminSession() {
+export async function getAdminSession(): Promise<AdminSession | null> {
   const cookieStore = await cookies();
   const value = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
   adminDebug("session:get", {
@@ -195,7 +158,7 @@ export async function getAdminSession() {
     cookieLength: value?.length ?? 0,
     cookieName: ADMIN_SESSION_COOKIE,
   });
-  return parseSessionCookie(value);
+  return parseAdminSessionCookieValue(value);
 }
 
 async function adminLoginRedirectPath() {
@@ -211,6 +174,9 @@ async function adminLoginRedirectPath() {
   return "/admin/login";
 }
 
+/**
+ * Full admin gate: host + Cloudflare JWT + v3 session consistency + active PlatformAdmin.
+ */
 export async function assertAdminAccess() {
   adminDebug("assert:start");
   const productionWexon = isWexonProductionDeployment();
@@ -221,66 +187,119 @@ export async function assertAdminAccess() {
     redirect(await adminLoginRedirectPath());
   }
 
-  const session = await getAdminSession();
-  if (!session) {
-    const loginPath = await adminLoginRedirectPath();
-    adminDebug("assert:redirect", { to: loginPath, hasSession: false });
-    redirect(loginPath);
+  const headerStore = await headers();
+  let identity;
+  try {
+    identity = await verifyCloudflareAccessJwtFromHeaders(headerStore);
+  } catch {
+    adminDebug("assert:redirect", {
+      to: "login",
+      ...cloudflareAccessAuditSafeMeta({ reason: "jwt_invalid" }),
+    });
+    redirect(await adminLoginRedirectPath());
   }
-  adminDebug("assert:ok", { email: session.email });
+
+  const session = await getAdminSession();
+  if (
+    !session ||
+    session.email !== identity.emailNormalized ||
+    session.cloudflareSubject !== identity.subject
+  ) {
+    adminDebug("assert:redirect", {
+      to: "login",
+      reason: "session_mismatch_or_missing",
+      emailMasked: maskPlatformAdminEmail(identity.emailNormalized),
+    });
+    redirect(await adminLoginRedirectPath());
+  }
+
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    await assertActivePlatformAdminMatchesIdentity(prisma, {
+      adminId: session.adminId,
+      emailNormalized: identity.emailNormalized,
+      cloudflareSubject: identity.subject,
+    });
+  } catch {
+    adminDebug("assert:redirect", {
+      to: "login",
+      reason: "platform_admin_denied",
+      emailMasked: maskPlatformAdminEmail(identity.emailNormalized),
+    });
+    redirect(await adminLoginRedirectPath());
+  }
+
+  adminDebug("assert:ok", { emailMasked: maskPlatformAdminEmail(session.email) });
   return session;
 }
 
-function clearLegacyDomainCookie(
-  cookieStore: Awaited<ReturnType<typeof cookies>>,
-) {
-  // Separate cookie name from v2 — never double-set the same name with two scopes.
-  cookieStore.set(ADMIN_SESSION_COOKIE_LEGACY, "", adminSessionCookieLegacyDomainClearOptions());
-}
-
-export async function createAdminSessionCookie(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
-  const signature = signSession(normalizedEmail, expiresAt);
-  const encodedEmail = encodeCookieEmail(normalizedEmail);
+export async function createAdminSessionCookie(input: {
+  adminId: string;
+  email: string;
+  cloudflareSubject: string;
+}) {
+  const payload = buildAdminSessionV3Payload(input);
+  const value = encodeAdminSessionV3CookieValue(payload);
   const cookieStore = await cookies();
 
   adminDebug("session:cookie_set", {
-    email: normalizedEmail,
-    path: SESSION_COOKIE_PATH,
-    expiresAt,
+    emailMasked: maskPlatformAdminEmail(payload.email),
+    path: "/",
+    expiresAt: payload.expiresAt,
     maxAgeMs: ADMIN_SESSION_TTL_MS,
     hostOnly: true,
     cookieName: ADMIN_SESSION_COOKIE,
   });
 
-  if (isWexonProductionDeployment()) {
-    clearLegacyDomainCookie(cookieStore);
-  }
+  clearPriorAdminCookies(cookieStore);
 
   cookieStore.set(
     ADMIN_SESSION_COOKIE,
-    `${encodedEmail}.${expiresAt}.${signature}`,
-    adminSessionCookieOptions(new Date(expiresAt)),
+    value,
+    adminSessionCookieOptions(new Date(payload.expiresAt)),
   );
 }
 
 export async function clearAdminSessionCookie() {
   const cookieStore = await cookies();
   adminDebug("session:cookie_clear", {
-    path: SESSION_COOKIE_PATH,
+    path: "/",
     hostOnly: true,
     cookieName: ADMIN_SESSION_COOKIE,
   });
 
-  // Clear active v2 host-only cookie.
   cookieStore.set(ADMIN_SESSION_COOKIE, "", adminSessionCookieClearOptions());
+  clearPriorAdminCookies(cookieStore);
+}
 
-  // Clear legacy cookie under a different name (no same-name dual-scope sets).
-  if (isWexonProductionDeployment()) {
-    clearLegacyDomainCookie(cookieStore);
-  } else {
-    // Local/preview only ever used host-only cookies; expire legacy name host-only.
-    cookieStore.set(ADMIN_SESSION_COOKIE_LEGACY, "", adminSessionCookieClearOptions());
-  }
+/**
+ * Verify Cloudflare JWT, bind/resolve PlatformAdmin, mint v3 session.
+ * Used by the post-Access continue action (no shared password).
+ */
+export async function establishAdminSessionFromCloudflareAccess() {
+  const headerStore = await headers();
+  const identity = await verifyCloudflareAccessJwtFromHeaders(headerStore);
+  const { prisma } = await import("@/lib/prisma");
+
+  const admin = await runWithTransactionRetry(() =>
+    prisma.$transaction((tx) =>
+      resolvePlatformAdminForCloudflareAccess(tx, {
+        emailNormalized: identity.emailNormalized,
+        cloudflareSubject: identity.subject,
+        touchLastLogin: true,
+      }),
+    ),
+  );
+
+  await createAdminSessionCookie({
+    adminId: admin.id,
+    email: admin.emailNormalized,
+    cloudflareSubject: identity.subject,
+  });
+
+  return {
+    admin,
+    identity,
+    sessionEmail: admin.emailNormalized,
+  };
 }
