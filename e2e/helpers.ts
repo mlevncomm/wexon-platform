@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { importJWK, SignJWT, type JWK } from "jose";
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
@@ -80,11 +81,10 @@ export function assertSafeE2ETarget() {
     process.env.E2E_PUBLIC_ORIGIN ||
     "";
 
-  const looksProduction =
-    target === "production" ||
-    /https?:\/\/([a-z0-9-]+\.)?wexon\.dev\b/i.test(base);
-
-  if (looksProduction && !(target === "production" && confirm)) {
+  if (
+    (target === "production" || /https?:\/\/([a-z0-9-]+\.)?wexon\.dev\b/i.test(base)) &&
+    !(target === "production" && confirm)
+  ) {
     throw new Error(
       [
         "Refusing to run E2E against production without explicit confirmation.",
@@ -97,14 +97,59 @@ export function assertSafeE2ETarget() {
   return { target, confirm, base };
 }
 
-export async function loginAdmin(page: Page, email: string, password: string) {
+function e2eCloudflareSubject(email: string) {
+  return `e2e-cf-subject:${email.trim().toLowerCase()}`;
+}
+
+export async function mintE2eCloudflareAccessJwt(email: string) {
+  if (process.env.VERCEL_ENV === "production") {
+    throw new Error("Refusing to mint CF Access test JWT on Vercel production.");
+  }
+  const privateRaw = process.env.WEXON_CF_ACCESS_TEST_PRIVATE_JWK?.trim();
+  const teamDomain = process.env.CLOUDFLARE_ACCESS_TEAM_DOMAIN?.trim();
+  const audience = process.env.CLOUDFLARE_ACCESS_AUD?.trim();
+  if (!privateRaw || !teamDomain || !audience) {
+    throw new Error("CF Access test JWT mint requires WEXON_CF_ACCESS_TEST_PRIVATE_JWK + team domain + AUD.");
+  }
+  const privateJwk = JSON.parse(privateRaw) as JWK;
+  const key = await importJWK(privateJwk, "RS256");
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({ email })
+    .setProtectedHeader({
+      alg: "RS256",
+      kid: typeof privateJwk.kid === "string" ? privateJwk.kid : undefined,
+      typ: "JWT",
+    })
+    .setIssuer(`https://${teamDomain}`)
+    .setAudience(audience)
+    .setSubject(e2eCloudflareSubject(email))
+    .setIssuedAt(now)
+    .setNotBefore(now)
+    .setExpirationTime(now + 60 * 60)
+    .sign(key);
+}
+
+/** Attach CF Access JWT for subsequent admin requests (local/CI test mode only). */
+export async function attachE2eCloudflareAccessJwt(page: Page, email: string) {
+  const token = await mintE2eCloudflareAccessJwt(email);
+  await page.context().setExtraHTTPHeaders({
+    "Cf-Access-Jwt-Assertion": token,
+  });
+  return token;
+}
+
+export async function loginAdmin(page: Page, email: string, password?: string) {
+  void password;
+  await attachE2eCloudflareAccessJwt(page, email);
   await page.goto("/admin/login");
-  await page.getByLabel("E-posta").fill(email);
-  await page.locator('input[name="password"]').fill(password);
+  await expect(page.getByRole("button", { name: /Yönetim paneline devam et/i })).toBeVisible();
   await Promise.all([
-    page.waitForURL(/\/admin(\/applications)?\/?$/),
-    page.locator('button[type="submit"]').click(),
+    page.waitForURL(/\/admin(\/applications)?\/?$/, { timeout: 30_000 }),
+    page.getByRole("button", { name: /Yönetim paneline devam et/i }).click(),
   ]);
+  await expect(page, "admin continue login must not stay on login with denial").not.toHaveURL(
+    /adminError=/,
+  );
 }
 
 export async function loginCustomer(page: Page, email: string, password: string) {
@@ -143,18 +188,21 @@ export async function expectSessionCookieSecureFlags(page: Page, name: string) {
   return cookie!;
 }
 
-/** Admin session cookies must be host-only v2 (no Domain=.wexon.dev). */
+/** Admin session cookies must be host-only v3 (no Domain=.wexon.dev). */
 export async function expectAdminSessionCookieHostOnly(page: Page) {
-  const cookie = await expectSessionCookieSecureFlags(page, "wexon_admin_session_v2");
+  const cookie = await expectSessionCookieSecureFlags(page, "wexon_admin_session_v3");
   const domain = (cookie.domain || "").replace(/^\./, "");
   const pageHost = new URL(page.url()).hostname;
   expect(cookie.domain?.startsWith(".") ?? false, "admin cookie must not use Domain=.wexon.dev").toBe(false);
   if (pageHost === "localhost" || pageHost === "127.0.0.1") {
     expect(["localhost", "127.0.0.1"]).toContain(domain || pageHost);
   }
-  // Legacy cookie must not grant a parallel session.
-  const legacy = cookieByName(await page.context().cookies(), "wexon_admin_session");
+  // Prior cookies must not grant a parallel session.
+  const all = await page.context().cookies();
+  const legacy = cookieByName(all, "wexon_admin_session");
+  const v2 = cookieByName(all, "wexon_admin_session_v2");
   expect(!legacy || !legacy.value, "legacy wexon_admin_session must be absent or empty").toBeTruthy();
+  expect(!v2 || !v2.value, "v2 wexon_admin_session_v2 must be absent or empty").toBeTruthy();
   return cookie;
 }
 

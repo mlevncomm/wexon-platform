@@ -64,11 +64,10 @@ test.describe.serial("auth journey", () => {
     test.skip(!email, "admin email required");
 
     await page.goto("/admin/login");
-    await page.getByLabel("E-posta").fill(email!);
-    await page.locator('input[name="password"]').fill("wrong-admin-password");
-    await page.locator('button[type="submit"]').click();
+    // Shared password form is gone — continue without JWT must fail generically.
+    await page.getByRole("button", { name: /Yönetim paneline devam et/i }).click();
     await expect(page).toHaveURL(/\/admin\/login/);
-    await expect(page.getByText(/E-posta veya şifre hatalı/i).first()).toBeVisible({
+    await expect(page.getByText(/Yönetim paneline erişim reddedildi/i).first()).toBeVisible({
       timeout: 20_000,
     });
     await expect(page.getByText(/yetki listesinde|ADMIN_LOGIN_PASSWORD|ADMIN_SESSION/i)).toHaveCount(0);
@@ -77,12 +76,13 @@ test.describe.serial("auth journey", () => {
   test("unified login with admin credentials does not mint admin cookie", async ({ page }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     const email = adminEmailFromEnv(fixtures);
-    test.skip(!email || !password, "ADMIN_EMAILS and ADMIN_LOGIN_PASSWORD required");
+    test.skip(!email || !password, "admin email and rollback password env required for negative test");
 
     await seedCookieConsentRejected(page);
     await loginUnified(page, email!, password);
     await expect(page).toHaveURL(/\/(login|dashboard\/login)/);
     const cookies = await page.context().cookies();
+    expect(cookieByName(cookies, "wexon_admin_session_v3")).toBeNull();
     expect(cookieByName(cookies, "wexon_admin_session_v2")).toBeNull();
     expect(cookieByName(cookies, "wexon_admin_session")).toBeNull();
   });
@@ -90,7 +90,7 @@ test.describe.serial("auth journey", () => {
   test("admin login sets host-only admin session cookie", async ({ page }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     const email = adminEmailFromEnv(fixtures);
-    test.skip(!email || !password, "ADMIN_EMAILS and ADMIN_LOGIN_PASSWORD required");
+    test.skip(!email, "admin email required");
 
     await loginAdmin(page, email!, password);
     await expect(page).toHaveURL(/\/admin\/?$/);
@@ -100,7 +100,7 @@ test.describe.serial("auth journey", () => {
   test("admin logout clears admin session cookie", async ({ page }) => {
     test.skip(!fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable");
     const email = adminEmailFromEnv(fixtures);
-    test.skip(!email || !password, "ADMIN_EMAILS and ADMIN_LOGIN_PASSWORD required");
+    test.skip(!email, "admin email required");
 
     await loginAdmin(page, email!, password);
     await expectAdminSessionCookieHostOnly(page);
@@ -110,9 +110,11 @@ test.describe.serial("auth journey", () => {
       page.getByRole("menuitem", { name: /Çıkış yap/i }).click(),
     ]);
     const cookies = await page.context().cookies();
-    const adminCookie = cookieByName(cookies, "wexon_admin_session_v2");
+    const v3 = cookieByName(cookies, "wexon_admin_session_v3");
+    const v2 = cookieByName(cookies, "wexon_admin_session_v2");
     const legacyCookie = cookieByName(cookies, "wexon_admin_session");
-    expect(!adminCookie || !adminCookie.value, "v2 admin cookie should be cleared").toBeTruthy();
+    expect(!v3 || !v3.value, "v3 admin cookie should be cleared").toBeTruthy();
+    expect(!v2 || !v2.value, "v2 admin cookie should be cleared").toBeTruthy();
     expect(!legacyCookie || !legacyCookie.value, "legacy admin cookie should be cleared").toBeTruthy();
   });
 

@@ -20,7 +20,10 @@ describe("wexon entitlement lifecycle", () => {
   let planId = "";
   let entitlementId = "";
   const actor: AdminSession = {
+    adminId: "lifecycle-test-admin",
     email: "lifecycle-test@wexon.dev",
+    cloudflareSubject: "lifecycle-cf-subject",
+    issuedAt: Date.now(),
     expiresAt: Date.now() + 60 * 60 * 1000,
   };
 

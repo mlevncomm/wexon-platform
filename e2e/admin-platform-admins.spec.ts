@@ -28,9 +28,9 @@ test.describe.serial("admin platform admins (PR2A)", () => {
     await page.goto("/admin/platform-admins");
     await expect(page).toHaveURL(/\/admin\/platform-admins/);
     await expect(page.locator("body")).toContainText(/PlatformAdmin yönetimi/i);
-    await expect(page.locator("body")).toContainText(/PR2A hazırlık/i);
-    await expect(page.locator("body")).toContainText(/PR2B'de bağlanacak/);
-    await expect(page.locator("body")).toContainText(/paylaşılan admin şifresi/i);
+    await expect(page.locator("body")).toContainText(/PR2B kimlik durumu/i);
+    await expect(page.locator("body")).toContainText(/Aktif \(JWT \+ subject\)/);
+    await expect(page.locator("body")).toContainText(/Cloudflare Access JWT/i);
     await expect(page.locator("body")).not.toContainText(/ADMIN_LOGIN_PASSWORD|ADMIN_SESSION_SECRET|eyJhbGciOi/i);
 
     const addForm = page.locator("form").filter({ has: page.locator('input[name="displayName"]') }).first();
@@ -69,18 +69,20 @@ test.describe.serial("admin platform admins (PR2A)", () => {
     await loginAdmin(page, email, password);
     await page.goto("/admin/platform-admins");
 
-    // Deactivate B first so only A (among the e2e pair) remains active among our rows;
-    // then deactivate every other active row if present, finally attempt last-active on A.
-    const rowB = page.locator("tr").filter({ hasText: emailB }).first();
-    if (await rowB.getByRole("button", { name: "Pasife al" }).count()) {
-      await rowB.getByRole("button", { name: "Pasife al" }).click();
+    // Never deactivate the logged-in session PlatformAdmin until it is the sole
+    // remaining active row — otherwise assertAdminAccess fails mid-test.
+    for (const target of [emailB, emailA]) {
+      const row = page.locator("tr").filter({ hasText: target }).first();
+      if (await row.getByRole("button", { name: "Pasife al" }).count()) {
+        await row.getByRole("button", { name: "Pasife al" }).click();
+        await page.goto("/admin/platform-admins");
+      }
     }
 
-    // Deactivate any other active rows except A (best-effort for isolated DB with only our rows).
     for (;;) {
       const otherActive = page
         .locator("tr")
-        .filter({ hasNotText: emailA })
+        .filter({ hasNotText: email })
         .filter({ has: page.getByRole("button", { name: "Pasife al" }) })
         .first();
       if ((await otherActive.count()) === 0) break;
@@ -88,10 +90,11 @@ test.describe.serial("admin platform admins (PR2A)", () => {
       await page.goto("/admin/platform-admins");
     }
 
-    const rowA = page.locator("tr").filter({ hasText: emailA }).first();
-    await rowA.getByRole("button", { name: "Pasife al" }).click();
+    const sessionRow = page.locator("tr").filter({ hasText: email }).first();
+    await expect(sessionRow).toBeVisible();
+    await sessionRow.getByRole("button", { name: "Pasife al" }).click();
     await expect(page.locator("body")).toContainText(/son aktif platform yöneticisi/i);
-    await expect(rowA).toContainText(/Aktif/i);
+    await expect(sessionRow).toContainText(/Aktif/i);
   });
 
   test("smoke: nav link reaches platform admins", async ({ page }) => {
