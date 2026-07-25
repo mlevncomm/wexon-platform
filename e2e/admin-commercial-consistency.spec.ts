@@ -326,7 +326,8 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await waive.locator('input[name="confirmed"]').check();
     await expect(waive.getByTestId("activation-fee-waive-submit")).toBeEnabled();
     await submitCommercialForm(page, waive.getByTestId("activation-fee-waive-submit"));
-    await expect(page.getByTestId("activation-fee-status")).toContainText(/\bMuaf\b/, { timeout: 30_000 });
+    // Status row text is concatenated as "DurumMuaf" — avoid word-boundary regex.
+    await expect(page.getByTestId("activation-fee-status")).toContainText("Muaf", { timeout: 30_000 });
     await expect
       .poll(async () => {
         const row = await prisma.activationFeeLedger.findUniqueOrThrow({
