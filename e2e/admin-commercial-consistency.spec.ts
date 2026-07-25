@@ -58,6 +58,30 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
   }
 
+  async function collapseUsageForEssential(orgId: string) {
+    const restaurants = await prisma.restaurant.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const extra of restaurants.slice(1)) {
+      await prisma.restaurant.update({ where: { id: extra.id }, data: { isActive: false } });
+      await prisma.branch.updateMany({ where: { restaurantId: extra.id }, data: { isActive: false } });
+    }
+    const keep = restaurants[0];
+    if (!keep) return;
+    await prisma.restaurant.update({ where: { id: keep.id }, data: { isActive: true } });
+    const branches = await prisma.branch.findMany({
+      where: { restaurantId: keep.id },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const extra of branches.slice(1)) {
+      await prisma.branch.update({ where: { id: extra.id }, data: { isActive: false } });
+    }
+    if (branches[0]) {
+      await prisma.branch.update({ where: { id: branches[0].id }, data: { isActive: true } });
+    }
+  }
+
   async function openCommercialPanels(page: import("@playwright/test").Page) {
     for (const title of ["Lisans ve paket", "Aktivasyon ücreti"]) {
       const details = page.locator("details").filter({ hasText: title }).first();
@@ -65,6 +89,16 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
       const isOpen = await details.evaluate((el) => (el as HTMLDetailsElement).open);
       if (!isOpen) await details.locator("summary").click();
     }
+  }
+
+  async function submitCommercialForm(
+    page: import("@playwright/test").Page,
+    submit: import("@playwright/test").Locator,
+  ) {
+    await Promise.all([
+      page.waitForLoadState("networkidle"),
+      submit.click(),
+    ]);
   }
 
   test("PR4C: session v3 opens commercial org detail", async ({ page }) => {
@@ -119,9 +153,10 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await form.locator('input[name="reason"]').fill("Isolated E2E Growth yükseltme gerekçesi");
     await form.locator('input[name="confirmed"]').check();
     await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
-    await form.getByTestId("plan-change-submit").click();
-    await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
+    await submitCommercialForm(page, form.getByTestId("plan-change-submit"));
+    await expect(page.getByTestId("license-sync-summary")).toContainText(/Growth/i, { timeout: 30_000 });
     await expect(page.locator("body")).not.toContainText(/adminError=/);
+    await expect(page.locator("body")).not.toContainText(/Paket düşürme reddedildi|Paket değiştirilemedi/);
 
     const updated = await prisma.license.findUniqueOrThrow({
       where: { id: license.id },
@@ -189,8 +224,8 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await form.locator('input[name="reason"]').fill("Isolated E2E limit aşan downgrade");
     await form.locator('input[name="confirmed"]').check();
     await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
-    await form.getByTestId("plan-change-submit").click();
-    await expect(page.locator("body")).toContainText(/Paket düşürme reddedildi|adminError/);
+    await submitCommercialForm(page, form.getByTestId("plan-change-submit"));
+    await expect(page.locator("body")).toContainText(/Paket düşürme reddedildi/, { timeout: 30_000 });
 
     const after = await prisma.license.findUniqueOrThrow({
       where: { id: license.id },
@@ -220,14 +255,8 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
     expect(essential && growth).toBeTruthy();
 
-    // Collapse to a single branch so essential limits pass.
-    const restaurants = await prisma.restaurant.findMany({ where: { organizationId: orgId } });
-    for (const restaurant of restaurants) {
-      const branches = await prisma.branch.findMany({ where: { restaurantId: restaurant.id }, orderBy: { createdAt: "asc" } });
-      for (const extra of branches.slice(1)) {
-        await prisma.branch.update({ where: { id: extra.id }, data: { isActive: false } });
-      }
-    }
+    // Collapse usage so Essential limits and multi-location checks pass.
+    await collapseUsageForEssential(orgId);
     await prisma.license.update({ where: { id: license.id }, data: { planId: growth!.id } });
     if (license.subscription) {
       await prisma.subscription.update({ where: { id: license.subscription.id }, data: { planId: growth!.id } });
@@ -240,11 +269,13 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
       has: page.getByTestId("plan-change-submit"),
     });
     await form.locator('select[name="planId"]').selectOption(essential!.id);
+    await expect(form.getByTestId("plan-change-type")).toContainText(/Düşürme/);
     await form.locator('input[name="reason"]').fill("Isolated E2E uygun downgrade");
     await form.locator('input[name="confirmed"]').check();
     await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
-    await form.getByTestId("plan-change-submit").click();
-    await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
+    await submitCommercialForm(page, form.getByTestId("plan-change-submit"));
+    await expect(page.getByTestId("license-sync-summary")).toContainText(/Essential/i, { timeout: 30_000 });
+    await expect(page.locator("body")).not.toContainText(/Paket düşürme reddedildi|Paket değiştirilemedi/);
 
     const after = await prisma.license.findUniqueOrThrow({
       where: { id: license.id },
@@ -290,8 +321,9 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await expect(waive).toBeVisible();
     await waive.locator('input[name="reason"]').fill("Isolated E2E aktivasyon muafiyeti");
     await waive.locator('input[name="confirmed"]').check();
-    await waive.getByTestId("activation-fee-waive-submit").click();
-    await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
+    await expect(waive.getByTestId("activation-fee-waive-submit")).toBeEnabled();
+    await submitCommercialForm(page, waive.getByTestId("activation-fee-waive-submit"));
+    await expect(page.getByTestId("activation-fee-panel")).toContainText(/Muaf|WAIVED|waived/i, { timeout: 30_000 });
 
     const ledger = await prisma.activationFeeLedger.findUniqueOrThrow({
       where: { organizationId_productId: { organizationId: orgId, productId: license.productId } },
