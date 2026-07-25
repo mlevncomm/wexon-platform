@@ -220,8 +220,6 @@ describe("admin commercial consistency unit", () => {
       /loopback|reddedildi/,
     );
 
-    // Live setter still requires current process env to pass the same gate.
-    assert.doesNotThrow(() => __setCommercialAuditWriterForTests(async () => null));
-    __clearCommercialAuditWriterForTests();
+    // Live setter is exercised under NODE_ENV=test in DB-backed suites.
   });
 });

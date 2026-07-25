@@ -58,16 +58,20 @@ async function seedEntitlements(planId: string, limits: Record<string, number | 
   }
 }
 
-async function waitForAdvisoryWaiters(minWaiters: number, timeoutMs = 10_000) {
+async function waitForAdvisoryWaiters(
+  monitor: pg.PoolClient,
+  minWaiters: number,
+  timeoutMs = 10_000,
+) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const rows = await prisma.$queryRaw<Array<{ c: number }>>`
-      SELECT COUNT(*)::int AS c
-      FROM pg_locks
-      WHERE locktype = 'advisory'
-        AND NOT granted
-    `;
-    if ((rows[0]?.c ?? 0) >= minWaiters) return;
+    const rows = await monitor.query<{ c: string }>(
+      `SELECT COUNT(*)::int AS c
+       FROM pg_locks
+       WHERE locktype = 'advisory'
+         AND NOT granted`,
+    );
+    if (Number(rows.rows[0]?.c ?? 0) >= minWaiters) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(`Timed out waiting for ${minWaiters} advisory lock waiter(s)`);
@@ -477,8 +481,9 @@ describe("admin commercial consistency (DB-backed)", () => {
     });
 
     const databaseUrl = process.env.DATABASE_URL!;
-    const pool = new pg.Pool({ connectionString: databaseUrl });
+    const pool = new pg.Pool({ connectionString: databaseUrl, max: 4 });
     const holder = await pool.connect();
+    const monitor = await pool.connect();
     const lockEntity = commercialLicensePlanLockEntity(ids.orgA!, ids.licenseA!);
 
     try {
@@ -496,7 +501,7 @@ describe("admin commercial consistency (DB-backed)", () => {
         confirmed: true,
         actor,
       });
-      await waitForAdvisoryWaiters(1);
+      await waitForAdvisoryWaiters(monitor, 1);
 
       const downgradePromise = changeLicensePlanWithSubscriptionSync({
         organizationId: ids.orgA!,
@@ -506,7 +511,7 @@ describe("admin commercial consistency (DB-backed)", () => {
         confirmed: true,
         actor,
       });
-      await waitForAdvisoryWaiters(2);
+      await waitForAdvisoryWaiters(monitor, 2);
 
       await holder.query("COMMIT");
 
@@ -536,6 +541,7 @@ describe("admin commercial consistency (DB-backed)", () => {
         /* already committed */
       }
       holder.release();
+      monitor.release();
       await pool.end();
       await prisma.branch.deleteMany({ where: { restaurantId: restaurant.id } }).catch(() => undefined);
       await prisma.restaurant.delete({ where: { id: restaurant.id } }).catch(() => undefined);
