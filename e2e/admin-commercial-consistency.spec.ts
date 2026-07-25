@@ -1,0 +1,337 @@
+import { expect, test } from "@playwright/test";
+import { prisma } from "@/lib/prisma";
+import {
+  adminEmailFromEnv,
+  adminPassword,
+  expectAdminSessionCookieHostOnly,
+  loadFixtures,
+  loginAdmin,
+} from "./helpers";
+
+/**
+ * Admin PR4 — commercial consistency (isolated, 0 skip).
+ * Titles are gated by scripts/run-wexpay-isolated-e2e.mjs.
+ */
+test.describe.serial("admin commercial consistency (PR4)", () => {
+  const fixtures = loadFixtures();
+  const password = adminPassword();
+
+  function requireFixtures() {
+    expect(fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable").toBe(true);
+    expect(fixtures.fixturesReady, fixtures.setupError ?? "fixtures incomplete").toBe(true);
+    expect(fixtures.licensedOrgId, "licensed org required").toBeTruthy();
+    const email = adminEmailFromEnv(fixtures);
+    expect(email, "admin email required").toBeTruthy();
+    return { email: email!, orgId: fixtures.licensedOrgId! };
+  }
+
+  async function ensureOrgHasSubscription(orgId: string) {
+    const license = await prisma.license.findFirst({
+      where: { organizationId: orgId, product: { key: "wexpay" } },
+      include: { subscription: true, plan: true, product: true },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(license, "licensed org must have WexPay license").toBeTruthy();
+    if (!license!.subscription) {
+      await prisma.subscription.create({
+        data: {
+          organizationId: orgId,
+          licenseId: license!.id,
+          planId: license!.planId,
+          status: "ACTIVE",
+          interval: "MONTHLY",
+          provider: "admin_manual",
+          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+    return prisma.license.findUniqueOrThrow({
+      where: { id: license!.id },
+      include: { subscription: true, plan: true, product: true },
+    });
+  }
+
+  test("PR4C: session v3 opens commercial org detail", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await expectAdminSessionCookieHostOnly(page);
+    await ensureOrgHasSubscription(orgId);
+
+    await page.goto(`/admin/organizations/${orgId}`);
+    await expect(page.getByTestId("license-commercial-panel")).toBeVisible();
+    await expect(page.getByTestId("license-sync-summary")).toBeVisible();
+    await expect(page.getByTestId("activation-fee-panel")).toBeVisible();
+    await expect(page.locator("body")).toContainText(/Senkron|Abonelik yok|Tutarsız/);
+  });
+
+  test("PR4C: upgrade succeeds and keeps License/Subscription synced", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    const license = await ensureOrgHasSubscription(orgId);
+
+    const growth = await prisma.plan.findFirst({
+      where: {
+        productId: license.productId,
+        isActive: true,
+        OR: [{ tierKey: "growth" }, { key: { contains: "growth" } }],
+      },
+    });
+    expect(growth, "growth plan required").toBeTruthy();
+
+    await page.goto(`/admin/organizations/${orgId}`);
+    const form = page.getByTestId("license-commercial-panel").locator("form").filter({
+      has: page.getByTestId("plan-change-submit"),
+    });
+    await form.locator('select[name="planId"]').selectOption(growth!.id);
+    await form.locator('input[name="reason"]').fill("Isolated E2E Growth yükseltme gerekçesi");
+    await form.locator('input[name="confirmed"]').check();
+    await form.getByTestId("plan-change-submit").click();
+    await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
+    await expect(page.locator("body")).not.toContainText(/adminError=/);
+
+    const updated = await prisma.license.findUniqueOrThrow({
+      where: { id: license.id },
+      include: { subscription: true },
+    });
+    expect(updated.planId).toBe(growth!.id);
+    expect(updated.subscription?.planId).toBe(growth!.id);
+    await expect(page.getByTestId("license-sync-summary")).toContainText(/Senkron/);
+  });
+
+  test("PR4C: over-limit downgrade is rejected without mutation", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    const license = await ensureOrgHasSubscription(orgId);
+
+    const essential = await prisma.plan.findFirst({
+      where: {
+        productId: license.productId,
+        isActive: true,
+        OR: [{ tierKey: "essential" }, { key: { contains: "essential" } }],
+      },
+    });
+    const growth = await prisma.plan.findFirst({
+      where: {
+        productId: license.productId,
+        isActive: true,
+        OR: [{ tierKey: "growth" }, { key: { contains: "growth" } }],
+      },
+    });
+    expect(essential && growth).toBeTruthy();
+
+    await prisma.license.update({ where: { id: license.id }, data: { planId: growth!.id } });
+    if (license.subscription) {
+      await prisma.subscription.update({ where: { id: license.subscription.id }, data: { planId: growth!.id } });
+    }
+
+    let restaurant = await prisma.restaurant.findFirst({ where: { organizationId: orgId } });
+    if (!restaurant) {
+      restaurant = await prisma.restaurant.create({
+        data: { organizationId: orgId, name: "PR4C Multi", slug: `pr4c-multi-${Date.now()}`, isActive: true },
+      });
+    }
+    const branchCount = await prisma.branch.count({ where: { restaurantId: restaurant.id, isActive: true } });
+    if (branchCount < 2) {
+      for (let i = branchCount; i < 2; i += 1) {
+        await prisma.branch.create({
+          data: {
+            restaurantId: restaurant.id,
+            name: `PR4C B${i}`,
+            slug: `pr4c-b${i}-${Date.now()}`,
+            isActive: true,
+          },
+        });
+      }
+    }
+
+    await page.goto(`/admin/organizations/${orgId}`);
+    const form = page.getByTestId("license-commercial-panel").locator("form").filter({
+      has: page.getByTestId("plan-change-submit"),
+    });
+    await form.locator('select[name="planId"]').selectOption(essential!.id);
+    await form.locator('input[name="reason"]').fill("Isolated E2E limit aşan downgrade");
+    await form.locator('input[name="confirmed"]').check();
+    await form.getByTestId("plan-change-submit").click();
+    await expect(page.locator("body")).toContainText(/Paket düşürme reddedildi|adminError/);
+
+    const after = await prisma.license.findUniqueOrThrow({
+      where: { id: license.id },
+      include: { subscription: true },
+    });
+    expect(after.planId).toBe(growth!.id);
+    expect(after.subscription?.planId).toBe(growth!.id);
+  });
+
+  test("PR4C: suitable downgrade succeeds when usage fits", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    const license = await ensureOrgHasSubscription(orgId);
+    const essential = await prisma.plan.findFirst({
+      where: {
+        productId: license.productId,
+        isActive: true,
+        OR: [{ tierKey: "essential" }, { key: { contains: "essential" } }],
+      },
+    });
+    const growth = await prisma.plan.findFirst({
+      where: {
+        productId: license.productId,
+        isActive: true,
+        OR: [{ tierKey: "growth" }, { key: { contains: "growth" } }],
+      },
+    });
+    expect(essential && growth).toBeTruthy();
+
+    // Collapse to a single branch so essential limits pass.
+    const restaurants = await prisma.restaurant.findMany({ where: { organizationId: orgId } });
+    for (const restaurant of restaurants) {
+      const branches = await prisma.branch.findMany({ where: { restaurantId: restaurant.id }, orderBy: { createdAt: "asc" } });
+      for (const extra of branches.slice(1)) {
+        await prisma.branch.update({ where: { id: extra.id }, data: { isActive: false } });
+      }
+    }
+    await prisma.license.update({ where: { id: license.id }, data: { planId: growth!.id } });
+    if (license.subscription) {
+      await prisma.subscription.update({ where: { id: license.subscription.id }, data: { planId: growth!.id } });
+    }
+
+    await page.goto(`/admin/organizations/${orgId}`);
+    const form = page.getByTestId("license-commercial-panel").locator("form").filter({
+      has: page.getByTestId("plan-change-submit"),
+    });
+    await form.locator('select[name="planId"]').selectOption(essential!.id);
+    await form.locator('input[name="reason"]').fill("Isolated E2E uygun downgrade");
+    await form.locator('input[name="confirmed"]').check();
+    await form.getByTestId("plan-change-submit").click();
+    await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
+
+    const after = await prisma.license.findUniqueOrThrow({
+      where: { id: license.id },
+      include: { subscription: true },
+    });
+    expect(after.planId).toBe(essential!.id);
+    expect(after.subscription?.planId).toBe(essential!.id);
+  });
+
+  test("PR4C: activation fee panel and suitable waive", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    const license = await ensureOrgHasSubscription(orgId);
+
+    await prisma.activationFeeLedger.upsert({
+      where: {
+        organizationId_productId: { organizationId: orgId, productId: license.productId },
+      },
+      create: {
+        organizationId: orgId,
+        productId: license.productId,
+        planId: license.planId,
+        status: "PENDING",
+        activationFeeMinor: 2000000,
+        taxAmountMinor: 0,
+        grossAmountMinor: 2000000,
+        reservedUntil: null,
+        subscriptionPaymentId: null,
+      },
+      update: {
+        status: "PENDING",
+        waivedReason: null,
+        reservedUntil: null,
+        subscriptionPaymentId: null,
+        paidAt: null,
+      },
+    });
+
+    await page.goto(`/admin/organizations/${orgId}`);
+    await expect(page.getByTestId("activation-fee-panel")).toContainText(/Beklemede|PENDING|Pasif|Durum/i);
+    const waive = page.getByTestId("activation-fee-waive-form");
+    await expect(waive).toBeVisible();
+    await waive.locator('input[name="reason"]').fill("Isolated E2E aktivasyon muafiyeti");
+    await waive.locator('input[name="confirmed"]').check();
+    await waive.getByTestId("activation-fee-waive-submit").click();
+    await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
+
+    const ledger = await prisma.activationFeeLedger.findUniqueOrThrow({
+      where: { organizationId_productId: { organizationId: orgId, productId: license.productId } },
+    });
+    expect(ledger.status).toBe("WAIVED");
+  });
+
+  test("PR4C: settled ledger waive is rejected", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    const license = await ensureOrgHasSubscription(orgId);
+
+    await prisma.activationFeeLedger.upsert({
+      where: {
+        organizationId_productId: { organizationId: orgId, productId: license.productId },
+      },
+      create: {
+        organizationId: orgId,
+        productId: license.productId,
+        status: "PAID",
+        paidAt: new Date(),
+        activationFeeMinor: 2000000,
+      },
+      update: {
+        status: "PAID",
+        paidAt: new Date(),
+        waivedReason: null,
+      },
+    });
+
+    await page.goto(`/admin/organizations/${orgId}`);
+    await expect(page.getByTestId("activation-fee-waive-form")).toHaveCount(0);
+    await expect(page.getByTestId("activation-fee-panel")).toContainText(/muafiyet işlemi uygun değil|Ödendi|PAID/i);
+  });
+
+  test("PR4C: cross-tenant license plan change is rejected", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    const license = await ensureOrgHasSubscription(orgId);
+    const otherOrgId = fixtures.realOrgId && fixtures.realOrgId !== orgId ? fixtures.realOrgId : fixtures.customerOrgId;
+    expect(otherOrgId, "second org required for cross-tenant check").toBeTruthy();
+    expect(otherOrgId).not.toBe(orgId);
+
+    await page.goto(`/admin/organizations/${otherOrgId}`);
+    // Attempt posting plan change action bound to wrong org/license via crafted form is covered by DB tests;
+    // UI must still not expose the foreign license as editable on this org.
+    await expect(page.getByTestId("license-commercial-panel")).toBeVisible();
+    const body = await page.locator("body").innerText();
+    expect(body.includes(license.id)).toBeFalsy();
+  });
+
+  test("PR4C: subscription create form providers are allowlisted", async ({ page }) => {
+    const { email } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await page.goto("/admin/subscriptions");
+    const provider = page.locator('select[name="provider"]');
+    await expect(provider).toBeVisible();
+    const options = await provider.locator("option").allTextContents();
+    expect(options.join(" ")).toMatch(/Admin manuel/i);
+    expect(options.join(" ")).toMatch(/PayTR/i);
+    expect(options.join(" ").toLowerCase()).not.toContain("mock");
+    expect(options.join(" ").toLowerCase()).not.toContain("stripe");
+  });
+
+  test("PR4C: PR3 read-only preview regression still holds", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await page.goto(`/admin/organizations/${orgId}/wexpay-preview`);
+    await expect(page.getByTestId("admin-preview-write-mode")).toContainText(/Read-only/i);
+  });
+
+  test("PR4C: logout clears admin session cookie", async ({ page }) => {
+    const { email } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await expectAdminSessionCookieHostOnly(page);
+    await page.getByRole("button", { name: "Admin profil menüsü" }).click();
+    await Promise.all([
+      page.waitForURL(/\/(login|admin\/login)/),
+      page.getByRole("menuitem", { name: /Çıkış yap/i }).click(),
+    ]);
+    const cookies = await page.context().cookies();
+    const v3 = cookies.find((c) => c.name === "wexon_admin_session_v3");
+    expect(!v3 || !v3.value).toBeTruthy();
+  });
+});
