@@ -9,14 +9,37 @@ import {
 } from "@/lib/wexon-core-access";
 import { ActivationFeeError, waiveActivationFee } from "@/lib/wexon-activation-fee";
 import { getCanonicalTier, resolveWexPayTierKey, type WexPayTierKey } from "@/lib/wexpay-canonical-catalog";
+import {
+  assertActivePlatformAdminMatchesIdentity,
+  PlatformAdminCloudflareAccessError,
+} from "@/lib/wexon-platform-admin-cloudflare-bind";
+import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
+import {
+  evaluateActivationFeeWaivePolicy,
+  isAllowedAdminSubscriptionProvider as isAllowedProviderFromPolicy,
+  isFreshActivationReservation as isFreshReservationFromPolicy,
+  type AdminSubscriptionProvider,
+} from "@/lib/wexon-admin-commercial-policy";
 
-export const ADMIN_SUBSCRIPTION_PROVIDERS = ["admin_manual", "paytr"] as const;
-export type AdminSubscriptionProvider = (typeof ADMIN_SUBSCRIPTION_PROVIDERS)[number];
+export {
+  ADMIN_SUBSCRIPTION_PROVIDERS,
+  ADMIN_SUBSCRIPTION_PROVIDER_LABELS,
+  ACTIVATION_WAIVE_ALLOWED_PAYMENT_STATUSES,
+  ACTIVATION_WAIVE_BLOCKED_PAYMENT_STATUSES,
+  classifyPlanChangeBySortOrder,
+  evaluateActivationFeeWaivePolicy,
+  planChangeTypeLabelTr,
+  type AdminSubscriptionProvider,
+  type ActivationFeeWaivePolicyResult,
+} from "@/lib/wexon-admin-commercial-policy";
 
 export const PLAN_CHANGE_REASON_MIN = 8;
 export const PLAN_CHANGE_REASON_MAX = 500;
 export const WAIVE_REASON_MIN = 8;
 export const WAIVE_REASON_MAX = 500;
+
+export const COMMERCIAL_LICENSE_PLAN_LOCK_NAMESPACE = "admin:license-plan";
+export const COMMERCIAL_TX_OPTIONS = { maxWait: 15_000, timeout: 30_000 } as const;
 
 export type PlanChangeType = "upgrade" | "downgrade" | "lateral";
 export type SubscriptionSyncMode = "synced" | "not_applicable";
@@ -58,13 +81,33 @@ type CommercialAuditWriter = (
 
 let commercialAuditWriter: CommercialAuditWriter | null = null;
 
-/** Test-only seam: force audit failure to prove transactional rollback. */
+/** Pure env gate for the audit-failure test seam (unit-testable without mutating process.env). */
+export function assertCommercialAuditOverrideAllowed(env: {
+  NODE_ENV?: string;
+  VERCEL_ENV?: string;
+  DATABASE_URL?: string;
+  DIRECT_URL?: string;
+  WEXON_ALLOW_LOCAL_DB_TESTS?: string;
+} = process.env) {
+  if ((env.NODE_ENV ?? "").trim().toLowerCase() !== "test") {
+    throw new Error("Commercial audit override yalnız NODE_ENV=test altında kullanılabilir.");
+  }
+  assertLocalDbTestGuard(env);
+}
+
+/** Test-only seam: force audit failure to prove transactional rollback. Production-guarded. */
 export function __setCommercialAuditWriterForTests(writer: CommercialAuditWriter | null) {
+  assertCommercialAuditOverrideAllowed(process.env);
   commercialAuditWriter = writer;
 }
 
+/** Test helper: clear override after a suite without re-validating env (always safe). */
+export function __clearCommercialAuditWriterForTests() {
+  commercialAuditWriter = null;
+}
+
 export function isAllowedAdminSubscriptionProvider(value: string | null | undefined): value is AdminSubscriptionProvider {
-  return value != null && (ADMIN_SUBSCRIPTION_PROVIDERS as readonly string[]).includes(value);
+  return isAllowedProviderFromPolicy(value);
 }
 
 export function assertAllowedAdminSubscriptionProvider(value: string | null | undefined): AdminSubscriptionProvider {
@@ -102,25 +145,18 @@ export function maskEmailForAudit(email: string | null | undefined): string | nu
 }
 
 export function isFreshActivationReservation(ledger: {
-  status: ActivationFeeStatus;
+  status: ActivationFeeStatus | string;
   reservedUntil: Date | null;
   subscriptionPaymentId: string | null;
   now?: Date;
 }) {
-  const now = ledger.now ?? new Date();
-  return (
-    ledger.status === "PENDING" &&
-    ledger.reservedUntil != null &&
-    ledger.reservedUntil.getTime() > now.getTime() &&
-    Boolean(ledger.subscriptionPaymentId)
-  );
+  return isFreshReservationFromPolicy(ledger);
 }
 
 export function classifyPlanChange(beforeTierKey: string | null | undefined, afterTierKey: string | null | undefined): PlanChangeType {
   const before = resolveWexPayTierKey(beforeTierKey);
   const after = resolveWexPayTierKey(afterTierKey);
   if (!before || !after) {
-    // Unknown tiers: treat equal keys as lateral; otherwise lateral with no upgrade/downgrade claim.
     if ((beforeTierKey ?? "") === (afterTierKey ?? "")) return "lateral";
     return "lateral";
   }
@@ -196,12 +232,6 @@ export function evaluateDowngradeBreaches(input: {
 
   if ("restaurant_limit" in input.entitlements) {
     numericChecks.unshift({ key: "restaurant_limit", current: input.usage.restaurants });
-  } else if (input.usage.restaurants > 0) {
-    // No restaurant_limit key — treat restaurant count as bounded by multi-location / branch_limit.
-    const branchCheck = assertExistingUsageWithinLimit(input.entitlements, "branch_limit", input.usage.restaurants);
-    if (!branchCheck.ok && input.usage.restaurants > (branchCheck.limit || 0) && branchCheck.limit !== -1) {
-      // Only add if restaurants exceed branch_limit when multi-location is off and restaurants > branches logic
-    }
   }
 
   for (const check of numericChecks) {
@@ -223,17 +253,6 @@ export function evaluateDowngradeBreaches(input: {
       current: true,
       limit: false,
     });
-  }
-
-  // Boolean features currently required by usage patterns beyond multi-location are soft-checked via canonical keys.
-  const requiredIfTrue: Array<{ key: string; inUse: boolean }> = [
-    { key: "feature_csv_export", inUse: false },
-  ];
-  for (const item of requiredIfTrue) {
-    if (!item.inUse) continue;
-    if (!isEntitlementEnabled(input.entitlements, item.key)) {
-      breaches.push({ key: item.key, label: item.key, current: true, limit: false });
-    }
   }
 
   return breaches;
@@ -260,8 +279,33 @@ export function targetLimitsSnapshot(entitlements: CoreEntitlementMap) {
   return out;
 }
 
-async function advisoryLockPlanChange(tx: TxClient, organizationId: string, productId: string) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"admin:license-plan"}), hashtext(${`${organizationId}:${productId}`}))`;
+/** Lock key for serializing all plan changes on one License (no mutable snapshot required). */
+export function commercialLicensePlanLockEntity(organizationId: string, licenseId: string) {
+  return `${organizationId}:${licenseId}`;
+}
+
+async function advisoryLockLicensePlanChange(tx: TxClient, organizationId: string, licenseId: string) {
+  const entity = commercialLicensePlanLockEntity(organizationId, licenseId);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${COMMERCIAL_LICENSE_PLAN_LOCK_NAMESPACE}), hashtext(${entity}))`;
+}
+
+async function advisoryLockActivationWaive(tx: TxClient, organizationId: string, productId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"admin:activation-waive"}), hashtext(${`${organizationId}:${productId}`}))`;
+}
+
+async function assertCommercialActorInTx(tx: TxClient, actor: AdminSession) {
+  try {
+    await assertActivePlatformAdminMatchesIdentity(tx, {
+      adminId: actor.adminId,
+      emailNormalized: actor.email,
+      cloudflareSubject: actor.cloudflareSubject,
+    });
+  } catch (error) {
+    if (error instanceof PlatformAdminCloudflareAccessError) {
+      throw new AdminValidationError("Bu işlem için yetkiniz yok.");
+    }
+    throw error;
+  }
 }
 
 export async function collectOrganizationUsageSnapshot(tx: TxClient, organizationId: string): Promise<UsageSnapshot> {
@@ -348,21 +392,29 @@ export async function changeLicensePlanWithSubscriptionSync(
   }
 
   return prisma.$transaction(async (tx) => {
+    // 1–2: Lock key from request ids only — never read mutable plan snapshot first.
+    await advisoryLockLicensePlanChange(tx, input.organizationId, input.licenseId);
+
+    // Actor must still be ACTIVE PlatformAdmin inside this transaction.
+    await assertCommercialActorInTx(tx, input.actor);
+
+    // 3–4: Re-read full mutable snapshot under lock.
     const license = await tx.license.findUnique({
       where: { id: input.licenseId },
       include: {
-        plan: { include: { entitlements: true } },
+        plan: { include: { entitlements: { where: { isActive: true } } } },
         subscription: true,
         product: true,
-        organization: { select: { id: true, isDemo: true } },
+        organization: { select: { id: true, isDemo: true, isActive: true } },
       },
     });
 
     if (!license || license.organizationId !== input.organizationId) {
       throw new AdminValidationError("Lisans bu organizasyona ait değil.");
     }
-
-    await advisoryLockPlanChange(tx, license.organizationId, license.productId);
+    if (!license.organization) {
+      throw new AdminValidationError("Organizasyon bulunamadı.");
+    }
 
     const targetPlan = await tx.plan.findUnique({
       where: { id: input.targetPlanId },
@@ -378,6 +430,7 @@ export async function changeLicensePlanWithSubscriptionSync(
       throw new AdminValidationError("Hedef paket aktif değil.");
     }
 
+    // 5: Classify + evaluate only from post-lock snapshot.
     const changeType = classifyPlanChange(license.plan.tierKey ?? license.plan.key, targetPlan.tierKey ?? targetPlan.key);
 
     const freshReservation = await tx.activationFeeLedger.findUnique({
@@ -404,8 +457,9 @@ export async function changeLicensePlanWithSubscriptionSync(
       }
     }
 
-    // Re-read subscription under lock for concurrency.
-    const subscription = await tx.subscription.findUnique({ where: { licenseId: license.id } });
+    const subscription = license.subscription
+      ? await tx.subscription.findUnique({ where: { id: license.subscription.id } })
+      : await tx.subscription.findUnique({ where: { licenseId: license.id } });
     if (subscription && subscription.organizationId !== license.organizationId) {
       throw new AdminValidationError("Abonelik organizasyon eşleşmesi başarısız.");
     }
@@ -469,7 +523,7 @@ export async function changeLicensePlanWithSubscriptionSync(
       licensePlanId: updatedLicense.planId,
       subscriptionPlanId: afterSubscriptionPlanId,
     };
-  });
+  }, COMMERCIAL_TX_OPTIONS);
 }
 
 export type WaiveActivationFeeAsAdminInput = {
@@ -487,6 +541,9 @@ export async function waiveActivationFeeAsAdmin(input: WaiveActivationFeeAsAdmin
   }
 
   return prisma.$transaction(async (tx) => {
+    await advisoryLockActivationWaive(tx, input.organizationId, input.productId);
+    await assertCommercialActorInTx(tx, input.actor);
+
     const organization = await tx.organization.findUnique({ where: { id: input.organizationId } });
     if (!organization) {
       throw new AdminValidationError("Organizasyon bulunamadı.");
@@ -496,8 +553,6 @@ export async function waiveActivationFeeAsAdmin(input: WaiveActivationFeeAsAdmin
     if (!product) {
       throw new AdminValidationError("Ürün bulunamadı.");
     }
-
-    await advisoryLockPlanChange(tx, input.organizationId, input.productId);
 
     const ledger = await tx.activationFeeLedger.findUnique({
       where: {
@@ -515,14 +570,14 @@ export async function waiveActivationFeeAsAdmin(input: WaiveActivationFeeAsAdmin
       throw new AdminValidationError("Aktivasyon ücreti kaydı bulunamadı.");
     }
 
-    if (ledger.status === "PAID" || ledger.status === "WAIVED" || ledger.status === "WAIVED_LEGACY") {
-      throw new AdminValidationError("Bu aktivasyon ücreti kaydı değiştirilemez.");
-    }
-
-    if (isFreshActivationReservation(ledger)) {
-      throw new AdminValidationError(
-        "Devam eden bir ödeme rezervasyonu varken aktivasyon ücreti muaf tutulamaz.",
-      );
+    const policy = evaluateActivationFeeWaivePolicy({
+      status: ledger.status,
+      reservedUntil: ledger.reservedUntil,
+      subscriptionPaymentId: ledger.subscriptionPaymentId,
+      paymentStatus: ledger.subscriptionPayment?.status ?? null,
+    });
+    if (!policy.canWaive) {
+      throw new AdminValidationError(policy.message);
     }
 
     let updated;
@@ -569,7 +624,7 @@ export async function waiveActivationFeeAsAdmin(input: WaiveActivationFeeAsAdmin
     );
 
     return updated;
-  });
+  }, COMMERCIAL_TX_OPTIONS);
 }
 
 export type ActivationFeeAdminSummary = {
@@ -601,8 +656,12 @@ export async function getActivationFeeAdminSummary(
     },
   });
   if (!ledger) return null;
-  const reservationFresh = isFreshActivationReservation(ledger);
-  const canWaive = ledger.status === "PENDING" && !reservationFresh;
+  const policy = evaluateActivationFeeWaivePolicy({
+    status: ledger.status,
+    reservedUntil: ledger.reservedUntil,
+    subscriptionPaymentId: ledger.subscriptionPaymentId,
+    paymentStatus: ledger.subscriptionPayment?.status ?? null,
+  });
   return {
     id: ledger.id,
     status: ledger.status,
@@ -612,11 +671,11 @@ export async function getActivationFeeAdminSummary(
     grossAmountMinor: ledger.grossAmountMinor,
     reservedUntil: ledger.reservedUntil,
     paidAt: ledger.paidAt,
-    reservationFresh,
+    reservationFresh: policy.reservationFresh,
     paymentStatus: ledger.subscriptionPayment?.status ?? null,
     merchantOidMasked: maskMerchantOid(ledger.subscriptionPayment?.merchantOid ?? null),
     waivedReason: ledger.waivedReason,
-    canWaive,
+    canWaive: policy.canWaive,
   };
 }
 

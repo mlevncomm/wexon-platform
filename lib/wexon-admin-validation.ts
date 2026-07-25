@@ -1,3 +1,8 @@
+import {
+  ADMIN_SUBSCRIPTION_PROVIDERS,
+  isAllowedAdminSubscriptionProvider,
+} from "@/lib/wexon-admin-commercial-policy";
+
 export class AdminValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -406,11 +411,9 @@ export function parseEntitlementPayload(formData: FormData) {
   };
 }
 
-const adminSubscriptionProviders = ["admin_manual", "paytr"] as const;
-
 export function parseSubscriptionCreatePayload(formData: FormData) {
   const providerRaw = nullableString(formData, "provider") ?? "admin_manual";
-  if (!(adminSubscriptionProviders as readonly string[]).includes(providerRaw)) {
+  if (!isAllowedAdminSubscriptionProvider(providerRaw)) {
     throw new AdminValidationError("Abonelik sağlayıcısı yalnız admin_manual veya paytr olabilir.");
   }
   return {
@@ -420,7 +423,7 @@ export function parseSubscriptionCreatePayload(formData: FormData) {
     interval: oneOf(requiredString(formData, "interval", "Dönem"), billingIntervals, "Dönem"),
     currentPeriodStart: parseDate(formData, "currentPeriodStart", "Dönem başlangıcı", true) as Date,
     currentPeriodEnd: parseDate(formData, "currentPeriodEnd", "Dönem bitişi", false),
-    provider: providerRaw as (typeof adminSubscriptionProviders)[number],
+    provider: providerRaw as (typeof ADMIN_SUBSCRIPTION_PROVIDERS)[number],
     providerRef: nullableString(formData, "providerRef"),
   };
 }

@@ -68,6 +68,7 @@ import {
   changeLicensePlanWithSubscriptionSync,
   waiveActivationFeeAsAdmin,
 } from "@/lib/wexon-admin-commercial-consistency";
+import { PlatformAdminCloudflareAccessError } from "@/lib/wexon-platform-admin-cloudflare-bind";
 
 type AuditClient = {
   auditLog: {
@@ -135,6 +136,7 @@ function isUniqueConflict(error: unknown) {
 
 function getActionErrorMessage(error: unknown, fallback: string) {
   if (error instanceof AdminValidationError) return error.message;
+  if (error instanceof PlatformAdminCloudflareAccessError) return fallback;
   if (error instanceof Error && error.message) return error.message;
   return fallback;
 }
