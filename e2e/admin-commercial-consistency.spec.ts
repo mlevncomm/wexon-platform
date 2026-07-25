@@ -51,6 +51,13 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
   }
 
+  async function clearFreshActivationReservation(orgId: string, productId: string) {
+    await prisma.activationFeeLedger.updateMany({
+      where: { organizationId: orgId, productId, status: "PENDING" },
+      data: { reservedUntil: null },
+    });
+  }
+
   async function openCommercialPanels(page: import("@playwright/test").Page) {
     for (const title of ["Lisans ve paket", "Aktivasyon ücreti"]) {
       const details = page.locator("details").filter({ hasText: title }).first();
@@ -79,6 +86,13 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await loginAdmin(page, email, password);
     const license = await ensureOrgHasSubscription(orgId);
 
+    const essential = await prisma.plan.findFirst({
+      where: {
+        productId: license.productId,
+        isActive: true,
+        OR: [{ tierKey: "essential" }, { key: { contains: "essential" } }],
+      },
+    });
     const growth = await prisma.plan.findFirst({
       where: {
         productId: license.productId,
@@ -86,7 +100,14 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
         OR: [{ tierKey: "growth" }, { key: { contains: "growth" } }],
       },
     });
-    expect(growth, "growth plan required").toBeTruthy();
+    expect(essential && growth, "essential+growth plans required").toBeTruthy();
+
+    // Start from a lower tier so the controlled form enables submit for a real upgrade.
+    await prisma.license.update({ where: { id: license.id }, data: { planId: essential!.id } });
+    if (license.subscription) {
+      await prisma.subscription.update({ where: { id: license.subscription.id }, data: { planId: essential!.id } });
+    }
+    await clearFreshActivationReservation(orgId, license.productId);
 
     await page.goto(`/admin/organizations/${orgId}`);
     await openCommercialPanels(page);
@@ -94,8 +115,10 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
       has: page.getByTestId("plan-change-submit"),
     });
     await form.locator('select[name="planId"]').selectOption(growth!.id);
+    await expect(form.getByTestId("plan-change-type")).toContainText(/Yükseltme/);
     await form.locator('input[name="reason"]').fill("Isolated E2E Growth yükseltme gerekçesi");
     await form.locator('input[name="confirmed"]').check();
+    await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
     await form.getByTestId("plan-change-submit").click();
     await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
     await expect(page.locator("body")).not.toContainText(/adminError=/);
@@ -135,6 +158,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     if (license.subscription) {
       await prisma.subscription.update({ where: { id: license.subscription.id }, data: { planId: growth!.id } });
     }
+    await clearFreshActivationReservation(orgId, license.productId);
 
     let restaurant = await prisma.restaurant.findFirst({ where: { organizationId: orgId } });
     if (!restaurant) {
@@ -164,6 +188,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await form.locator('select[name="planId"]').selectOption(essential!.id);
     await form.locator('input[name="reason"]').fill("Isolated E2E limit aşan downgrade");
     await form.locator('input[name="confirmed"]').check();
+    await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
     await form.getByTestId("plan-change-submit").click();
     await expect(page.locator("body")).toContainText(/Paket düşürme reddedildi|adminError/);
 
@@ -207,6 +232,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     if (license.subscription) {
       await prisma.subscription.update({ where: { id: license.subscription.id }, data: { planId: growth!.id } });
     }
+    await clearFreshActivationReservation(orgId, license.productId);
 
     await page.goto(`/admin/organizations/${orgId}`);
     await openCommercialPanels(page);
@@ -216,6 +242,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await form.locator('select[name="planId"]').selectOption(essential!.id);
     await form.locator('input[name="reason"]').fill("Isolated E2E uygun downgrade");
     await form.locator('input[name="confirmed"]').check();
+    await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
     await form.getByTestId("plan-change-submit").click();
     await expect(page).toHaveURL(new RegExp(`/admin/organizations/${orgId}`));
 
