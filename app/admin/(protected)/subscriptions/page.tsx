@@ -77,8 +77,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
           <AdminDateField label="Dönem bitişi" name="currentPeriodEnd" />
           <AdminSelectField label="Sağlayıcı" name="provider" defaultValue="admin_manual">
             <option value="admin_manual">Admin manuel</option>
-            <option value="mock">Mock</option>
-            <option value="stripe">Stripe</option>
+            <option value="paytr">PayTR (kayıt; ödeme başlatmaz)</option>
           </AdminSelectField>
           <div className="md:col-span-2 xl:col-span-3">
             <AdminSubmitButton>Abonelik oluştur</AdminSubmitButton>
