@@ -371,7 +371,10 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     const { email, orgId } = requireFixtures();
     await loginAdmin(page, email, password);
     const license = await ensureOrgHasSubscription(orgId);
-    const otherOrgId = fixtures.realOrgId && fixtures.realOrgId !== orgId ? fixtures.realOrgId : fixtures.customerOrgId;
+    const otherOrgId =
+      [fixtures.demoOrgId, fixtures.inactiveWexPayOrgId, fixtures.customerOrgId, fixtures.realOrgId].find(
+        (id) => Boolean(id) && id !== orgId,
+      ) ?? null;
     expect(otherOrgId, "second org required for cross-tenant check").toBeTruthy();
     expect(otherOrgId).not.toBe(orgId);
 
