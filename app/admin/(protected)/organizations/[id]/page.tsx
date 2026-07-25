@@ -33,7 +33,7 @@ import {
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOrganizationDetail, getAdminOrganizationMutationOptions } from "@/lib/wexon-admin";
 import {
   collectOrganizationUsageSnapshot,
-  isFreshActivationReservation,
+  evaluateActivationFeeWaivePolicy,
   maskMerchantOid,
 } from "@/lib/wexon-admin-commercial-consistency";
 import { AdminActivationFeeWaiveForm, AdminLicensePlanChangeForm } from "@/components/admin/AdminCommercialConsistencyForms";
@@ -113,12 +113,16 @@ export default async function AdminOrganizationDetailPage({
     organization.activationFeeLedgers.find((ledger) => ledger.productId === wexPayLicense?.productId) ??
     organization.activationFeeLedgers[0] ??
     null;
-  const activationReservationFresh = activationFeeLedger
-    ? isFreshActivationReservation(activationFeeLedger)
-    : false;
-  const activationCanWaive = Boolean(
-    activationFeeLedger && activationFeeLedger.status === "PENDING" && !activationReservationFresh,
-  );
+  const activationWaivePolicy = activationFeeLedger
+    ? evaluateActivationFeeWaivePolicy({
+        status: activationFeeLedger.status,
+        reservedUntil: activationFeeLedger.reservedUntil,
+        subscriptionPaymentId: activationFeeLedger.subscriptionPaymentId,
+        paymentStatus: activationFeeLedger.subscriptionPayment?.status ?? null,
+      })
+    : null;
+  const activationReservationFresh = activationWaivePolicy?.reservationFresh ?? false;
+  const activationCanWaive = Boolean(activationWaivePolicy?.canWaive);
   const updateOrganization = updateAdminOrganizationAction.bind(null, organization.id);
   const enableWexPayAccess = enableWexPayAccessAction.bind(null, organization.id);
   const activateWexPayAccess = updateWexPayAccessStatusAction.bind(null, organization.id, "ACTIVE");
@@ -462,13 +466,13 @@ export default async function AdminOrganizationDetailPage({
                     organizationId={organization.id}
                     licenseId={wexPayLicense.id}
                     currentPlanId={wexPayLicense.planId}
-                    currentTierKey={wexPayLicense.plan.tierKey}
-                    currentPlanKey={wexPayLicense.plan.key}
+                    currentSortOrder={wexPayLicense.plan.sortOrder}
                     plans={options.wexPayPlans.map((plan) => ({
                       id: plan.id,
                       name: displayPlanName(plan.name),
                       tierKey: plan.tierKey,
                       key: plan.key,
+                      sortOrder: plan.sortOrder,
                     }))}
                     action={changeAdminLicensePlanAction}
                   />
@@ -567,8 +571,8 @@ export default async function AdminOrganizationDetailPage({
                 />
               ) : (
                 <AdminActionNotice>
-                  {activationFeeLedger.status === "PENDING" && activationReservationFresh
-                    ? "Aktif ödeme rezervasyonu varken muafiyet yapılamaz."
+                  {activationWaivePolicy && !activationWaivePolicy.canWaive
+                    ? activationWaivePolicy.message
                     : "Bu kayıt için muafiyet işlemi uygun değil."}
                 </AdminActionNotice>
               )}

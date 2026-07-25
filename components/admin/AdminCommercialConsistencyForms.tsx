@@ -1,19 +1,17 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import {
+  classifyPlanChangeBySortOrder,
+  planChangeTypeLabelTr,
+} from "@/lib/wexon-admin-commercial-policy";
 
 type PlanOption = {
   id: string;
   name: string;
   tierKey: string | null;
   key: string;
-};
-
-const TIER_ORDER: Record<string, number> = {
-  essential: 1,
-  growth: 2,
-  scale: 3,
-  business_suite: 4,
+  sortOrder: number;
 };
 
 function FieldShell({ label, children }: { label: string; children: ReactNode }) {
@@ -28,26 +26,11 @@ function FieldShell({ label, children }: { label: string; children: ReactNode })
 const inputClass =
   "mt-2 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100";
 
-function resolveTier(raw: string | null | undefined) {
-  if (!raw) return null;
-  const key = raw.trim().toLowerCase().replace(/^wexpay_/, "");
-  return key in TIER_ORDER ? key : null;
-}
-
-function classify(before: string | null, after: string | null) {
-  const b = resolveTier(before);
-  const a = resolveTier(after);
-  if (!b || !a || TIER_ORDER[b] === TIER_ORDER[a]) return "Yatay değişiklik";
-  if (TIER_ORDER[a] > TIER_ORDER[b]) return "Yükseltme";
-  return "Düşürme";
-}
-
 export function AdminLicensePlanChangeForm(props: {
   organizationId: string;
   licenseId: string;
   currentPlanId: string;
-  currentTierKey: string | null;
-  currentPlanKey: string;
+  currentSortOrder: number;
   plans: PlanOption[];
   action: (organizationId: string, licenseId: string, formData: FormData) => Promise<void>;
 }) {
@@ -55,8 +38,11 @@ export function AdminLicensePlanChangeForm(props: {
   const [confirmed, setConfirmed] = useState(false);
   const selected = props.plans.find((p) => p.id === planId) ?? null;
   const changeLabel = useMemo(
-    () => classify(props.currentTierKey ?? props.currentPlanKey, selected?.tierKey ?? selected?.key ?? null),
-    [selected, props.currentTierKey, props.currentPlanKey],
+    () =>
+      planChangeTypeLabelTr(
+        classifyPlanChangeBySortOrder(props.currentSortOrder, selected?.sortOrder ?? null),
+      ),
+    [selected, props.currentSortOrder],
   );
 
   return (
