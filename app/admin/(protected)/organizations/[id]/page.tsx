@@ -524,7 +524,9 @@ export default async function AdminOrganizationDetailPage({
           {activationFeeLedger ? (
             <>
               <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
-                <AdminInfoRow label="Durum" value={formatAdminStatus(activationFeeLedger.status)} />
+                <div data-testid="activation-fee-status">
+                  <AdminInfoRow label="Durum" value={formatAdminStatus(activationFeeLedger.status)} />
+                </div>
                 <AdminInfoRow
                   label="Rezervasyon"
                   value={

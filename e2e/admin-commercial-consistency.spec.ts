@@ -92,13 +92,10 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
   }
 
   async function submitCommercialForm(
-    page: import("@playwright/test").Page,
+    _page: import("@playwright/test").Page,
     submit: import("@playwright/test").Locator,
   ) {
-    await Promise.all([
-      page.waitForLoadState("networkidle"),
-      submit.click(),
-    ]);
+    await submit.click();
   }
 
   test("PR4C: session v3 opens commercial org detail", async ({ page }) => {
@@ -283,6 +280,12 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
     expect(after.planId).toBe(essential!.id);
     expect(after.subscription?.planId).toBe(essential!.id);
+
+    // Restore Growth so later isolated suite specs (CSV export, multi-location) keep Growth entitlements.
+    await prisma.license.update({ where: { id: license.id }, data: { planId: growth!.id } });
+    if (after.subscription) {
+      await prisma.subscription.update({ where: { id: after.subscription.id }, data: { planId: growth!.id } });
+    }
   });
 
   test("PR4C: activation fee panel and suitable waive", async ({ page }) => {
@@ -316,19 +319,23 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
 
     await page.goto(`/admin/organizations/${orgId}`);
     await openCommercialPanels(page);
-    await expect(page.getByTestId("activation-fee-panel")).toContainText(/Beklemede|PENDING|Pasif|Durum/i);
+    await expect(page.getByTestId("activation-fee-status")).toContainText(/Beklemede/i);
     const waive = page.getByTestId("activation-fee-waive-form");
     await expect(waive).toBeVisible();
     await waive.locator('input[name="reason"]').fill("Isolated E2E aktivasyon muafiyeti");
     await waive.locator('input[name="confirmed"]').check();
     await expect(waive.getByTestId("activation-fee-waive-submit")).toBeEnabled();
     await submitCommercialForm(page, waive.getByTestId("activation-fee-waive-submit"));
-    await expect(page.getByTestId("activation-fee-panel")).toContainText(/Muaf|WAIVED|waived/i, { timeout: 30_000 });
-
-    const ledger = await prisma.activationFeeLedger.findUniqueOrThrow({
-      where: { organizationId_productId: { organizationId: orgId, productId: license.productId } },
+    await expect(page.getByTestId("activation-fee-status")).toContainText(/^[\s\S]*Muaf(?!iyet)/m, { timeout: 30_000 }).catch(async () => {
+      // Prefer exact status label "Muaf" (not "Muafiyet gerekçesi").
+      await expect(page.getByTestId("activation-fee-status")).toContainText(/Muaf\b/, { timeout: 30_000 });
     });
-    expect(ledger.status).toBe("WAIVED");
+    await expect.poll(async () => {
+      const row = await prisma.activationFeeLedger.findUniqueOrThrow({
+        where: { organizationId_productId: { organizationId: orgId, productId: license.productId } },
+      });
+      return row.status;
+    }).toBe("WAIVED");
   });
 
   test("PR4C: settled ledger waive is rejected", async ({ page }) => {
