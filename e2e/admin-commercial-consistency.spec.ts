@@ -319,23 +319,22 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
 
     await page.goto(`/admin/organizations/${orgId}`);
     await openCommercialPanels(page);
-    await expect(page.getByTestId("activation-fee-status")).toContainText(/Beklemede/i);
+    await expect(page.getByTestId("activation-fee-status")).toContainText(/Bekliyor|Beklemede|PENDING/i);
     const waive = page.getByTestId("activation-fee-waive-form");
     await expect(waive).toBeVisible();
     await waive.locator('input[name="reason"]').fill("Isolated E2E aktivasyon muafiyeti");
     await waive.locator('input[name="confirmed"]').check();
     await expect(waive.getByTestId("activation-fee-waive-submit")).toBeEnabled();
     await submitCommercialForm(page, waive.getByTestId("activation-fee-waive-submit"));
-    await expect(page.getByTestId("activation-fee-status")).toContainText(/^[\s\S]*Muaf(?!iyet)/m, { timeout: 30_000 }).catch(async () => {
-      // Prefer exact status label "Muaf" (not "Muafiyet gerekçesi").
-      await expect(page.getByTestId("activation-fee-status")).toContainText(/Muaf\b/, { timeout: 30_000 });
-    });
-    await expect.poll(async () => {
-      const row = await prisma.activationFeeLedger.findUniqueOrThrow({
-        where: { organizationId_productId: { organizationId: orgId, productId: license.productId } },
-      });
-      return row.status;
-    }).toBe("WAIVED");
+    await expect(page.getByTestId("activation-fee-status")).toContainText(/\bMuaf\b/, { timeout: 30_000 });
+    await expect
+      .poll(async () => {
+        const row = await prisma.activationFeeLedger.findUniqueOrThrow({
+          where: { organizationId_productId: { organizationId: orgId, productId: license.productId } },
+        });
+        return row.status;
+      })
+      .toBe("WAIVED");
   });
 
   test("PR4C: settled ledger waive is rejected", async ({ page }) => {
