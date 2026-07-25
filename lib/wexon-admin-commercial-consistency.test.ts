@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import {
+  __clearCommercialAuditWriterForTests,
+  __setCommercialAuditWriterForTests,
   assertAllowedAdminSubscriptionProvider,
+  assertCommercialAuditOverrideAllowed,
   assertExistingUsageWithinLimit,
   classifyPlanChange,
   entitlementsFromRecords,
@@ -13,15 +16,29 @@ import {
   maskMerchantOid,
   sanitizeCommercialReason,
 } from "@/lib/wexon-admin-commercial-consistency";
+import {
+  classifyPlanChangeBySortOrder,
+  evaluateActivationFeeWaivePolicy,
+} from "@/lib/wexon-admin-commercial-policy";
 import { AdminValidationError } from "@/lib/wexon-admin-validation";
 import { parseSubscriptionCreatePayload, parseLicensePlanPayload, parseActivationFeeWaivePayload } from "@/lib/wexon-admin-validation";
 
 describe("admin commercial consistency unit", () => {
+  afterEach(() => {
+    __clearCommercialAuditWriterForTests();
+  });
+
   it("classifies upgrade/downgrade/lateral via canonical tiers", () => {
     assert.equal(classifyPlanChange("essential", "growth"), "upgrade");
     assert.equal(classifyPlanChange("scale", "essential"), "downgrade");
     assert.equal(classifyPlanChange("growth", "growth"), "lateral");
     assert.equal(classifyPlanChange("wexpay_essential", "wexpay_business_suite"), "upgrade");
+  });
+
+  it("UI sortOrder classification matches upgrade/downgrade/lateral", () => {
+    assert.equal(classifyPlanChangeBySortOrder(1, 2), "upgrade");
+    assert.equal(classifyPlanChangeBySortOrder(3, 1), "downgrade");
+    assert.equal(classifyPlanChangeBySortOrder(2, 2), "lateral");
   });
 
   it("entitlement existing-usage semantics: missing deny, 0 closed, -1 unlimited, positive hard limit", () => {
@@ -116,6 +133,47 @@ describe("admin commercial consistency unit", () => {
     );
   });
 
+  it("activation waive policy allows null/FAILED/CANCELED/EXPIRED and blocks open/PAID", () => {
+    assert.equal(
+      evaluateActivationFeeWaivePolicy({
+        status: "PENDING",
+        reservedUntil: null,
+        subscriptionPaymentId: null,
+      }).canWaive,
+      true,
+    );
+    for (const paymentStatus of ["FAILED", "CANCELED", "EXPIRED"] as const) {
+      assert.equal(
+        evaluateActivationFeeWaivePolicy({
+          status: "PENDING",
+          reservedUntil: null,
+          subscriptionPaymentId: "pay_1",
+          paymentStatus,
+        }).canWaive,
+        true,
+      );
+    }
+    for (const paymentStatus of ["INITIATED", "TOKEN_CREATED", "PENDING_CALLBACK", "PAID"] as const) {
+      const denied = evaluateActivationFeeWaivePolicy({
+        status: "PENDING",
+        reservedUntil: new Date(Date.now() - 60_000),
+        subscriptionPaymentId: "pay_1",
+        paymentStatus,
+      });
+      assert.equal(denied.canWaive, false);
+    }
+    const paid = evaluateActivationFeeWaivePolicy({
+      status: "PENDING",
+      reservedUntil: new Date(Date.now() - 60_000),
+      subscriptionPaymentId: "pay_1",
+      paymentStatus: "PAID",
+    });
+    assert.equal(paid.canWaive, false);
+    if (!paid.canWaive) {
+      assert.match(paid.message, /tahsilat|uzlaştırma/i);
+    }
+  });
+
   it("plan change and waive payloads require reason + confirmation", () => {
     const planForm = new FormData();
     planForm.set("planId", "plan_1");
@@ -129,5 +187,41 @@ describe("admin commercial consistency unit", () => {
     waiveForm.set("reason", "Demo müşteri aktivasyon muafiyeti");
     waiveForm.set("confirmed", "true");
     assert.equal(parseActivationFeeWaivePayload(waiveForm).confirmed, true);
+  });
+
+  it("audit override setter is production-guarded", () => {
+    const localTestEnv = {
+      NODE_ENV: "test",
+      VERCEL_ENV: "",
+      WEXON_ALLOW_LOCAL_DB_TESTS: "1",
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5433/wexon_e2e",
+      DIRECT_URL: "postgresql://postgres:postgres@127.0.0.1:5433/wexon_e2e",
+    };
+    assert.doesNotThrow(() => assertCommercialAuditOverrideAllowed(localTestEnv));
+    assert.throws(
+      () => assertCommercialAuditOverrideAllowed({ ...localTestEnv, NODE_ENV: "production" }),
+      /NODE_ENV=test/,
+    );
+    assert.throws(
+      () => assertCommercialAuditOverrideAllowed({ ...localTestEnv, VERCEL_ENV: "production" }),
+      /VERCEL_ENV|reddedildi/,
+    );
+    assert.throws(
+      () => assertCommercialAuditOverrideAllowed({ ...localTestEnv, VERCEL_ENV: "preview" }),
+      /VERCEL_ENV|reddedildi/,
+    );
+    assert.throws(
+      () =>
+        assertCommercialAuditOverrideAllowed({
+          ...localTestEnv,
+          DATABASE_URL: "postgresql://postgres:postgres@db.xxx.supabase.co:5432/postgres",
+          DIRECT_URL: undefined,
+        }),
+      /loopback|reddedildi/,
+    );
+
+    // Live setter still requires current process env to pass the same gate.
+    assert.doesNotThrow(() => __setCommercialAuditWriterForTests(async () => null));
+    __clearCommercialAuditWriterForTests();
   });
 });
