@@ -391,6 +391,11 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     const { email } = requireFixtures();
     await loginAdmin(page, email, password);
     await page.goto("/admin/subscriptions");
+    const createPanel = page.locator("details").filter({ hasText: "Yeni abonelik oluştur" }).first();
+    if ((await createPanel.count()) > 0) {
+      const isOpen = await createPanel.evaluate((el) => (el as HTMLDetailsElement).open);
+      if (!isOpen) await createPanel.locator("summary").click();
+    }
     const provider = page.locator('select[name="provider"]');
     await expect(provider).toBeVisible();
     const options = await provider.locator("option").allTextContents();
