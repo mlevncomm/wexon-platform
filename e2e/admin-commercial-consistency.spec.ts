@@ -51,6 +51,15 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
   }
 
+  async function openCommercialPanels(page: import("@playwright/test").Page) {
+    for (const title of ["Lisans ve paket", "Aktivasyon ücreti"]) {
+      const details = page.locator("details").filter({ hasText: title }).first();
+      if ((await details.count()) === 0) continue;
+      const isOpen = await details.evaluate((el) => (el as HTMLDetailsElement).open);
+      if (!isOpen) await details.locator("summary").click();
+    }
+  }
+
   test("PR4C: session v3 opens commercial org detail", async ({ page }) => {
     const { email, orgId } = requireFixtures();
     await loginAdmin(page, email, password);
@@ -58,6 +67,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await ensureOrgHasSubscription(orgId);
 
     await page.goto(`/admin/organizations/${orgId}`);
+    await openCommercialPanels(page);
     await expect(page.getByTestId("license-commercial-panel")).toBeVisible();
     await expect(page.getByTestId("license-sync-summary")).toBeVisible();
     await expect(page.getByTestId("activation-fee-panel")).toBeVisible();
@@ -79,6 +89,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     expect(growth, "growth plan required").toBeTruthy();
 
     await page.goto(`/admin/organizations/${orgId}`);
+    await openCommercialPanels(page);
     const form = page.getByTestId("license-commercial-panel").locator("form").filter({
       has: page.getByTestId("plan-change-submit"),
     });
@@ -95,6 +106,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
     expect(updated.planId).toBe(growth!.id);
     expect(updated.subscription?.planId).toBe(growth!.id);
+    await openCommercialPanels(page);
     await expect(page.getByTestId("license-sync-summary")).toContainText(/Senkron/);
   });
 
@@ -145,6 +157,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     }
 
     await page.goto(`/admin/organizations/${orgId}`);
+    await openCommercialPanels(page);
     const form = page.getByTestId("license-commercial-panel").locator("form").filter({
       has: page.getByTestId("plan-change-submit"),
     });
@@ -196,6 +209,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     }
 
     await page.goto(`/admin/organizations/${orgId}`);
+    await openCommercialPanels(page);
     const form = page.getByTestId("license-commercial-panel").locator("form").filter({
       has: page.getByTestId("plan-change-submit"),
     });
@@ -243,6 +257,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
 
     await page.goto(`/admin/organizations/${orgId}`);
+    await openCommercialPanels(page);
     await expect(page.getByTestId("activation-fee-panel")).toContainText(/Beklemede|PENDING|Pasif|Durum/i);
     const waive = page.getByTestId("activation-fee-waive-form");
     await expect(waive).toBeVisible();
@@ -281,6 +296,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     });
 
     await page.goto(`/admin/organizations/${orgId}`);
+    await openCommercialPanels(page);
     await expect(page.getByTestId("activation-fee-waive-form")).toHaveCount(0);
     await expect(page.getByTestId("activation-fee-panel")).toContainText(/muafiyet işlemi uygun değil|Ödendi|PAID/i);
   });
@@ -294,6 +310,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     expect(otherOrgId).not.toBe(orgId);
 
     await page.goto(`/admin/organizations/${otherOrgId}`);
+    await openCommercialPanels(page);
     // Attempt posting plan change action bound to wrong org/license via crafted form is covered by DB tests;
     // UI must still not expose the foreign license as editable on this org.
     await expect(page.getByTestId("license-commercial-panel")).toBeVisible();

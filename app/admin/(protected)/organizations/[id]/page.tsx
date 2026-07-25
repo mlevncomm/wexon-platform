@@ -413,7 +413,7 @@ export default async function AdminOrganizationDetailPage({
           <AdminActionNotice>WexHotel ve WexB2B write yönetimi bu fazda kapalıdır.</AdminActionNotice>
         </AdminFormPanel>
 
-        <AdminFormPanel title="Lisans ve paket" description="WexPay lisansı, abonelik senkronu ve paket değişikliği." collapsible>
+        <AdminFormPanel title="Lisans ve paket" description="WexPay lisansı, abonelik senkronu ve paket değişikliği." collapsible defaultOpen>
           <div className="space-y-6" data-testid="license-commercial-panel">
             <form action={createLicense} className="grid gap-4 md:grid-cols-2">
               <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
@@ -518,6 +518,7 @@ export default async function AdminOrganizationDetailPage({
         title="Aktivasyon ücreti"
         description="Smart Activation ledger özeti ve güvenli muafiyet işlemi."
         collapsible
+        defaultOpen
       >
         <div className="space-y-4" data-testid="activation-fee-panel">
           {activationFeeLedger ? (
