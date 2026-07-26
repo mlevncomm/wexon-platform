@@ -18,13 +18,6 @@ import {
   sanitizeAdminMutationReason,
   type AdminMutationRiskClass,
 } from "@/lib/wexon-admin-mutation-policy";
-
-function maskEmailForAudit(email: string | null | undefined): string | null {
-  if (!email) return null;
-  const [local, domain] = email.trim().toLowerCase().split("@");
-  if (!local || !domain) return null;
-  return `${local.slice(0, Math.min(2, local.length))}***@${domain}`;
-}
 import {
   ADMIN_MUTATION_GENERIC_USER_MESSAGE,
   AdminMutationGuardError,
@@ -32,15 +25,21 @@ import {
 } from "@/lib/wexon-admin-mutation-errors";
 import { enforceAdminMutationRateLimit } from "@/lib/wexon-admin-mutation-rate-limit";
 import {
-  claimAdminMutationIdempotency,
+  claimAdminMutationIdempotencyIndependent,
   completeAdminMutationIdempotency,
+  finalizeAdminMutationIdempotencyFailed,
   hashAdminIdempotencyKey,
   hashAdminMutationRequestPayload,
+  lockAdminMutationIdempotencyRow,
   maybeCleanupExpiredAdminIdempotency,
 } from "@/lib/wexon-admin-mutation-idempotency";
 import { LastActiveOwnerError } from "@/lib/wexon-active-owner";
 import { SubscriptionAccessSyncError } from "@/lib/wexon-subscription-lifecycle";
 import { ActivationFeeError } from "@/lib/wexon-activation-fee";
+import {
+  maskEmailForAudit,
+  sanitizeAdminAuditMetadata,
+} from "@/lib/wexon-admin-audit-sanitize";
 
 export const ADMIN_MUTATION_TX_OPTIONS = { maxWait: 15_000, timeout: 30_000 } as const;
 
@@ -90,8 +89,6 @@ export type RunAdminMutationInput = {
   execute: (ctx: AdminMutationContext) => Promise<AdminMutationExecuteResult>;
 };
 
-const recentRateLimitDenies = new Map<string, number>();
-
 function hashCloudflareSubject(subject: string): string {
   return createHash("sha256").update(`cfsub:${subject}`).digest("hex").slice(0, 16);
 }
@@ -111,7 +108,7 @@ export function buildAdminMutationAuditMetadata(input: {
   rateLimitBucketHash?: string | null;
   extra?: Record<string, unknown>;
 }) {
-  return {
+  const base = {
     actorAdminId: input.actor.adminId,
     actorEmailMasked: maskEmailForAudit(input.actor.email),
     cloudflareSubjectHash: hashCloudflareSubject(input.actor.cloudflareSubject),
@@ -127,21 +124,9 @@ export function buildAdminMutationAuditMetadata(input: {
     transition: input.transition ?? null,
     idempotencyKeyHash: input.idempotencyKeyHash ?? null,
     rateLimitBucketHash: input.rateLimitBucketHash ?? null,
-    ...(input.extra ?? {}),
   };
-}
-
-function coalesceRateLimitDenyAudit(bucketHash: string): boolean {
-  const now = Date.now();
-  const last = recentRateLimitDenies.get(bucketHash) ?? 0;
-  if (now - last < 60_000) return false;
-  recentRateLimitDenies.set(bucketHash, now);
-  if (recentRateLimitDenies.size > 500) {
-    for (const [key, ts] of recentRateLimitDenies) {
-      if (now - ts > 120_000) recentRateLimitDenies.delete(key);
-    }
-  }
-  return true;
+  const extra = sanitizeAdminAuditMetadata(input.extra ?? {});
+  return sanitizeAdminAuditMetadata({ ...base, ...extra });
 }
 
 export function writeAdminMutationDeniedAudit(input: {
@@ -156,10 +141,10 @@ export function writeAdminMutationDeniedAudit(input: {
   message: string;
   rateLimitBucketHash?: string | null;
   ipAddress?: string | null;
+  /** When false, skip writing (used for serverless rate-limit coalescing). */
+  write?: boolean;
 }) {
-  if (input.code === "rate_limit_denied" && input.rateLimitBucketHash) {
-    if (!coalesceRateLimitDenyAudit(input.rateLimitBucketHash)) return;
-  }
+  if (input.write === false) return;
   writeAuditFailure({
     action: `admin.mutation.denied.${input.code}`,
     organizationId: input.organizationId ?? null,
@@ -232,6 +217,8 @@ export function logAdminMutationInternalError(input: {
  * 3) ActivationFee advisory (PR4)
  * 4) Idempotency / finance entity rows
  * 5) post-lock reads → mutate → success audit → commit
+ *
+ * Idempotency claim is independent; FAILED finalizer is a separate transaction.
  */
 export async function runAdminMutation(input: RunAdminMutationInput): Promise<AdminMutationExecuteResult> {
   const riskClass = resolveAdminMutationRiskClass(input.action);
@@ -322,6 +309,7 @@ export async function runAdminMutation(input: RunAdminMutationInput): Promise<Ad
       message: err.safeMessage,
       rateLimitBucketHash: rate.bucketHash,
       ipAddress,
+      write: rate.shouldAuditDeny,
     });
     throw err;
   }
@@ -330,6 +318,7 @@ export async function runAdminMutation(input: RunAdminMutationInput): Promise<Ad
   let mutationKey: string | null = null;
   let requestHash: string | null = null;
   let idempotencyKeyHash: string | null = null;
+  let idempotencyRecordId: string | null = null;
 
   if (needsIdempotency) {
     if (!isValidAdminMutationKey(input.mutationId)) {
@@ -354,6 +343,60 @@ export async function runAdminMutation(input: RunAdminMutationInput): Promise<Ad
     requestHash = hashAdminMutationRequestPayload(input.requestHashPayload ?? {});
     idempotencyKeyHash = hashAdminIdempotencyKey(mutationKey);
     void maybeCleanupExpiredAdminIdempotency();
+
+    const claim = await claimAdminMutationIdempotencyIndependent({
+      adminId: input.actor.adminId,
+      action: input.action,
+      mutationKey,
+      requestHash,
+      organizationId,
+      entityType: input.entityType,
+    });
+    if (claim.kind === "conflict") {
+      const err = new AdminMutationGuardError(
+        "idempotency_conflict",
+        "Bu işlem anahtarı farklı bir içerikle kullanılmış. Sayfayı yenileyip tekrar deneyin.",
+      );
+      writeAdminMutationDeniedAudit({
+        actor: input.actor,
+        action: input.action,
+        riskClass,
+        requestId,
+        organizationId,
+        entityType: input.entityType,
+        code: err.code,
+        message: err.safeMessage,
+        ipAddress,
+      });
+      throw err;
+    }
+    if (claim.kind === "in_progress") {
+      const err = new AdminMutationGuardError(
+        "idempotency_in_progress",
+        "İşlem devam ediyor. Sayfayı yenileyip sonucu kontrol edin.",
+      );
+      writeAdminMutationDeniedAudit({
+        actor: input.actor,
+        action: input.action,
+        riskClass,
+        requestId,
+        organizationId,
+        entityType: input.entityType,
+        code: err.code,
+        message: err.safeMessage,
+        ipAddress,
+      });
+      throw err;
+    }
+    if (claim.kind === "replay") {
+      return {
+        entityId: input.entityId ?? null,
+        organizationId,
+        metadata: { idempotentReplay: true, replayResult: claim.result },
+        replayResult: claim.result,
+      };
+    }
+    idempotencyRecordId = claim.recordId;
   }
 
   const lockAdmin = !input.skipAdminLock && requiresAdminRowLock(riskClass);
@@ -413,37 +456,14 @@ export async function runAdminMutation(input: RunAdminMutationInput): Promise<Ad
         }
       }
 
-      let idempotencyRecordId: string | null = null;
-      if (needsIdempotency && mutationKey && requestHash) {
-        const claim = await claimAdminMutationIdempotency(tx, {
+      if (idempotencyRecordId && mutationKey && requestHash) {
+        await lockAdminMutationIdempotencyRow(tx, {
+          recordId: idempotencyRecordId,
           adminId: input.actor.adminId,
           action: input.action,
           mutationKey,
           requestHash,
-          organizationId,
-          entityType: input.entityType,
         });
-        if (claim.kind === "conflict") {
-          throw new AdminMutationGuardError(
-            "idempotency_conflict",
-            "Bu işlem anahtarı farklı bir içerikle kullanılmış. Sayfayı yenileyip tekrar deneyin.",
-          );
-        }
-        if (claim.kind === "in_progress") {
-          throw new AdminMutationGuardError(
-            "idempotency_in_progress",
-            "İşlem devam ediyor. Sayfayı yenileyip sonucu kontrol edin.",
-          );
-        }
-        if (claim.kind === "replay") {
-          return {
-            entityId: input.entityId ?? null,
-            organizationId,
-            metadata: { idempotentReplay: true, replayResult: claim.result },
-            replayResult: claim.result,
-          };
-        }
-        idempotencyRecordId = claim.recordId;
       }
 
       const ctx: AdminMutationContext = {
@@ -456,24 +476,7 @@ export async function runAdminMutation(input: RunAdminMutationInput): Promise<Ad
         organizationId,
       };
 
-      let result: AdminMutationExecuteResult;
-      try {
-        result = await input.execute(ctx);
-      } catch (error) {
-        if (idempotencyRecordId) {
-          await completeAdminMutationIdempotency(tx, {
-            recordId: idempotencyRecordId,
-            status: "FAILED",
-            denyCode:
-              error instanceof AdminMutationGuardError
-                ? error.code
-                : error instanceof AdminValidationError
-                  ? "finance_invariant_failed"
-                  : "unknown",
-          });
-        }
-        throw error;
-      }
+      const result = await input.execute(ctx);
 
       await writeAuditLog(
         {
@@ -506,6 +509,11 @@ export async function runAdminMutation(input: RunAdminMutationInput): Promise<Ad
         await completeAdminMutationIdempotency(tx, {
           recordId: idempotencyRecordId,
           status: "SUCCEEDED",
+          expectedStatus: "PROCESSING",
+          requestHash: requestHash ?? undefined,
+          adminId: input.actor.adminId,
+          action: input.action,
+          mutationKey: mutationKey ?? undefined,
           entityId: result.entityId ?? null,
           result: result.replayResult ?? {
             entityId: result.entityId ?? null,
@@ -517,6 +525,23 @@ export async function runAdminMutation(input: RunAdminMutationInput): Promise<Ad
       return result;
     }, ADMIN_MUTATION_TX_OPTIONS);
   } catch (error) {
+    if (idempotencyRecordId && mutationKey && requestHash) {
+      const denyCode =
+        error instanceof AdminMutationGuardError
+          ? error.code
+          : error instanceof AdminValidationError
+            ? "finance_invariant_failed"
+            : "unknown";
+      await finalizeAdminMutationIdempotencyFailed({
+        recordId: idempotencyRecordId,
+        adminId: input.actor.adminId,
+        action: input.action,
+        mutationKey,
+        requestHash,
+        denyCode,
+      });
+    }
+
     if (
       error instanceof AdminMutationGuardError ||
       error instanceof AdminValidationError ||
@@ -649,6 +674,7 @@ export async function enforceAdminMutationGate(input: {
       message: err.safeMessage,
       rateLimitBucketHash: rate.bucketHash,
       ipAddress,
+      write: rate.shouldAuditDeny,
     });
     throw err;
   }
