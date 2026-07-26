@@ -566,7 +566,7 @@ describe("smart activation foundation (db)", () => {
     assert.ok((await resolvePublicTableByQr(legacyQr))?.allowed);
   });
 
-  it("public schema has 41 tables and full RLS/grants on new tables", async () => {
+  it("public schema has 43 tables and full RLS/grants on new tables", async () => {
     const tables = await prisma.$queryRaw<Array<{ table_name: string; rls: boolean }>>`
       SELECT c.relname AS table_name, c.relrowsecurity AS rls
       FROM pg_class c
@@ -575,7 +575,7 @@ describe("smart activation foundation (db)", () => {
       ORDER BY c.relname
     `;
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 41);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 43);
     for (const name of [
       "ActivationJourney",
       "ActivationJourneyStep",

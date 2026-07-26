@@ -65,6 +65,13 @@ const mandatoryAdminCommercialTests = [
   "PR4C: PR3 read-only preview regression still holds",
   "PR4C: logout clears admin session cookie",
 ];
+const mandatoryAdminMutationFinanceTests = [
+  "PR5: billing create form requires reason confirmation and mutationId",
+  "PR5: double submit creates a single invoice",
+  "PR5: invalid invoice transition shows safe UI error",
+  "PR5: subscription providers remain allowlisted",
+  "PR5: logout clears admin session cookie",
+];
 
 function run(cmd, args, env = {}) {
   console.log(`[isolated-e2e] $ ${cmd} ${args.join(" ")}`);
@@ -160,6 +167,7 @@ async function runOnce(label) {
       "e2e/admin-cloudflare-identity.spec.ts",
       "e2e/admin-wexpay-preview-write.spec.ts",
       "e2e/admin-commercial-consistency.spec.ts",
+      "e2e/admin-mutation-finance-hardening.spec.ts",
       "--reporter=list",
     ],
     {
@@ -189,7 +197,7 @@ async function runOnce(label) {
   }
   // Includes activation, auth/tenant, pricing, workspace, final closure, routing,
   // PlatformAdmin management, PR2B Cloudflare identity, and PR3 admin preview write specs.
-  const MIN_ISOLATED_PASSES = 60;
+  const MIN_ISOLATED_PASSES = 65;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
@@ -201,6 +209,7 @@ async function runOnce(label) {
     ...mandatoryAdminIdentityTests,
     ...mandatoryAdminPreviewWriteTests,
     ...mandatoryAdminCommercialTests,
+    ...mandatoryAdminMutationFinanceTests,
   ]) {
     const resultLine = combined
       .split(/\r?\n/)
@@ -215,8 +224,9 @@ async function runOnce(label) {
         `[isolated-e2e] ${label}: mandatory test must not skip: ${mandatoryTitle}`,
       );
     }
-    // Require a real pass marker from the list reporter (✓ / √ / "passed").
-    if (!/[✓√]|\bpassed\b/i.test(resultLine)) {
+    // Require a real pass marker from the list reporter (✓ / √ / "passed" / "ok N").
+    // Piping through PowerShell/Tee often strips Unicode checkmarks to ASCII "ok".
+    if (!/[✓√]|\bpassed\b|^\s*ok\s+\d+/i.test(resultLine)) {
       throw new Error(
         `[isolated-e2e] ${label}: mandatory test did not pass: ${mandatoryTitle}`,
       );

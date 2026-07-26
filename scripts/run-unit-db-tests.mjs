@@ -47,6 +47,7 @@ const files = [
   "lib/wexon-platform-admin-cloudflare-bind.db.test.ts",
   "lib/wexon-admin-preview-write.db.test.ts",
   "lib/wexon-admin-commercial-consistency.db.test.ts",
+  "lib/wexon-admin-mutation-guard.db.test.ts",
 ];
 
 const credentialEncryptionKey = randomBytes(32).toString("hex");
