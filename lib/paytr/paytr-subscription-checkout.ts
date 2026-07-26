@@ -185,7 +185,12 @@ export async function createPaytrSubscriptionIframeCheckout(input: CreateSubscri
           isDemo: organization.isDemo,
         });
       } catch (error) {
-        if (error instanceof ActivationFeeError && error.code === "ACTIVATION_FEE_RESERVED") {
+        if (
+          error instanceof ActivationFeeError &&
+          (error.code === "ACTIVATION_FEE_RESERVED" ||
+            error.code === "ACTIVATION_FEE_STALE_QUOTE" ||
+            error.code === "ACTIVATION_FEE_IMMUTABLE")
+        ) {
           throw new CheckoutValidationError(error.message);
         }
         throw error;

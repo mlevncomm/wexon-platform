@@ -7,10 +7,16 @@ import {
   isEntitlementEnabled,
   type CoreEntitlementMap,
 } from "@/lib/wexon-core-access";
-import { ActivationFeeError, waiveActivationFee } from "@/lib/wexon-activation-fee";
+import {
+  ActivationFeeError,
+  ACTIVATION_FEE_LOCK_NAMESPACE,
+  activationFeeLockEntity,
+  lockActivationFeeLedger,
+  waiveActivationFee,
+} from "@/lib/wexon-activation-fee";
 import { getCanonicalTier, resolveWexPayTierKey, type WexPayTierKey } from "@/lib/wexpay-canonical-catalog";
 import {
-  assertActivePlatformAdminMatchesIdentity,
+  lockActivePlatformAdminMatchesIdentity,
   PlatformAdminCloudflareAccessError,
 } from "@/lib/wexon-platform-admin-cloudflare-bind";
 import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
@@ -39,7 +45,18 @@ export const WAIVE_REASON_MIN = 8;
 export const WAIVE_REASON_MAX = 500;
 
 export const COMMERCIAL_LICENSE_PLAN_LOCK_NAMESPACE = "admin:license-plan";
+export { ACTIVATION_FEE_LOCK_NAMESPACE, activationFeeLockEntity };
 export const COMMERCIAL_TX_OPTIONS = { maxWait: 15_000, timeout: 30_000 } as const;
+
+/**
+ * Deadlock-safe commercial lock order (all mutating admin commercial paths):
+ * 1) PlatformAdmin row FOR UPDATE
+ * 2) License plan advisory lock (plan-change only)
+ * 3) ActivationFeeLedger advisory lock (org+product)
+ * 4) post-lock domain reads → mutation → audit → commit
+ *
+ * Checkout/callback (no PlatformAdmin): ActivationFeeLedger lock → reads → mutation.
+ */
 
 export type PlanChangeType = "upgrade" | "downgrade" | "lateral";
 export type SubscriptionSyncMode = "synced" | "not_applicable";
@@ -289,13 +306,9 @@ async function advisoryLockLicensePlanChange(tx: TxClient, organizationId: strin
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${COMMERCIAL_LICENSE_PLAN_LOCK_NAMESPACE}), hashtext(${entity}))`;
 }
 
-async function advisoryLockActivationWaive(tx: TxClient, organizationId: string, productId: string) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"admin:activation-waive"}), hashtext(${`${organizationId}:${productId}`}))`;
-}
-
 async function assertCommercialActorInTx(tx: TxClient, actor: AdminSession) {
   try {
-    await assertActivePlatformAdminMatchesIdentity(tx, {
+    await lockActivePlatformAdminMatchesIdentity(tx, {
       adminId: actor.adminId,
       emailNormalized: actor.email,
       cloudflareSubject: actor.cloudflareSubject,
@@ -392,13 +405,22 @@ export async function changeLicensePlanWithSubscriptionSync(
   }
 
   return prisma.$transaction(async (tx) => {
-    // 1–2: Lock key from request ids only — never read mutable plan snapshot first.
+    // Lock order: PlatformAdmin → License plan → ActivationFeeLedger → reads → mutate → audit.
+    await assertCommercialActorInTx(tx, input.actor);
+    // License lock key from request ids only — never read mutable plan snapshot first.
     await advisoryLockLicensePlanChange(tx, input.organizationId, input.licenseId);
 
-    // Actor must still be ACTIVE PlatformAdmin inside this transaction.
-    await assertCommercialActorInTx(tx, input.actor);
+    // Product id for activation lock comes from License after plan lock (cross-tenant safe).
+    const licenseForLock = await tx.license.findUnique({
+      where: { id: input.licenseId },
+      select: { id: true, organizationId: true, productId: true },
+    });
+    if (!licenseForLock || licenseForLock.organizationId !== input.organizationId) {
+      throw new AdminValidationError("Lisans bu organizasyona ait değil.");
+    }
+    await lockActivationFeeLedger(tx, licenseForLock.organizationId, licenseForLock.productId);
 
-    // 3–4: Re-read full mutable snapshot under lock.
+    // Re-read full mutable snapshot under all locks.
     const license = await tx.license.findUnique({
       where: { id: input.licenseId },
       include: {
@@ -430,7 +452,7 @@ export async function changeLicensePlanWithSubscriptionSync(
       throw new AdminValidationError("Hedef paket aktif değil.");
     }
 
-    // 5: Classify + evaluate only from post-lock snapshot.
+    // Classify + evaluate only from post-lock snapshot.
     const changeType = classifyPlanChange(license.plan.tierKey ?? license.plan.key, targetPlan.tierKey ?? targetPlan.key);
 
     const freshReservation = await tx.activationFeeLedger.findUnique({
@@ -541,8 +563,9 @@ export async function waiveActivationFeeAsAdmin(input: WaiveActivationFeeAsAdmin
   }
 
   return prisma.$transaction(async (tx) => {
-    await advisoryLockActivationWaive(tx, input.organizationId, input.productId);
+    // Lock order: PlatformAdmin → ActivationFeeLedger → reads → mutate → audit.
     await assertCommercialActorInTx(tx, input.actor);
+    await lockActivationFeeLedger(tx, input.organizationId, input.productId);
 
     const organization = await tx.organization.findUnique({ where: { id: input.organizationId } });
     if (!organization) {
@@ -583,6 +606,7 @@ export async function waiveActivationFeeAsAdmin(input: WaiveActivationFeeAsAdmin
     let updated;
     try {
       // Do NOT write PlatformAdmin id into waivedByUserId (User-oriented field).
+      // waiveActivationFee re-takes the same advisory lock (xact-reentrant) and re-reads under lock.
       updated = await waiveActivationFee(tx, {
         organizationId: input.organizationId,
         productId: input.productId,

@@ -5,6 +5,9 @@ import { getCanonicalTier, resolveWexPayTierKey } from "@/lib/wexpay-canonical-c
 
 export const ACTIVATION_RESERVE_MS = 30 * 60 * 1000; // abandoned PENDING does not permanently lock
 
+/** Shared advisory lock for all ActivationFeeLedger read-modify-write paths. */
+export const ACTIVATION_FEE_LOCK_NAMESPACE = "wexon:activation-fee";
+
 export type ActivationDueDecision =
   | { due: true; amountMinor: number; reason: "first_purchase" }
   | { due: false; amountMinor: 0; reason: "already_settled" | "waived" | "waived_legacy" | "demo" | "zero_fee" };
@@ -14,14 +17,16 @@ export class ActivationFeeError extends Error {
     | "ACTIVATION_FEE_RESERVED"
     | "ACTIVATION_FEE_OWNERSHIP_MISMATCH"
     | "ACTIVATION_FEE_STALE_CALLBACK"
-    | "ACTIVATION_FEE_IMMUTABLE";
+    | "ACTIVATION_FEE_IMMUTABLE"
+    | "ACTIVATION_FEE_STALE_QUOTE";
 
   constructor(
     code:
       | "ACTIVATION_FEE_RESERVED"
       | "ACTIVATION_FEE_OWNERSHIP_MISMATCH"
       | "ACTIVATION_FEE_STALE_CALLBACK"
-      | "ACTIVATION_FEE_IMMUTABLE",
+      | "ACTIVATION_FEE_IMMUTABLE"
+      | "ACTIVATION_FEE_STALE_QUOTE",
     message?: string,
   ) {
     super(message ?? code);
@@ -32,7 +37,23 @@ export class ActivationFeeError extends Error {
 
 type LedgerClient = {
   activationFeeLedger: Prisma.TransactionClient["activationFeeLedger"];
+  $executeRaw: Prisma.TransactionClient["$executeRaw"];
+  license: Prisma.TransactionClient["license"];
 };
+
+export function activationFeeLockEntity(organizationId: string, productId: string) {
+  return `${organizationId}:${productId}`;
+}
+
+/** Transaction-scoped advisory lock; re-entrant within the same PostgreSQL transaction. */
+export async function lockActivationFeeLedger(
+  tx: Pick<LedgerClient, "$executeRaw">,
+  organizationId: string,
+  productId: string,
+) {
+  const entity = activationFeeLockEntity(organizationId, productId);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ACTIVATION_FEE_LOCK_NAMESPACE}), hashtext(${entity}))`;
+}
 
 function activationMinorForPlan(plan: { tierKey?: string | null; setupFee?: unknown; key?: string | null }): number {
   const tierKey = resolveWexPayTierKey(plan.tierKey ?? plan.key ?? null);
@@ -55,13 +76,17 @@ function isFreshReservation(ledger: {
   );
 }
 
+function isSettledStatus(status: ActivationFeeStatus) {
+  return status === "PAID" || status === "WAIVED" || status === "WAIVED_LEGACY";
+}
+
 /**
  * Decide whether Smart Activation fee is due for org+product.
  * Settled statuses (PAID/WAIVED/WAIVED_LEGACY) → not due.
  * Expired PENDING reservations are ignored (re-openable).
  */
 export async function resolveActivationFeeDue(
-  tx: LedgerClient,
+  tx: Pick<LedgerClient, "activationFeeLedger">,
   input: {
     organizationId: string;
     productId: string;
@@ -114,6 +139,26 @@ function activationLedgerAmounts(quote: CheckoutQuoteSnapshot, activationFeeMino
   };
 }
 
+async function assertReservePlanMatchesActiveLicense(
+  tx: Pick<LedgerClient, "license">,
+  input: { organizationId: string; productId: string; planId: string },
+) {
+  const activeLicense = await tx.license.findFirst({
+    where: {
+      organizationId: input.organizationId,
+      productId: input.productId,
+      status: "ACTIVE",
+    },
+    select: { planId: true },
+  });
+  if (activeLicense && activeLicense.planId !== input.planId) {
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_STALE_QUOTE",
+      "Aktivasyon rezervasyonu güncel lisans paketi ile uyuşmuyor.",
+    );
+  }
+}
+
 export async function reserveActivationFeeForCheckout(
   tx: LedgerClient,
   input: {
@@ -130,6 +175,9 @@ export async function reserveActivationFeeForCheckout(
     return { status: "WAIVED", ledgerId: null };
   }
 
+  await lockActivationFeeLedger(tx, input.organizationId, input.productId);
+  await assertReservePlanMatchesActiveLicense(tx, input);
+
   const reservedUntil = new Date(Date.now() + ACTIVATION_RESERVE_MS);
   const existing = await tx.activationFeeLedger.findUnique({
     where: {
@@ -140,7 +188,7 @@ export async function reserveActivationFeeForCheckout(
     },
   });
 
-  if (existing && (existing.status === "PAID" || existing.status === "WAIVED" || existing.status === "WAIVED_LEGACY")) {
+  if (existing && isSettledStatus(existing.status)) {
     return { status: existing.status, ledgerId: existing.id };
   }
 
@@ -165,11 +213,35 @@ export async function reserveActivationFeeForCheckout(
   };
 
   if (existing) {
-    const updated = await tx.activationFeeLedger.update({
-      where: { id: existing.id },
+    // Predicate update: never overwrite PAID/WAIVED/WAIVED_LEGACY via stale PENDING snapshot.
+    const updated = await tx.activationFeeLedger.updateMany({
+      where: { id: existing.id, status: "PENDING" },
       data,
     });
-    return { status: updated.status, ledgerId: updated.id };
+    if (updated.count === 0) {
+      const raced = await tx.activationFeeLedger.findUnique({
+        where: {
+          organizationId_productId: {
+            organizationId: input.organizationId,
+            productId: input.productId,
+          },
+        },
+      });
+      if (raced && isSettledStatus(raced.status)) {
+        return { status: raced.status, ledgerId: raced.id };
+      }
+      if (raced && isFreshReservation(raced) && raced.subscriptionPaymentId !== input.subscriptionPaymentId) {
+        throw new ActivationFeeError(
+          "ACTIVATION_FEE_RESERVED",
+          "Aktivasyon bedeli için eşzamanlı bir ödeme zaten devam ediyor.",
+        );
+      }
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_RESERVED",
+        "Aktivasyon bedeli rezervasyonu oluşturulamadı; lütfen yeniden deneyin.",
+      );
+    }
+    return { status: "PENDING", ledgerId: existing.id };
   }
 
   try {
@@ -190,7 +262,7 @@ export async function reserveActivationFeeForCheckout(
         },
       },
     });
-    if (raced && (raced.status === "PAID" || raced.status === "WAIVED" || raced.status === "WAIVED_LEGACY")) {
+    if (raced && isSettledStatus(raced.status)) {
       return { status: raced.status, ledgerId: raced.id };
     }
     if (raced && isFreshReservation(raced) && raced.subscriptionPaymentId !== input.subscriptionPaymentId) {
@@ -221,6 +293,8 @@ export async function markActivationFeePaid(
     activationFeeAmountMinor?: number | null;
   },
 ) {
+  await lockActivationFeeLedger(tx, input.organizationId, input.productId);
+
   const intendedCharge = input.activationFeeAmountMinor ?? 0;
   const ledger = await tx.activationFeeLedger.findUnique({
     where: {
@@ -278,8 +352,12 @@ export async function markActivationFeePaid(
     );
   }
 
-  await tx.activationFeeLedger.update({
-    where: { id: ledger.id },
+  const updated = await tx.activationFeeLedger.updateMany({
+    where: {
+      id: ledger.id,
+      status: "PENDING",
+      subscriptionPaymentId: input.subscriptionPaymentId,
+    },
     data: {
       status: "PAID",
       paidAt: new Date(),
@@ -287,6 +365,38 @@ export async function markActivationFeePaid(
       reservedUntil: null,
     },
   });
+  if (updated.count === 0) {
+    const raced = await tx.activationFeeLedger.findUnique({
+      where: {
+        organizationId_productId: {
+          organizationId: input.organizationId,
+          productId: input.productId,
+        },
+      },
+    });
+    if (raced?.status === "PAID" && raced.subscriptionPaymentId === input.subscriptionPaymentId) {
+      return { updated: false as const, duplicate: true as const };
+    }
+    if (raced && (raced.status === "WAIVED" || raced.status === "WAIVED_LEGACY")) {
+      if (intendedCharge > 0) {
+        throw new ActivationFeeError(
+          "ACTIVATION_FEE_IMMUTABLE",
+          `Aktivasyon kaydı ${raced.status} durumunda; bu ödeme aktivasyon tahsil edemez.`,
+        );
+      }
+      return { updated: false as const, waived: true as const, status: raced.status };
+    }
+    if (raced?.status === "PAID") {
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_OWNERSHIP_MISMATCH",
+        "Aktivasyon bedeli başka bir ödeme ile zaten tahsil edilmiş.",
+      );
+    }
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_STALE_CALLBACK",
+      "Aktivasyon rezervasyonu süresi dolmuş; manuel reconciliation gerekir.",
+    );
+  }
   return { updated: true as const };
 }
 
@@ -294,6 +404,8 @@ export async function releaseActivationFeeReservation(
   tx: LedgerClient,
   input: { organizationId: string; productId: string; subscriptionPaymentId: string },
 ) {
+  await lockActivationFeeLedger(tx, input.organizationId, input.productId);
+
   const ledger = await tx.activationFeeLedger.findUnique({
     where: {
       organizationId_productId: {
@@ -304,8 +416,12 @@ export async function releaseActivationFeeReservation(
   });
   if (!ledger || ledger.status !== "PENDING") return;
   if (ledger.subscriptionPaymentId !== input.subscriptionPaymentId) return;
-  await tx.activationFeeLedger.update({
-    where: { id: ledger.id },
+  await tx.activationFeeLedger.updateMany({
+    where: {
+      id: ledger.id,
+      status: "PENDING",
+      subscriptionPaymentId: input.subscriptionPaymentId,
+    },
     data: {
       subscriptionPaymentId: null,
       reservedUntil: null,
@@ -323,6 +439,8 @@ export async function waiveActivationFee(
     legacy?: boolean;
   },
 ) {
+  await lockActivationFeeLedger(tx, input.organizationId, input.productId);
+
   const existing = await tx.activationFeeLedger.findUnique({
     where: {
       organizationId_productId: {
@@ -331,7 +449,7 @@ export async function waiveActivationFee(
       },
     },
   });
-  if (existing && (existing.status === "PAID" || existing.status === "WAIVED" || existing.status === "WAIVED_LEGACY")) {
+  if (existing && isSettledStatus(existing.status)) {
     throw new ActivationFeeError(
       "ACTIVATION_FEE_IMMUTABLE",
       `Aktivasyon kaydı ${existing.status} durumunda değiştirilemez.`,
@@ -339,30 +457,73 @@ export async function waiveActivationFee(
   }
 
   const status = input.legacy ? ("WAIVED_LEGACY" as const) : ("WAIVED" as const);
-  return tx.activationFeeLedger.upsert({
-    where: {
-      organizationId_productId: {
+  const waiveData = {
+    status,
+    waivedReason: input.reason,
+    waivedByUserId: input.waivedByUserId ?? null,
+    reservedUntil: null,
+    subscriptionPaymentId: null,
+  };
+
+  if (existing) {
+    const updated = await tx.activationFeeLedger.updateMany({
+      where: { id: existing.id, status: "PENDING" },
+      data: waiveData,
+    });
+    if (updated.count === 0) {
+      const raced = await tx.activationFeeLedger.findUniqueOrThrow({
+        where: {
+          organizationId_productId: {
+            organizationId: input.organizationId,
+            productId: input.productId,
+          },
+        },
+      });
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_IMMUTABLE",
+        `Aktivasyon kaydı ${raced.status} durumunda değiştirilemez.`,
+      );
+    }
+    return tx.activationFeeLedger.findUniqueOrThrow({
+      where: {
+        organizationId_productId: {
+          organizationId: input.organizationId,
+          productId: input.productId,
+        },
+      },
+    });
+  }
+
+  try {
+    return await tx.activationFeeLedger.create({
+      data: {
         organizationId: input.organizationId,
         productId: input.productId,
+        currency: "TRY",
+        activationFeeMinor: 0,
+        ...waiveData,
       },
-    },
-    create: {
-      organizationId: input.organizationId,
-      productId: input.productId,
-      status,
-      currency: "TRY",
-      activationFeeMinor: 0,
-      waivedReason: input.reason,
-      waivedByUserId: input.waivedByUserId ?? null,
-    },
-    update: {
-      status,
-      waivedReason: input.reason,
-      waivedByUserId: input.waivedByUserId ?? null,
-      reservedUntil: null,
-      subscriptionPaymentId: null,
-    },
-  });
+    });
+  } catch {
+    const raced = await tx.activationFeeLedger.findUnique({
+      where: {
+        organizationId_productId: {
+          organizationId: input.organizationId,
+          productId: input.productId,
+        },
+      },
+    });
+    if (raced && isSettledStatus(raced.status)) {
+      throw new ActivationFeeError(
+        "ACTIVATION_FEE_IMMUTABLE",
+        `Aktivasyon kaydı ${raced.status} durumunda değiştirilemez.`,
+      );
+    }
+    throw new ActivationFeeError(
+      "ACTIVATION_FEE_IMMUTABLE",
+      "Aktivasyon ücreti muafiyeti tamamlanamadı.",
+    );
+  }
 }
 
 export function quoteToLegacyMajorDisplay(quote: CheckoutQuoteSnapshot) {

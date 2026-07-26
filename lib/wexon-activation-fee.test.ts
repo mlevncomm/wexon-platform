@@ -74,6 +74,8 @@ describe("smart activation fee policy", () => {
     assert.equal(mismatch.code, "ACTIVATION_FEE_OWNERSHIP_MISMATCH");
     const stale = new ActivationFeeError("ACTIVATION_FEE_STALE_CALLBACK");
     assert.equal(stale.code, "ACTIVATION_FEE_STALE_CALLBACK");
+    const staleQuote = new ActivationFeeError("ACTIVATION_FEE_STALE_QUOTE");
+    assert.equal(staleQuote.code, "ACTIVATION_FEE_STALE_QUOTE");
   });
 
   it("isolates org/product quote amounts by tier", () => {
