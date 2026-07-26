@@ -7,7 +7,6 @@ import { redirect } from "next/navigation";
 import { adminDebug, assertAdminAccess, type AdminSession } from "@/lib/wexon-admin-auth";
 import {
   assertEntitlementPhysicalDeleteForbidden,
-  setEntitlementActiveState,
 } from "@/lib/wexon-entitlement-lifecycle";
 import { writeAuditLog } from "@/lib/wexon-audit";
 import { hashApiKey } from "@/lib/wexon-api-key-hash";
@@ -27,7 +26,6 @@ import {
   LastActiveOwnerError,
   lockUserForUpdate,
   resolveNextActiveFromLockedUser,
-  runWithTransactionRetry,
 } from "@/lib/wexon-active-owner";
 import {
   AdminValidationError,
@@ -69,6 +67,32 @@ import {
   waiveActivationFeeAsAdmin,
 } from "@/lib/wexon-admin-commercial-consistency";
 import { PlatformAdminCloudflareAccessError } from "@/lib/wexon-platform-admin-cloudflare-bind";
+import {
+  enforceAdminMutationGate,
+  getSafeAdminActionErrorMessage,
+  logAdminMutationInternalError,
+  readHighRiskConfirmation,
+  readMutationId,
+  runAdminMutation,
+} from "@/lib/wexon-admin-mutation-guard";
+import { AdminMutationGuardError } from "@/lib/wexon-admin-mutation-errors";
+import { isHostedDeploymentCleanupForbidden, isAllowedAdminBillingPaymentProvider } from "@/lib/wexon-admin-mutation-policy";
+import {
+  assertInvoiceCreateStatus,
+  assertMoneyInvariant,
+  assertPositiveAmount,
+  evaluateLicenseStatusAgainstSubscription,
+  evaluateSubscriptionStatusTransition,
+} from "@/lib/wexon-admin-finance-policy";
+import {
+  executeCreateBillingPayment,
+  executeCreateLicense,
+  executeCreateSubscription,
+  executeUpdateBillingPaymentStatus,
+  executeUpdateInvoiceStatus,
+} from "@/lib/wexon-admin-finance-operations";
+import { maskMerchantOid } from "@/lib/wexon-admin-commercial-consistency";
+import { maskEmailForAudit, sanitizeAdminAuditMetadata } from "@/lib/wexon-admin-audit-sanitize";
 
 type AuditClient = {
   auditLog: {
@@ -109,25 +133,28 @@ type DeleteClient = Pick<
 function getAdminActionActor(actor: AdminSession) {
   return {
     type: "admin_session",
-    email: actor.email,
+    emailMasked: maskEmailForAudit(actor.email),
   };
 }
 
+/** Thin adapter over shared writeAuditLog — masks PII before write. */
 async function writeAdminAuditLog(input: AdminAuditInput, client: AuditClient = prisma) {
-  return client.auditLog.create({
-    data: {
-      organizationId: input.organizationId ?? null,
-      userId: null,
+  return writeAuditLog(
+    {
       action: input.action,
+      organizationId: input.organizationId ?? null,
       entityType: input.entityType,
       entityId: input.entityId,
-      metadataJson: {
+      source: "admin_mutation",
+      metadata: sanitizeAdminAuditMetadata({
         actor: getAdminActionActor(input.actor),
-        source: "admin_organization_management",
+        actorAdminId: input.actor.adminId,
+        actorEmailMasked: maskEmailForAudit(input.actor.email),
         ...(input.metadata ?? {}),
-      },
+      }),
     },
-  });
+    client as unknown as Parameters<typeof writeAuditLog>[1],
+  );
 }
 
 function isUniqueConflict(error: unknown) {
@@ -135,10 +162,7 @@ function isUniqueConflict(error: unknown) {
 }
 
 function getActionErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof AdminValidationError) return error.message;
-  if (error instanceof PlatformAdminCloudflareAccessError) return fallback;
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
+  return getSafeAdminActionErrorMessage(error, fallback);
 }
 
 function throwIfRedirectError(error: unknown) {
@@ -154,12 +178,36 @@ function throwIfRedirectError(error: unknown) {
 }
 
 function redirectWithError(formData: FormData, fallback: string, error: unknown, message = "İşlem tamamlanamadı.") {
+  if (
+    !(error instanceof AdminValidationError) &&
+    !(error instanceof AdminMutationGuardError) &&
+    !(error instanceof PlatformAdminCloudflareAccessError)
+  ) {
+    logAdminMutationInternalError({
+      requestId: "action",
+      action: "unknown",
+      adminId: "unknown",
+      error,
+    });
+  }
   const returnTo = readReturnTo(formData, fallback);
   const params = new URLSearchParams({ adminError: getActionErrorMessage(error, message) });
   redirect(`${returnTo}?${params.toString()}`);
 }
 
 function redirectPathWithError(path: string, error: unknown, message = "İşlem tamamlanamadı.") {
+  if (
+    !(error instanceof AdminValidationError) &&
+    !(error instanceof AdminMutationGuardError) &&
+    !(error instanceof PlatformAdminCloudflareAccessError)
+  ) {
+    logAdminMutationInternalError({
+      requestId: "action",
+      action: "unknown",
+      adminId: "unknown",
+      error,
+    });
+  }
   const params = new URLSearchParams({ adminError: getActionErrorMessage(error, message) });
   redirect(`${path}?${params.toString()}`);
 }
@@ -220,13 +268,6 @@ async function setAdminApiKeyFlashCookie(value: { name: string; prefix: string; 
     path: "/admin/integrations",
     maxAge: 5 * 60,
   });
-}
-
-function addPeriod(date: Date, interval: "MONTHLY" | "YEARLY") {
-  const next = new Date(date);
-  if (interval === "YEARLY") next.setFullYear(next.getFullYear() + 1);
-  else next.setMonth(next.getMonth() + 1);
-  return next;
 }
 
 async function deleteOrganizationGraph(tx: DeleteClient, organizationId: string) {
@@ -322,33 +363,36 @@ async function assertOrganizationLicense(organizationId: string, licenseId: stri
 export async function createAdminOrganizationAction(formData: FormData) {
   try {
     adminDebug("org:create:start");
-    adminDebug("org:create:form_keys", { keys: Array.from(formData.keys()) });
     const actor = await assertAdminAccess();
-    adminDebug("org:create:actor", { email: actor.email });
     const payload = parseOrganizationPayload(formData);
-    adminDebug("org:create:validated", { name: payload.name, slug: payload.slug, email: payload.email, country: payload.country, isActive: payload.isActive });
-    const organization = await prisma.$transaction(async (tx) => {
-      adminDebug("org:create:db_create_start");
-      const created = await tx.organization.create({ data: payload });
-      adminDebug("org:create:created", { organizationId: created.id });
-      await writeAdminAuditLog(
-        {
-          action: "admin.organization.created",
-          actor,
+    adminDebug("org:create:validated", { name: payload.name, slug: payload.slug, country: payload.country, isActive: payload.isActive });
+
+    const result = await runAdminMutation({
+      action: "organization.create",
+      actor,
+      entityType: "Organization",
+      requestHashPayload: {
+        name: payload.name,
+        slug: payload.slug,
+        country: payload.country,
+        isActive: payload.isActive,
+        isDemo: payload.isDemo,
+      },
+      execute: async ({ tx }) => {
+        adminDebug("org:create:db_create_start");
+        const created = await tx.organization.create({ data: payload });
+        adminDebug("org:create:created", { organizationId: created.id });
+        return {
           organizationId: created.id,
-          entityType: "Organization",
           entityId: created.id,
-          metadata: { after: payload },
-        },
-        tx,
-      );
-      adminDebug("org:create:audit_written", { organizationId: created.id });
-      return created;
+          after: { name: created.name, slug: created.slug, isActive: created.isActive },
+          replayResult: { organizationId: created.id },
+        };
+      },
     });
 
-    adminDebug("org:create:revalidate_start", { organizationId: organization.id });
-    revalidateOrganizationRoutes(organization.id);
-    const returnTo = readReturnTo(formData, `/admin/organizations/${organization.id}`);
+    revalidateOrganizationRoutes(result.organizationId!);
+    const returnTo = readReturnTo(formData, `/admin/organizations/${result.entityId}`);
     adminDebug("org:create:redirect", { to: returnTo });
     redirect(returnTo);
   } catch (error) {
@@ -368,51 +412,52 @@ export async function updateAdminOrganizationAction(organizationId: string, form
   try {
     const actor = await assertAdminAccess();
     const payload = parseOrganizationPayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const before = await tx.organization.findUnique({ where: { id: organizationId } });
-      if (!before) {
-        throw new AdminValidationError("Organizasyon bulunamadı.");
-      }
 
-      const updated = await tx.organization.update({
-        where: { id: organizationId },
-        data: payload,
-      });
+    await runAdminMutation({
+      action: "organization.update",
+      actor,
+      organizationId,
+      entityType: "Organization",
+      entityId: organizationId,
+      requestHashPayload: payload,
+      execute: async ({ tx }) => {
+        const before = await tx.organization.findUnique({ where: { id: organizationId } });
+        if (!before) {
+          throw new AdminValidationError("Organizasyon bulunamadı.");
+        }
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.organization.updated",
-          actor,
+        const updated = await tx.organization.update({
+          where: { id: organizationId },
+          data: payload,
+        });
+
+        return {
           organizationId,
-          entityType: "Organization",
           entityId: organizationId,
-          metadata: {
-            before: {
-              name: before.name,
-              slug: before.slug,
-              legalName: before.legalName,
-              taxNo: before.taxNo,
-              email: before.email,
-              phone: before.phone,
-              country: before.country,
-              isDemo: before.isDemo,
-              isActive: before.isActive,
-            },
-            after: {
-              name: updated.name,
-              slug: updated.slug,
-              legalName: updated.legalName,
-              taxNo: updated.taxNo,
-              email: updated.email,
-              phone: updated.phone,
-              country: updated.country,
-              isDemo: updated.isDemo,
-              isActive: updated.isActive,
-            },
+          before: {
+            name: before.name,
+            slug: before.slug,
+            legalName: before.legalName,
+            taxNo: before.taxNo,
+            email: maskEmailForAudit(before.email),
+            phone: before.phone,
+            country: before.country,
+            isDemo: before.isDemo,
+            isActive: before.isActive,
           },
-        },
-        tx,
-      );
+          after: {
+            name: updated.name,
+            slug: updated.slug,
+            legalName: updated.legalName,
+            taxNo: updated.taxNo,
+            email: maskEmailForAudit(updated.email),
+            phone: updated.phone,
+            country: updated.country,
+            isDemo: updated.isDemo,
+            isActive: updated.isActive,
+          },
+        };
+      },
     });
 
     revalidateOrganizationRoutes(organizationId);
@@ -440,41 +485,44 @@ export async function deactivateAdminOrganizationAction(organizationId: string, 
       redirect(returnTo);
     }
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.organization.update({
-        where: { id: organizationId },
-        data: { isActive: false },
-      });
+    const confirm = readHighRiskConfirmation(formData ?? new FormData());
 
-      const wexPayProduct = await tx.product.findFirst({
-        where: {
-          OR: [{ key: "wexpay" }, { name: { equals: "WexPay", mode: "insensitive" } }],
-        },
-      });
-
-      if (wexPayProduct) {
-        await tx.appInstallation.updateMany({
-          where: { organizationId, productId: wexPayProduct.id, status: "ACTIVE" },
-          data: { status: "DISABLED" },
+    await runAdminMutation({
+      action: "organization.deactivate",
+      actor,
+      organizationId,
+      entityType: "Organization",
+      entityId: organizationId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: { organizationId },
+      execute: async ({ tx }) => {
+        const updated = await tx.organization.update({
+          where: { id: organizationId },
+          data: { isActive: false },
         });
-      }
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.organization.deactivated",
-          actor,
-          organizationId,
-          entityType: "Organization",
-          entityId: organizationId,
-          metadata: {
-            before: { isActive: organization.isActive },
-            after: { isActive: updated.isActive },
-            productAccessDisabled: Boolean(wexPayProduct),
-            hardDelete: false,
+        const wexPayProduct = await tx.product.findFirst({
+          where: {
+            OR: [{ key: "wexpay" }, { name: { equals: "WexPay", mode: "insensitive" } }],
           },
-        },
-        tx,
-      );
+        });
+
+        if (wexPayProduct) {
+          await tx.appInstallation.updateMany({
+            where: { organizationId, productId: wexPayProduct.id, status: "ACTIVE" },
+            data: { status: "DISABLED" },
+          });
+        }
+
+        return {
+          organizationId,
+          entityId: organizationId,
+          before: { isActive: organization.isActive },
+          after: { isActive: updated.isActive },
+          metadata: { productAccessDisabled: Boolean(wexPayProduct), hardDelete: false },
+        };
+      },
     });
 
     revalidateOrganizationRoutes(organizationId);
@@ -499,40 +547,44 @@ export async function reactivateAdminOrganizationAction(organizationId: string, 
       redirect(returnTo);
     }
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.organization.update({
-        where: { id: organizationId },
-        data: { isActive: true },
-      });
+    const confirm = readHighRiskConfirmation(formData ?? new FormData());
 
-      const wexPayProduct = await tx.product.findFirst({
-        where: {
-          OR: [{ key: "wexpay" }, { name: { equals: "WexPay", mode: "insensitive" } }],
-        },
-      });
-
-      if (wexPayProduct) {
-        await tx.appInstallation.updateMany({
-          where: { organizationId, productId: wexPayProduct.id, status: "DISABLED" },
-          data: { status: "ACTIVE" },
+    await runAdminMutation({
+      action: "organization.reactivate",
+      actor,
+      organizationId,
+      entityType: "Organization",
+      entityId: organizationId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: { organizationId },
+      execute: async ({ tx }) => {
+        const updated = await tx.organization.update({
+          where: { id: organizationId },
+          data: { isActive: true },
         });
-      }
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.organization.reactivated",
-          actor,
-          organizationId,
-          entityType: "Organization",
-          entityId: organizationId,
-          metadata: {
-            before: { isActive: organization.isActive },
-            after: { isActive: updated.isActive },
-            productAccessReactivated: Boolean(wexPayProduct),
+        const wexPayProduct = await tx.product.findFirst({
+          where: {
+            OR: [{ key: "wexpay" }, { name: { equals: "WexPay", mode: "insensitive" } }],
           },
-        },
-        tx,
-      );
+        });
+
+        if (wexPayProduct) {
+          await tx.appInstallation.updateMany({
+            where: { organizationId, productId: wexPayProduct.id, status: "DISABLED" },
+            data: { status: "ACTIVE" },
+          });
+        }
+
+        return {
+          organizationId,
+          entityId: organizationId,
+          before: { isActive: organization.isActive },
+          after: { isActive: updated.isActive },
+          metadata: { productAccessReactivated: Boolean(wexPayProduct) },
+        };
+      },
     });
 
     revalidateOrganizationRoutes(organizationId);
@@ -549,49 +601,61 @@ export async function permanentlyDeleteAdminOrganizationAction(organizationId: s
   try {
     const actor = await assertAdminAccess();
     const confirmSlug = String(formData.get("confirmSlug") ?? "").trim();
+    const confirm = readHighRiskConfirmation(formData);
+    const mutationId = readMutationId(formData);
 
-    const organization = await prisma.organization.findUnique({
-      where: { id: organizationId },
-      include: {
-        _count: {
-          select: {
-            invoices: true,
-            billingPayments: true,
+    await runAdminMutation({
+      action: "organization.permanent_delete",
+      actor,
+      organizationId,
+      entityType: "Organization",
+      entityId: organizationId,
+      mutationId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: { organizationId, confirmSlug },
+      execute: async ({ tx }) => {
+        const organization = await tx.organization.findUnique({
+          where: { id: organizationId },
+          include: {
+            _count: {
+              select: {
+                invoices: true,
+                billingPayments: true,
+              },
+            },
           },
-        },
-      },
-    });
+        });
 
-    if (!organization) {
-      throw new AdminValidationError("Müşteri bulunamadı.");
-    }
+        if (!organization) {
+          throw new AdminValidationError("Müşteri bulunamadı.");
+        }
 
-    if (confirmSlug !== organization.slug) {
-      throw new AdminValidationError("Onay slug değeri eşleşmiyor.");
-    }
+        if (confirmSlug !== organization.slug) {
+          throw new AdminValidationError("Onay slug değeri eşleşmiyor.");
+        }
 
-    if (organization._count.invoices > 0 || organization._count.billingPayments > 0) {
-      throw new AdminValidationError("Bu müşteriye ait fatura veya ödeme kaydı olduğu için kalıcı silme yapılamaz. Müşteriyi pasife alabilirsiniz.");
-    }
+        if (organization._count.invoices > 0 || organization._count.billingPayments > 0) {
+          throw new AdminValidationError(
+            "Bu müşteriye ait fatura veya ödeme kaydı olduğu için kalıcı silme yapılamaz. Müşteriyi pasife alabilirsiniz.",
+          );
+        }
 
-    await prisma.$transaction(async (tx) => {
-      await writeAdminAuditLog(
-        {
-          action: "admin.organization.permanently_deleted",
-          actor,
+        await deleteOrganizationGraph(tx, organizationId);
+
+        return {
           organizationId,
-          entityType: "Organization",
           entityId: organizationId,
+          before: { slug: organization.slug, name: organization.name },
+          after: { deleted: true },
           metadata: {
             organizationName: organization.name,
             organizationSlug: organization.slug,
             hardDelete: true,
           },
-        },
-        tx,
-      );
-
-      await deleteOrganizationGraph(tx, organizationId);
+          replayResult: { organizationId, deleted: true },
+        };
+      },
     });
 
     revalidatePath("/admin");
@@ -610,9 +674,20 @@ export async function deleteAllTestOrganizationsAction(formData: FormData) {
   try {
     const actor = await assertAdminAccess();
     const confirmText = String(formData.get("confirmText") ?? "").trim();
+    const confirm = readHighRiskConfirmation(formData);
 
-    if (process.env.NODE_ENV === "production") {
-      throw new AdminValidationError("Bu işlem production ortamında devre dışıdır.");
+    await enforceAdminMutationGate({
+      action: "test_organization.bulk_delete",
+      actor,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+    });
+
+    if (isHostedDeploymentCleanupForbidden(process.env)) {
+      throw new AdminMutationGuardError(
+        "cleanup_forbidden",
+        "Bu işlem production/preview ortamında devre dışıdır.",
+      );
     }
 
     if (confirmText !== "TÜM TEST MÜŞTERİLERİNİ SİL") {
@@ -678,29 +753,30 @@ export async function enableWexPayAccessAction(organizationId: string) {
     const product = await getWexPayProduct();
     const license = await getWexPayLicense(organizationId, product.id);
 
-    await prisma.$transaction(async (tx) => {
-      const installation = await tx.appInstallation.upsert({
-        where: { organizationId_productId: { organizationId, productId: product.id } },
-        update: { status: "ACTIVE", licenseId: license?.id ?? null },
-        create: {
-          organizationId,
-          productId: product.id,
-          licenseId: license?.id ?? null,
-          status: "ACTIVE",
-        },
-      });
+    await runAdminMutation({
+      action: "wexpay_access.enable",
+      actor,
+      organizationId,
+      entityType: "AppInstallation",
+      requestHashPayload: { organizationId, productId: product.id },
+      execute: async ({ tx }) => {
+        const installation = await tx.appInstallation.upsert({
+          where: { organizationId_productId: { organizationId, productId: product.id } },
+          update: { status: "ACTIVE", licenseId: license?.id ?? null },
+          create: {
+            organizationId,
+            productId: product.id,
+            licenseId: license?.id ?? null,
+            status: "ACTIVE",
+          },
+        });
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.product_access.enabled",
-          actor,
+        return {
           organizationId,
-          entityType: "AppInstallation",
           entityId: installation.id,
-          metadata: { productKey: product.key, licenseId: license?.id ?? null },
-        },
-        tx,
-      );
+          after: { productKey: product.key, status: installation.status, licenseId: license?.id ?? null },
+        };
+      },
     });
 
     revalidateLicenseRoutes(organizationId);
@@ -719,33 +795,37 @@ export async function updateWexPayAccessStatusAction(organizationId: string, sta
     const product = await getWexPayProduct();
     const license = await getWexPayLicense(organizationId, product.id);
 
-    await prisma.$transaction(async (tx) => {
-      const before = await tx.appInstallation.findUnique({
-        where: { organizationId_productId: { organizationId, productId: product.id } },
-      });
+    await runAdminMutation({
+      action: "wexpay_access.status_change",
+      actor,
+      organizationId,
+      entityType: "AppInstallation",
+      requestHashPayload: { organizationId, productId: product.id, status: nextStatus },
+      execute: async ({ tx }) => {
+        const before = await tx.appInstallation.findUnique({
+          where: { organizationId_productId: { organizationId, productId: product.id } },
+        });
 
-      const installation = await tx.appInstallation.upsert({
-        where: { organizationId_productId: { organizationId, productId: product.id } },
-        update: { status: nextStatus, licenseId: license?.id ?? before?.licenseId ?? null },
-        create: {
-          organizationId,
-          productId: product.id,
-          licenseId: license?.id ?? null,
-          status: nextStatus,
-        },
-      });
+        const installation = await tx.appInstallation.upsert({
+          where: { organizationId_productId: { organizationId, productId: product.id } },
+          update: { status: nextStatus, licenseId: license?.id ?? before?.licenseId ?? null },
+          create: {
+            organizationId,
+            productId: product.id,
+            licenseId: license?.id ?? null,
+            status: nextStatus,
+          },
+        });
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.product_access.status_changed",
-          actor,
+        return {
           organizationId,
-          entityType: "AppInstallation",
           entityId: installation.id,
-          metadata: { productKey: product.key, before: { status: before?.status ?? null }, after: { status: installation.status } },
-        },
-        tx,
-      );
+          before: { status: before?.status ?? null },
+          after: { status: installation.status },
+          transition: `${before?.status ?? "none"}->${installation.status}`,
+          metadata: { productKey: product.key },
+        };
+      },
     });
 
     revalidateLicenseRoutes(organizationId);
@@ -760,45 +840,39 @@ export async function createAdminLicenseAction(organizationId: string, formData:
   try {
     const actor = await assertAdminAccess();
     const payload = parseLicensePayload(formData);
+    const confirm = readHighRiskConfirmation(formData);
+    const mutationId = readMutationId(formData);
     await assertOrganization(organizationId);
     const product = await getWexPayProduct();
     await assertWexPayPlan(payload.planId, product.id);
 
-    await prisma.$transaction(async (tx) => {
-      const license = await tx.license.create({
-        data: {
+    await runAdminMutation({
+      action: "license.create",
+      actor,
+      organizationId,
+      entityType: "License",
+      mutationId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: {
+        organizationId,
+        planId: payload.planId,
+        licenseType: payload.licenseType,
+        startsAt: payload.startsAt?.toISOString() ?? null,
+        endsAt: payload.endsAt?.toISOString() ?? null,
+        status: payload.status,
+      },
+      execute: async ({ tx }) =>
+        executeCreateLicense(tx, {
           organizationId,
           productId: product.id,
+          productKey: payload.productKey,
           planId: payload.planId,
           licenseType: payload.licenseType,
           startsAt: payload.startsAt,
           endsAt: payload.endsAt,
           status: payload.status,
-        },
-      });
-
-      await tx.appInstallation.upsert({
-        where: { organizationId_productId: { organizationId, productId: product.id } },
-        update: { status: "ACTIVE", licenseId: license.id },
-        create: {
-          organizationId,
-          productId: product.id,
-          licenseId: license.id,
-          status: "ACTIVE",
-        },
-      });
-
-      await writeAdminAuditLog(
-        {
-          action: "admin.license.created",
-          actor,
-          organizationId,
-          entityType: "License",
-          entityId: license.id,
-          metadata: { productKey: payload.productKey, after: payload },
-        },
-        tx,
-      );
+        }),
     });
 
     revalidateLicenseRoutes(organizationId);
@@ -838,6 +912,13 @@ export async function blockAdminWexPayActivationAction(
   const returnTo = readReturnTo(formData, `/admin/organizations/${organizationId}`);
   try {
     const actor = await assertAdminAccess();
+    await enforceAdminMutationGate({
+      action: "wexpay_activation.block",
+      actor,
+      organizationId,
+      entityType: "ActivationJourney",
+      reason: readStringFromForm(formData, "note"),
+    });
     await blockWexPayActivationAsAdmin({
       organizationId,
       expectedVersion: readActivationExpectedVersion(formData),
@@ -861,6 +942,13 @@ export async function unblockAdminWexPayActivationAction(
   const returnTo = readReturnTo(formData, `/admin/organizations/${organizationId}`);
   try {
     const actor = await assertAdminAccess();
+    await enforceAdminMutationGate({
+      action: "wexpay_activation.unblock",
+      actor,
+      organizationId,
+      entityType: "ActivationJourney",
+      reason: readStringFromForm(formData, "reason"),
+    });
     await unblockWexPayActivationAsAdmin({
       organizationId,
       expectedVersion: readActivationExpectedVersion(formData),
@@ -883,6 +971,13 @@ export async function adminAssistedWexPayGoLiveAction(
   const returnTo = readReturnTo(formData, `/admin/organizations/${organizationId}`);
   try {
     const actor = await assertAdminAccess();
+    await enforceAdminMutationGate({
+      action: "wexpay_activation.assisted_go_live",
+      actor,
+      organizationId,
+      entityType: "ActivationJourney",
+      reason: readStringFromForm(formData, "note"),
+    });
     await adminAssistedWexPayGoLive({
       organizationId,
       expectedVersion: readActivationExpectedVersion(formData),
@@ -913,6 +1008,16 @@ export async function changeAdminLicensePlanAction(organizationId: string, licen
     }
     await assertWexPayPlan(payload.planId, product.id);
 
+    await enforceAdminMutationGate({
+      action: "license.plan_change",
+      actor,
+      organizationId,
+      entityType: "License",
+      entityId: licenseId,
+      confirmed: payload.confirmed,
+      reason: payload.reason,
+    });
+
     await changeLicensePlanWithSubscriptionSync({
       organizationId,
       licenseId,
@@ -936,6 +1041,15 @@ export async function waiveAdminActivationFeeAction(organizationId: string, form
     const payload = parseActivationFeeWaivePayload(formData);
     await assertOrganization(organizationId);
 
+    await enforceAdminMutationGate({
+      action: "activation_fee.waive",
+      actor,
+      organizationId,
+      entityType: "ActivationFeeLedger",
+      confirmed: payload.confirmed,
+      reason: payload.reason,
+    });
+
     await waiveActivationFeeAsAdmin({
       organizationId,
       productId: payload.productId,
@@ -957,25 +1071,57 @@ export async function changeAdminLicenseStatusAction(organizationId: string, lic
   try {
     const actor = await assertAdminAccess();
     const payload = parseLicenseStatusPayload(formData);
+    const confirm = readHighRiskConfirmation(formData);
     const license = await assertOrganizationLicense(organizationId, licenseId);
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.license.update({
-        where: { id: licenseId },
-        data: { status: payload.status },
-      });
+    await runAdminMutation({
+      action: "license.status_change",
+      actor,
+      organizationId,
+      entityType: "License",
+      entityId: licenseId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: { organizationId, licenseId, status: payload.status },
+      execute: async ({ tx }) => {
+        const subscription = await tx.subscription.findFirst({ where: { licenseId } });
+        const transition = evaluateLicenseStatusAgainstSubscription({
+          licenseStatus: payload.status,
+          subscriptionStatus: subscription?.status ?? null,
+        });
+        if (!transition.ok) {
+          throw new AdminMutationGuardError("invalid_state_transition", transition.message);
+        }
+        if (license.status === payload.status) {
+          return {
+            organizationId,
+            entityId: licenseId,
+            before: { status: license.status },
+            after: { status: license.status },
+            transition: "noop",
+          };
+        }
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.license.status_changed",
-          actor,
+        const updated = await tx.license.updateMany({
+          where: { id: licenseId, status: license.status },
+          data: { status: payload.status },
+        });
+        if (updated.count === 0) {
+          throw new AdminMutationGuardError(
+            "stale_version",
+            "Lisans durumu başka bir işlem tarafından değiştirilmiş. Sayfayı yenileyin.",
+          );
+        }
+
+        return {
           organizationId,
-          entityType: "License",
           entityId: licenseId,
-          metadata: { before: { status: license.status }, after: { status: updated.status } },
-        },
-        tx,
-      );
+          before: { status: license.status },
+          after: { status: payload.status },
+          transition: `${license.status}->${payload.status}`,
+          metadata: { subscriptionStatus: subscription?.status ?? null },
+        };
+      },
     });
 
     revalidateLicenseRoutes(organizationId);
@@ -991,30 +1137,17 @@ export async function updateAdminInvoiceStatusAction(invoiceId: string, formData
   try {
     const actor = await assertAdminAccess();
     const payload = parseInvoiceStatusPayload(formData);
-    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
-    if (!invoice) throw new AdminValidationError("Fatura bulunamadı.");
+    const confirm = readHighRiskConfirmation(formData);
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.invoice.update({
-        where: { id: invoiceId },
-        data: {
-          status: payload.status,
-          paidAt: payload.status === "PAID" ? new Date() : invoice.paidAt,
-          issuedAt: payload.status === "ISSUED" && !invoice.issuedAt ? new Date() : invoice.issuedAt,
-        },
-      });
-
-      await writeAdminAuditLog(
-        {
-          action: "admin.invoice.status_changed",
-          actor,
-          organizationId: invoice.organizationId,
-          entityType: "Invoice",
-          entityId: invoiceId,
-          metadata: { before: { status: invoice.status }, after: { status: updated.status } },
-        },
-        tx,
-      );
+    await runAdminMutation({
+      action: "invoice.status_change",
+      actor,
+      entityType: "Invoice",
+      entityId: invoiceId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: { invoiceId, status: payload.status },
+      execute: async ({ tx }) => executeUpdateInvoiceStatus(tx, invoiceId, payload.status),
     });
 
     revalidateBillingRoutes();
@@ -1033,23 +1166,50 @@ export async function updateAdminProductStatusAction(productId: string, formData
     const product = await prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new AdminValidationError("Ürün bulunamadı.");
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.product.update({
-        where: { id: productId },
-        data: { status: payload.status, isActive: payload.status === "ACTIVE" },
-      });
-
-      await writeAdminAuditLog(
-        {
-          action: "admin.product.status_changed",
-          actor,
-          entityType: "Product",
-          entityId: productId,
-          metadata: { before: { status: product.status }, after: { status: updated.status } },
+    if (payload.status !== "ACTIVE") {
+      const confirm = readHighRiskConfirmation(formData);
+      await runAdminMutation({
+        action: "product.disable",
+        actor,
+        entityType: "Product",
+        entityId: productId,
+        confirmed: confirm.confirmed,
+        reason: confirm.reason,
+        requestHashPayload: { productId, status: payload.status },
+        execute: async ({ tx }) => {
+          const updated = await tx.product.update({
+            where: { id: productId },
+            data: { status: payload.status, isActive: false },
+          });
+          return {
+            entityId: productId,
+            before: { status: product.status },
+            after: { status: updated.status },
+            transition: `${product.status}->${payload.status}`,
+          };
         },
-        tx,
-      );
-    });
+      });
+    } else {
+      await runAdminMutation({
+        action: "product.enable",
+        actor,
+        entityType: "Product",
+        entityId: productId,
+        requestHashPayload: { productId, status: payload.status },
+        execute: async ({ tx }) => {
+          const updated = await tx.product.update({
+            where: { id: productId },
+            data: { status: payload.status, isActive: true },
+          });
+          return {
+            entityId: productId,
+            before: { status: product.status },
+            after: { status: updated.status },
+            transition: `${product.status}->${payload.status}`,
+          };
+        },
+      });
+    }
 
     revalidateCatalogRoutes();
     redirect(returnTo);
@@ -1067,23 +1227,50 @@ export async function updateAdminPlanActiveAction(planId: string, formData: Form
     const plan = await prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new AdminValidationError("Paket bulunamadı.");
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.plan.update({
-        where: { id: planId },
-        data: { isActive: payload.isActive },
-      });
-
-      await writeAdminAuditLog(
-        {
-          action: "admin.plan.active_changed",
-          actor,
-          entityType: "Plan",
-          entityId: planId,
-          metadata: { before: { isActive: plan.isActive }, after: { isActive: updated.isActive } },
+    if (!payload.isActive) {
+      const confirm = readHighRiskConfirmation(formData);
+      await runAdminMutation({
+        action: "plan.disable",
+        actor,
+        entityType: "Plan",
+        entityId: planId,
+        confirmed: confirm.confirmed,
+        reason: confirm.reason,
+        requestHashPayload: { planId, isActive: payload.isActive },
+        execute: async ({ tx }) => {
+          const updated = await tx.plan.update({
+            where: { id: planId },
+            data: { isActive: false },
+          });
+          return {
+            entityId: planId,
+            before: { isActive: plan.isActive },
+            after: { isActive: updated.isActive },
+            transition: `${plan.isActive}->false`,
+          };
         },
-        tx,
-      );
-    });
+      });
+    } else {
+      await runAdminMutation({
+        action: "plan.enable",
+        actor,
+        entityType: "Plan",
+        entityId: planId,
+        requestHashPayload: { planId, isActive: payload.isActive },
+        execute: async ({ tx }) => {
+          const updated = await tx.plan.update({
+            where: { id: planId },
+            data: { isActive: true },
+          });
+          return {
+            entityId: planId,
+            before: { isActive: plan.isActive },
+            after: { isActive: updated.isActive },
+            transition: `${plan.isActive}->true`,
+          };
+        },
+      });
+    }
 
     revalidateCatalogRoutes();
     redirect(returnTo);
@@ -1098,75 +1285,104 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
   try {
     const actor = await assertAdminAccess();
     const payload = parseSubscriptionStatusPayload(formData);
-    const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
-    if (!subscription) throw new AdminValidationError("Abonelik bulunamadı.");
+    const confirm = readHighRiskConfirmation(formData);
 
-    const paidPaytr = await prisma.subscriptionPayment.findFirst({
-      where: {
-        organizationId: subscription.organizationId,
-        planId: subscription.planId,
-        status: "PAID",
-        provider: "PAYTR",
+    await runAdminMutation({
+      action: "subscription.status_change",
+      actor,
+      entityType: "Subscription",
+      entityId: subscriptionId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason || payload.auditNote,
+      requestHashPayload: {
+        subscriptionId,
+        status: payload.status,
+        acknowledgePaytrPaid: payload.acknowledgePaytrPaid,
       },
-      orderBy: { paidAt: "desc" },
-    });
+      execute: async ({ tx }) => {
+        const subscription = await tx.subscription.findUnique({ where: { id: subscriptionId } });
+        if (!subscription) throw new AdminValidationError("Abonelik bulunamadı.");
 
-    if (
-      payload.status === "ACTIVE" &&
-      paidPaytr &&
-      subscription.status !== "ACTIVE" &&
-      !payload.acknowledgePaytrPaid
-    ) {
-      throw new AdminValidationError(
-        `Bu plan için PAID PayTR ödemesi var (merchant_oid=${paidPaytr.merchantOid}). Çift aktivasyonu önlemek için acknowledgePaytrPaid işaretleyin ve audit notu girin.`,
-      );
-    }
+        const transition = evaluateSubscriptionStatusTransition(subscription.status, payload.status);
+        if (!transition.ok) {
+          throw new AdminMutationGuardError("invalid_state_transition", transition.message);
+        }
 
-    // Clear cancelAt on explicit reactivation, stamp it now on cancellation.
-    const nextCancelAt =
-      payload.status === "CANCELLED"
-        ? new Date()
-        : payload.status === "ACTIVE" || payload.status === "TRIALING"
-          ? null
-          : subscription.cancelAt;
+        const paidPaytr = await tx.subscriptionPayment.findFirst({
+          where: {
+            organizationId: subscription.organizationId,
+            planId: subscription.planId,
+            status: "PAID",
+            provider: "PAYTR",
+          },
+          orderBy: { paidAt: "desc" },
+        });
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.subscription.update({
-        where: { id: subscriptionId },
-        data: {
-          status: payload.status,
-          cancelAt: nextCancelAt,
-        },
-      });
+        if (
+          payload.status === "ACTIVE" &&
+          paidPaytr &&
+          subscription.status !== "ACTIVE" &&
+          !payload.acknowledgePaytrPaid
+        ) {
+          throw new AdminValidationError(
+            "Bu plan için PAID PayTR ödemesi var. Çift aktivasyonu önlemek için acknowledgePaytrPaid işaretleyin ve audit notu girin.",
+          );
+        }
 
-      // Keep License + this org/product AppInstallation consistent with the
-      // deliberate status change (terminal close OR reactivation), atomically in
-      // this transaction. A future-dated cancellation is a no-op here.
-      const accessSync = await syncSubscriptionAccessState(tx, {
-        subscription: {
-          id: updated.id,
-          organizationId: updated.organizationId,
-          licenseId: updated.licenseId,
-          status: updated.status,
-          cancelAt: updated.cancelAt,
-          currentPeriodEnd: updated.currentPeriodEnd,
-        },
-        previousStatus: subscription.status,
-      });
+        if (transition.kind === "noop") {
+          return {
+            organizationId: subscription.organizationId,
+            entityId: subscription.id,
+            before: { status: subscription.status },
+            after: { status: subscription.status },
+            transition: "noop",
+          };
+        }
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.subscription.status_changed",
-          actor,
+        const nextCancelAt =
+          payload.status === "CANCELLED"
+            ? new Date()
+            : payload.status === "ACTIVE" || payload.status === "TRIALING"
+              ? null
+              : subscription.cancelAt;
+
+        const updatedRows = await tx.subscription.updateMany({
+          where: { id: subscriptionId, status: subscription.status },
+          data: {
+            status: payload.status,
+            cancelAt: nextCancelAt,
+          },
+        });
+        if (updatedRows.count === 0) {
+          throw new AdminMutationGuardError(
+            "stale_version",
+            "Abonelik durumu başka bir işlem tarafından değiştirilmiş. Sayfayı yenileyin.",
+          );
+        }
+
+        const updated = await tx.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+        const accessSync = await syncSubscriptionAccessState(tx, {
+          subscription: {
+            id: updated.id,
+            organizationId: updated.organizationId,
+            licenseId: updated.licenseId,
+            status: updated.status,
+            cancelAt: updated.cancelAt,
+            currentPeriodEnd: updated.currentPeriodEnd,
+          },
+          previousStatus: subscription.status,
+        });
+
+        return {
           organizationId: subscription.organizationId,
-          entityType: "Subscription",
           entityId: subscriptionId,
+          before: { subscriptionStatus: subscription.status },
+          after: { subscriptionStatus: updated.status, cancelAt: updated.cancelAt },
+          transition: `${subscription.status}->${payload.status}`,
           metadata: {
-            before: { subscriptionStatus: subscription.status },
-            after: { subscriptionStatus: updated.status, cancelAt: updated.cancelAt },
             auditNote: payload.auditNote,
             acknowledgePaytrPaid: payload.acknowledgePaytrPaid,
-            paidPaytrMerchantOid: paidPaytr?.merchantOid ?? null,
+            paidPaytrMerchantOidMasked: maskMerchantOid(paidPaytr?.merchantOid ?? null),
             accessSync: {
               intent: accessSync.intent,
               reason: accessSync.reason,
@@ -1175,14 +1391,14 @@ export async function updateAdminSubscriptionStatusAction(subscriptionId: string
               installation: accessSync.installation,
             },
           },
-        },
-        tx,
-      );
+        };
+      },
     });
 
     revalidateCatalogRoutes();
     revalidateBillingRoutes();
-    revalidateLicenseRoutes(subscription.organizationId);
+    const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (subscription) revalidateLicenseRoutes(subscription.organizationId);
     redirect(returnTo);
   } catch (error) {
     throwIfRedirectError(error);
@@ -1194,23 +1410,28 @@ export async function revokeAdminApiKeyAction(apiKeyId: string, formData: FormDa
   const returnTo = readReturnTo(formData, "/admin/integrations");
   try {
     const actor = await assertAdminAccess();
-    const apiKey = await prisma.apiKey.findUnique({ where: { id: apiKeyId } });
-    if (!apiKey) throw new AdminValidationError("API anahtarı bulunamadı.");
-    if (apiKey.revokedAt) throw new AdminValidationError("API anahtarı zaten iptal edilmiş.");
 
-    await prisma.$transaction(async (tx) => {
-      await tx.apiKey.update({ where: { id: apiKeyId }, data: { revokedAt: new Date() } });
-      await writeAdminAuditLog(
-        {
-          action: "admin.api_key.revoked",
-          actor,
+    await runAdminMutation({
+      action: "api_key.revoke",
+      actor,
+      entityType: "ApiKey",
+      entityId: apiKeyId,
+      requestHashPayload: { apiKeyId },
+      execute: async ({ tx }) => {
+        const apiKey = await tx.apiKey.findUnique({ where: { id: apiKeyId } });
+        if (!apiKey) throw new AdminValidationError("API anahtarı bulunamadı.");
+        if (apiKey.revokedAt) throw new AdminValidationError("API anahtarı zaten iptal edilmiş.");
+
+        await tx.apiKey.update({ where: { id: apiKeyId }, data: { revokedAt: new Date() } });
+
+        return {
           organizationId: apiKey.organizationId,
-          entityType: "ApiKey",
           entityId: apiKeyId,
+          before: { revokedAt: apiKey.revokedAt },
+          after: { revokedAt: new Date().toISOString() },
           metadata: { prefix: apiKey.prefix, name: apiKey.name },
-        },
-        tx,
-      );
+        };
+      },
     });
 
     revalidateIntegrationRoutes();
@@ -1226,26 +1447,30 @@ export async function toggleAdminWebhookAction(webhookId: string, formData: Form
   try {
     const actor = await assertAdminAccess();
     const payload = parseWebhookActivePayload(formData);
-    const webhook = await prisma.webhookEndpoint.findUnique({ where: { id: webhookId } });
-    if (!webhook) throw new AdminValidationError("Webhook bulunamadı.");
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.webhookEndpoint.update({
-        where: { id: webhookId },
-        data: { isActive: payload.isActive },
-      });
+    await runAdminMutation({
+      action: "webhook.toggle",
+      actor,
+      entityType: "WebhookEndpoint",
+      entityId: webhookId,
+      requestHashPayload: { webhookId, isActive: payload.isActive },
+      execute: async ({ tx }) => {
+        const webhook = await tx.webhookEndpoint.findUnique({ where: { id: webhookId } });
+        if (!webhook) throw new AdminValidationError("Webhook bulunamadı.");
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.webhook.active_changed",
-          actor,
+        const updated = await tx.webhookEndpoint.update({
+          where: { id: webhookId },
+          data: { isActive: payload.isActive },
+        });
+
+        return {
           organizationId: webhook.organizationId,
-          entityType: "WebhookEndpoint",
           entityId: webhookId,
-          metadata: { before: { isActive: webhook.isActive }, after: { isActive: updated.isActive } },
-        },
-        tx,
-      );
+          before: { isActive: webhook.isActive },
+          after: { isActive: updated.isActive },
+          transition: `${webhook.isActive}->${updated.isActive}`,
+        };
+      },
     });
 
     revalidateIntegrationRoutes();
@@ -1262,22 +1487,22 @@ export async function createAdminRestaurantAction(organizationId: string, formDa
     const payload = parseRestaurantPayload(formData);
     await assertOrganization(organizationId);
 
-    await prisma.$transaction(async (tx) => {
-      const restaurant = await tx.restaurant.create({
-        data: { ...payload, organizationId },
-      });
-
-      await writeAdminAuditLog(
-        {
-          action: "admin.restaurant.created",
-          actor,
+    await runAdminMutation({
+      action: "restaurant.create",
+      actor,
+      organizationId,
+      entityType: "Restaurant",
+      requestHashPayload: { organizationId, ...payload },
+      execute: async ({ tx }) => {
+        const restaurant = await tx.restaurant.create({
+          data: { ...payload, organizationId },
+        });
+        return {
           organizationId,
-          entityType: "Restaurant",
           entityId: restaurant.id,
-          metadata: { after: payload },
-        },
-        tx,
-      );
+          after: { name: restaurant.name, slug: restaurant.slug },
+        };
+      },
     });
 
     revalidateOrganizationRoutes(organizationId);
@@ -1300,67 +1525,75 @@ export async function addAdminMembershipAction(organizationId: string, formData:
 
     const wexpayAccess = await evaluateProductAccess({ organizationId, productKey: "wexpay" });
 
-    await prisma.$transaction(async (tx) => {
-      const existingUser = await tx.user.findUnique({ where: { email: payload.email } });
-      if (!existingUser && !payload.temporaryPassword) {
-        throw new AdminValidationError("Yeni kullanıcı oluşturmak için geçici şifre zorunludur.");
-      }
-
-      const passwordData = payload.temporaryPassword
-        ? {
-            passwordHash: await hashPassword(payload.temporaryPassword),
-            passwordSetAt: new Date(),
-            mustChangePassword: payload.mustChangePassword,
-          }
-        : {};
-
-      const user = existingUser
-        ? await tx.user.update({
-            where: { id: existingUser.id },
-            data: { name: payload.name ?? undefined, isActive: true, ...passwordData },
-          })
-        : await tx.user.create({
-            data: { email: payload.email, name: payload.name, isActive: true, ...passwordData },
-          });
-
-      const existingMembership = await tx.membership.findUnique({
-        where: { organizationId_userId: { organizationId, userId: user.id } },
-      });
-
-      if (!existingMembership || existingMembership.status !== "ACTIVE") {
-        const activeStaffCount = await tx.membership.count({
-          where: { organizationId, status: "ACTIVE" },
-        });
-        const limitCheck = assertStaffEntitlementLimit(wexpayAccess, activeStaffCount);
-        if (!limitCheck.ok) {
-          throw new AdminValidationError(limitCheck.message);
+    await runAdminMutation({
+      action: "membership.add",
+      actor,
+      organizationId,
+      entityType: "Membership",
+      requestHashPayload: {
+        organizationId,
+        email: maskEmailForAudit(payload.email),
+        role: payload.role,
+        mustChangePassword: payload.mustChangePassword,
+        hasTemporaryPassword: Boolean(payload.temporaryPassword),
+      },
+      execute: async ({ tx }) => {
+        const existingUser = await tx.user.findUnique({ where: { email: payload.email } });
+        if (!existingUser && !payload.temporaryPassword) {
+          throw new AdminValidationError("Yeni kullanıcı oluşturmak için geçici şifre zorunludur.");
         }
-      }
 
-      const membership = await tx.membership.upsert({
-        where: { organizationId_userId: { organizationId, userId: user.id } },
-        update: { role: payload.role, status: "ACTIVE" },
-        create: { organizationId, userId: user.id, role: payload.role, status: "ACTIVE", acceptedAt: new Date() },
-      });
+        const passwordData = payload.temporaryPassword
+          ? {
+              passwordHash: await hashPassword(payload.temporaryPassword),
+              passwordSetAt: new Date(),
+              mustChangePassword: payload.mustChangePassword,
+            }
+          : {};
 
-      await writeAdminAuditLog(
-        {
-          action: "admin.membership.added",
-          actor,
+        const user = existingUser
+          ? await tx.user.update({
+              where: { id: existingUser.id },
+              data: { name: payload.name ?? undefined, isActive: true, ...passwordData },
+            })
+          : await tx.user.create({
+              data: { email: payload.email, name: payload.name, isActive: true, ...passwordData },
+            });
+
+        const existingMembership = await tx.membership.findUnique({
+          where: { organizationId_userId: { organizationId, userId: user.id } },
+        });
+
+        if (!existingMembership || existingMembership.status !== "ACTIVE") {
+          const activeStaffCount = await tx.membership.count({
+            where: { organizationId, status: "ACTIVE" },
+          });
+          const limitCheck = assertStaffEntitlementLimit(wexpayAccess, activeStaffCount);
+          if (!limitCheck.ok) {
+            throw new AdminValidationError(limitCheck.message);
+          }
+        }
+
+        const membership = await tx.membership.upsert({
+          where: { organizationId_userId: { organizationId, userId: user.id } },
+          update: { role: payload.role, status: "ACTIVE" },
+          create: { organizationId, userId: user.id, role: payload.role, status: "ACTIVE", acceptedAt: new Date() },
+        });
+
+        return {
           organizationId,
-          entityType: "Membership",
           entityId: membership.id,
+          after: { role: membership.role, status: membership.status },
           metadata: {
             userId: user.id,
-            email: user.email,
+            emailMasked: maskEmailForAudit(user.email),
             role: membership.role,
             emailInvitationSent: false,
             passwordSet: Boolean(payload.temporaryPassword),
             mustChangePassword: payload.mustChangePassword,
           },
-        },
-        tx,
-      );
+        };
+      },
     });
 
     revalidateOrganizationRoutes(organizationId);
@@ -1377,9 +1610,19 @@ export async function updateAdminMembershipRoleAction(organizationId: string, me
   try {
     const actor = await assertAdminAccess();
     const payload = parseMembershipRolePayload(formData);
-    await runWithTransactionRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const membership = await tx.membership.findFirst({ where: { id: membershipId, organizationId }, include: { user: true } });
+
+    await runAdminMutation({
+      action: "membership.role_change",
+      actor,
+      organizationId,
+      entityType: "Membership",
+      entityId: membershipId,
+      requestHashPayload: { organizationId, membershipId, role: payload.role },
+      execute: async ({ tx }) => {
+        const membership = await tx.membership.findFirst({
+          where: { id: membershipId, organizationId },
+          include: { user: true },
+        });
         if (!membership) throw new AdminValidationError("Üyelik bulunamadı.");
         if (membership.role === "OWNER" && payload.role !== "OWNER") {
           try {
@@ -1395,19 +1638,17 @@ export async function updateAdminMembershipRoleAction(organizationId: string, me
           }
         }
         const updated = await tx.membership.update({ where: { id: membershipId }, data: { role: payload.role } });
-        await writeAdminAuditLog(
-          {
-            action: "admin.membership.role_updated",
-            actor,
-            organizationId,
-            entityType: "Membership",
-            entityId: membershipId,
-            metadata: { email: membership.user.email, before: { role: membership.role }, after: { role: updated.role } },
-          },
-          tx,
-        );
-      }),
-    );
+        return {
+          organizationId,
+          entityId: membershipId,
+          before: { role: membership.role },
+          after: { role: updated.role },
+          transition: `${membership.role}->${updated.role}`,
+          metadata: { emailMasked: maskEmailForAudit(membership.user.email) },
+        };
+      },
+    });
+
     revalidateUserRoutes(organizationId);
     redirect(returnTo);
   } catch (error) {
@@ -1421,9 +1662,19 @@ export async function updateAdminMembershipStatusAction(organizationId: string, 
   try {
     const actor = await assertAdminAccess();
     const payload = parseMembershipStatusPayload(formData);
-    await runWithTransactionRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const membership = await tx.membership.findFirst({ where: { id: membershipId, organizationId }, include: { user: true } });
+
+    await runAdminMutation({
+      action: "membership.status_change",
+      actor,
+      organizationId,
+      entityType: "Membership",
+      entityId: membershipId,
+      requestHashPayload: { organizationId, membershipId, status: payload.status },
+      execute: async ({ tx }) => {
+        const membership = await tx.membership.findFirst({
+          where: { id: membershipId, organizationId },
+          include: { user: true },
+        });
         if (!membership) throw new AdminValidationError("Üyelik bulunamadı.");
         if (membership.role === "OWNER" && payload.status !== "ACTIVE") {
           try {
@@ -1439,19 +1690,17 @@ export async function updateAdminMembershipStatusAction(organizationId: string, 
           }
         }
         const updated = await tx.membership.update({ where: { id: membershipId }, data: { status: payload.status } });
-        await writeAdminAuditLog(
-          {
-            action: "admin.membership.status_updated",
-            actor,
-            organizationId,
-            entityType: "Membership",
-            entityId: membershipId,
-            metadata: { email: membership.user.email, before: { status: membership.status }, after: { status: updated.status } },
-          },
-          tx,
-        );
-      }),
-    );
+        return {
+          organizationId,
+          entityId: membershipId,
+          before: { status: membership.status },
+          after: { status: updated.status },
+          transition: `${membership.status}->${updated.status}`,
+          metadata: { emailMasked: maskEmailForAudit(membership.user.email) },
+        };
+      },
+    });
+
     revalidateUserRoutes(organizationId);
     redirect(returnTo);
   } catch (error) {
@@ -1466,34 +1715,36 @@ export async function resetAdminUserPasswordAction(userId: string, formData: For
     const actor = await assertAdminAccess();
     const payload = parseUserPasswordResetPayload(formData);
     const passwordHash = await hashPassword(payload.temporaryPassword);
-    await runWithTransactionRetry(() =>
-      prisma.$transaction(async (tx) => {
-        // Lock User first (before any org locks elsewhere) so races with
-        // toggleAdminUserActiveAction serialize consistently.
+
+    await runAdminMutation({
+      action: "user.password_reset",
+      actor,
+      entityType: "User",
+      entityId: userId,
+      requestHashPayload: { userId, mustChangePassword: payload.mustChangePassword },
+      execute: async ({ tx }) => {
         const locked = await lockUserForUpdate(tx, userId);
         if (!locked) throw new AdminValidationError("Kullanıcı bulunamadı.");
 
         await tx.user.update({
           where: { id: userId },
-          data: { passwordHash, passwordSetAt: new Date(), mustChangePassword: payload.mustChangePassword, isActive: true },
-        });
-        await writeAdminAuditLog(
-          {
-            action: "admin.user.password_reset",
-            actor,
-            entityType: "User",
-            entityId: userId,
-            metadata: {
-              email: locked.email,
-              mustChangePassword: payload.mustChangePassword,
-              before: { isActive: locked.isActive },
-              after: { isActive: true },
-            },
+          data: {
+            passwordHash,
+            passwordSetAt: new Date(),
+            mustChangePassword: payload.mustChangePassword,
+            isActive: true,
           },
-          tx,
-        );
-      }),
-    );
+        });
+
+        return {
+          entityId: userId,
+          before: { isActive: locked.isActive },
+          after: { isActive: true },
+          metadata: { emailMasked: maskEmailForAudit(locked.email), mustChangePassword: payload.mustChangePassword },
+        };
+      },
+    });
+
     revalidateUserRoutes();
     redirect(returnTo);
   } catch (error) {
@@ -1506,38 +1757,35 @@ export async function toggleAdminUserActiveAction(userId: string, formData: Form
   const returnTo = readReturnTo(formData, "/admin/users");
   try {
     const actor = await assertAdminAccess();
-    await runWithTransactionRetry(() =>
-      prisma.$transaction(async (tx) => {
-        // 1) Lock User FOR UPDATE  2) read fresh state  3) compute nextActive
-        // 4) owner guard (locks orgs)  5) update + audit — all in one transaction.
-        // Never use a pre-transaction User snapshot for nextActive / audit.
+
+    await runAdminMutation({
+      action: "user.active_change",
+      actor,
+      entityType: "User",
+      entityId: userId,
+      requestHashPayload: { userId },
+      execute: async ({ tx }) => {
         const locked = await lockUserForUpdate(tx, userId);
         if (!locked) throw new AdminValidationError("Kullanıcı bulunamadı.");
 
         const nextActive = resolveNextActiveFromLockedUser(locked);
 
-        // Reactivation (false → true) must never be blocked by the owner guard.
         if (!nextActive) {
           await assertUserDeactivationPreservesActiveOwners(tx, userId);
         }
 
         await tx.user.update({ where: { id: userId }, data: { isActive: nextActive } });
-        await writeAdminAuditLog(
-          {
-            action: nextActive ? "admin.user.reactivated" : "admin.user.deactivated",
-            actor,
-            entityType: "User",
-            entityId: userId,
-            metadata: {
-              email: locked.email,
-              before: { isActive: locked.isActive },
-              after: { isActive: nextActive },
-            },
-          },
-          tx,
-        );
-      }),
-    );
+
+        return {
+          entityId: userId,
+          before: { isActive: locked.isActive },
+          after: { isActive: nextActive },
+          transition: `${locked.isActive}->${nextActive}`,
+          metadata: { emailMasked: maskEmailForAudit(locked.email) },
+        };
+      },
+    });
+
     revalidateUserRoutes();
     redirect(returnTo);
   } catch (error) {
@@ -1551,41 +1799,82 @@ export async function createAdminInvoiceAction(formData: FormData) {
   try {
     const actor = await assertAdminAccess();
     const payload = parseInvoiceCreatePayload(formData);
+    const confirm = readHighRiskConfirmation(formData);
+    const mutationId = readMutationId(formData);
     await assertOrganization(payload.organizationId);
-    await prisma.$transaction(async (tx) => {
-      const invoice = await tx.invoice.create({
-        data: {
+
+    const money = assertMoneyInvariant({
+      subtotal: payload.subtotal,
+      tax: payload.tax,
+      total: payload.total,
+    });
+    if (!money.ok) throw new AdminValidationError(money.message);
+    const createStatus = assertInvoiceCreateStatus(payload.status);
+    if (!createStatus.ok) throw new AdminValidationError(createStatus.message);
+
+    if (payload.subscriptionId) {
+      const subscription = await prisma.subscription.findUnique({ where: { id: payload.subscriptionId } });
+      if (!subscription || subscription.organizationId !== payload.organizationId) {
+        throw new AdminMutationGuardError("tenant_mismatch", "Abonelik bu organizasyona ait değil.");
+      }
+    }
+
+    await runAdminMutation({
+      action: "invoice.create",
+      actor,
+      organizationId: payload.organizationId,
+      entityType: "Invoice",
+      mutationId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: {
+        organizationId: payload.organizationId,
+        subscriptionId: payload.subscriptionId,
+        invoiceNo: payload.invoiceNo,
+        status: payload.status,
+        subtotal: payload.subtotal,
+        tax: payload.tax,
+        total: payload.total,
+        currency: payload.currency,
+      },
+      execute: async ({ tx }) => {
+        if (payload.subscriptionId) {
+          const subscription = await tx.subscription.findUnique({ where: { id: payload.subscriptionId } });
+          if (!subscription || subscription.organizationId !== payload.organizationId) {
+            throw new AdminMutationGuardError("tenant_mismatch", "Abonelik bu organizasyona ait değil.");
+          }
+        }
+        const invoice = await tx.invoice.create({
+          data: {
+            organizationId: payload.organizationId,
+            subscriptionId: payload.subscriptionId,
+            invoiceNo: payload.invoiceNo,
+            status: payload.status,
+            subtotal: payload.subtotal,
+            tax: payload.tax,
+            total: payload.total,
+            currency: payload.currency,
+            issuedAt: payload.status === "ISSUED" ? new Date() : null,
+            dueAt: payload.dueAt,
+            paidAt: null,
+          },
+        });
+        return {
           organizationId: payload.organizationId,
-          subscriptionId: payload.subscriptionId,
-          invoiceNo: payload.invoiceNo,
-          status: payload.status,
-          subtotal: payload.subtotal,
-          tax: payload.tax,
-          total: payload.total,
-          currency: payload.currency,
-          issuedAt: payload.status === "ISSUED" || payload.status === "PAID" ? new Date() : null,
-          dueAt: payload.dueAt,
-          paidAt: payload.status === "PAID" ? new Date() : null,
-        },
-      });
-      await writeAdminAuditLog(
-        {
-          action: "admin.invoice.created",
-          actor,
-          organizationId: payload.organizationId,
-          entityType: "Invoice",
           entityId: invoice.id,
-          metadata: { invoiceNo: invoice.invoiceNo, total: String(invoice.total), status: invoice.status },
-        },
-        tx,
-      );
+          after: { invoiceNo: invoice.invoiceNo, total: String(invoice.total), status: invoice.status },
+          replayResult: { invoiceId: invoice.id, invoiceNo: invoice.invoiceNo },
+        };
+      },
     });
     revalidateBillingRoutes();
     revalidateOrganizationRoutes(payload.organizationId);
     redirect(returnTo);
   } catch (error) {
     throwIfRedirectError(error);
-    if (isUniqueConflict(error)) redirectWithError(formData, returnTo, new Error("Bu fatura numarası zaten kullanılıyor."));
+    if (isUniqueConflict(error)) {
+      redirectWithError(formData, returnTo, new AdminValidationError("Bu fatura numarası zaten kullanılıyor."));
+    }
     redirectWithError(formData, returnTo, error, "Fatura oluşturulamadı.");
   }
 }
@@ -1595,38 +1884,45 @@ export async function createAdminBillingPaymentAction(formData: FormData) {
   try {
     const actor = await assertAdminAccess();
     const payload = parseBillingPaymentCreatePayload(formData);
+    const confirm = readHighRiskConfirmation(formData);
+    const mutationId = readMutationId(formData);
     await assertOrganization(payload.organizationId);
-    await prisma.$transaction(async (tx) => {
-      const payment = await tx.billingPayment.create({
-        data: {
+
+    const amountCheck = assertPositiveAmount(payload.amount);
+    if (!amountCheck.ok) throw new AdminValidationError(amountCheck.message);
+    if (!isAllowedAdminBillingPaymentProvider(payload.provider)) {
+      throw new AdminValidationError("Manuel tahsilat sağlayıcısı yalnız admin_manual olabilir.");
+    }
+
+    await runAdminMutation({
+      action: "billing_payment.create",
+      actor,
+      organizationId: payload.organizationId,
+      entityType: "BillingPayment",
+      mutationId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: {
+        organizationId: payload.organizationId,
+        invoiceId: payload.invoiceId,
+        subscriptionId: payload.subscriptionId,
+        amount: payload.amount,
+        currency: payload.currency,
+        status: payload.status,
+        provider: payload.provider,
+        providerRef: payload.providerRef,
+      },
+      execute: async ({ tx }) =>
+        executeCreateBillingPayment(tx, {
           organizationId: payload.organizationId,
           invoiceId: payload.invoiceId,
           subscriptionId: payload.subscriptionId,
           amount: payload.amount,
           currency: payload.currency,
-          status: payload.status,
+          status: payload.status as "PENDING" | "PAID" | "FAILED" | "REFUNDED",
           provider: payload.provider,
           providerRef: payload.providerRef,
-          paidAt: payload.status === "PAID" ? new Date() : null,
-        },
-      });
-      if (payload.invoiceId && payload.status === "PAID") {
-        await tx.invoice.update({
-          where: { id: payload.invoiceId },
-          data: { status: "PAID", paidAt: new Date() },
-        });
-      }
-      await writeAdminAuditLog(
-        {
-          action: "admin.payment.created",
-          actor,
-          organizationId: payload.organizationId,
-          entityType: "BillingPayment",
-          entityId: payment.id,
-          metadata: { amount: String(payment.amount), status: payment.status, invoiceId: payment.invoiceId },
-        },
-        tx,
-      );
+        }),
     });
     revalidateBillingRoutes();
     revalidateOrganizationRoutes(payload.organizationId);
@@ -1637,25 +1933,57 @@ export async function createAdminBillingPaymentAction(formData: FormData) {
   }
 }
 
+export async function updateAdminBillingPaymentStatusAction(paymentId: string, formData: FormData) {
+  const returnTo = readReturnTo(formData, "/admin/billing");
+  try {
+    const actor = await assertAdminAccess();
+    const status = String(formData.get("status") ?? "").trim();
+    const confirm = readHighRiskConfirmation(formData);
+
+    await runAdminMutation({
+      action: "billing_payment.status_change",
+      actor,
+      entityType: "BillingPayment",
+      entityId: paymentId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: { paymentId, status },
+      execute: async ({ tx }) => executeUpdateBillingPaymentStatus(tx, paymentId, status),
+    });
+
+    revalidateBillingRoutes();
+    redirect(returnTo);
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, returnTo, error, "Tahsilat durumu güncellenemedi.");
+  }
+}
+
 export async function createAdminProductAction(formData: FormData) {
   const returnTo = readReturnTo(formData, "/admin/products");
   try {
     const actor = await assertAdminAccess();
     const payload = parseProductCreatePayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const product = await tx.product.create({
-        data: {
-          key: payload.key,
-          name: payload.name,
-          description: payload.description,
-          status: payload.status,
-          isActive: payload.status === "ACTIVE",
-        },
-      });
-      await writeAdminAuditLog(
-        { action: "admin.product.created", actor, entityType: "Product", entityId: product.id, metadata: { key: product.key, name: product.name } },
-        tx,
-      );
+    await runAdminMutation({
+      action: "product.create",
+      actor,
+      entityType: "Product",
+      requestHashPayload: payload,
+      execute: async ({ tx }) => {
+        const product = await tx.product.create({
+          data: {
+            key: payload.key,
+            name: payload.name,
+            description: payload.description,
+            status: payload.status,
+            isActive: payload.status === "ACTIVE",
+          },
+        });
+        return {
+          entityId: product.id,
+          after: { key: product.key, name: product.name, status: product.status },
+        };
+      },
     });
     revalidateCatalogRoutes();
     redirect(returnTo);
@@ -1671,28 +1999,30 @@ export async function updateAdminProductAction(productId: string, formData: Form
   try {
     const actor = await assertAdminAccess();
     const payload = parseProductUpdatePayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const before = await tx.product.findUnique({ where: { id: productId } });
-      if (!before) throw new AdminValidationError("Ürün bulunamadı.");
-      const updated = await tx.product.update({
-        where: { id: productId },
-        data: {
-          name: payload.name,
-          description: payload.description,
-          status: payload.status,
-          isActive: payload.isActive,
-        },
-      });
-      await writeAdminAuditLog(
-        {
-          action: "admin.product.updated",
-          actor,
-          entityType: "Product",
+    await runAdminMutation({
+      action: "product.update",
+      actor,
+      entityType: "Product",
+      entityId: productId,
+      requestHashPayload: { productId, ...payload },
+      execute: async ({ tx }) => {
+        const before = await tx.product.findUnique({ where: { id: productId } });
+        if (!before) throw new AdminValidationError("Ürün bulunamadı.");
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: {
+            name: payload.name,
+            description: payload.description,
+            status: payload.status,
+            isActive: payload.isActive,
+          },
+        });
+        return {
           entityId: productId,
-          metadata: { before: { name: before.name, status: before.status }, after: { name: updated.name, status: updated.status } },
-        },
-        tx,
-      );
+          before: { name: before.name, status: before.status },
+          after: { name: updated.name, status: updated.status },
+        };
+      },
     });
     revalidateCatalogRoutes();
     redirect(returnTo);
@@ -1707,14 +2037,20 @@ export async function createAdminPlanAction(formData: FormData) {
   try {
     const actor = await assertAdminAccess();
     const payload = parsePlanCreatePayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({ where: { id: payload.productId } });
-      if (!product) throw new AdminValidationError("Ürün bulunamadı.");
-      const plan = await tx.plan.create({ data: payload });
-      await writeAdminAuditLog(
-        { action: "admin.plan.created", actor, entityType: "Plan", entityId: plan.id, metadata: { key: plan.key, name: plan.name, productId: plan.productId } },
-        tx,
-      );
+    await runAdminMutation({
+      action: "plan.create",
+      actor,
+      entityType: "Plan",
+      requestHashPayload: payload,
+      execute: async ({ tx }) => {
+        const product = await tx.product.findUnique({ where: { id: payload.productId } });
+        if (!product) throw new AdminValidationError("Ürün bulunamadı.");
+        const plan = await tx.plan.create({ data: payload });
+        return {
+          entityId: plan.id,
+          after: { key: plan.key, name: plan.name, productId: plan.productId },
+        };
+      },
     });
     revalidateCatalogRoutes();
     redirect(returnTo);
@@ -1730,20 +2066,22 @@ export async function updateAdminPlanAction(planId: string, formData: FormData) 
   try {
     const actor = await assertAdminAccess();
     const payload = parsePlanUpdatePayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const before = await tx.plan.findUnique({ where: { id: planId } });
-      if (!before) throw new AdminValidationError("Paket bulunamadı.");
-      const updated = await tx.plan.update({ where: { id: planId }, data: payload });
-      await writeAdminAuditLog(
-        {
-          action: "admin.plan.updated",
-          actor,
-          entityType: "Plan",
+    await runAdminMutation({
+      action: "plan.update",
+      actor,
+      entityType: "Plan",
+      entityId: planId,
+      requestHashPayload: { planId, ...payload },
+      execute: async ({ tx }) => {
+        const before = await tx.plan.findUnique({ where: { id: planId } });
+        if (!before) throw new AdminValidationError("Paket bulunamadı.");
+        const updated = await tx.plan.update({ where: { id: planId }, data: payload });
+        return {
           entityId: planId,
-          metadata: { before: { name: before.name, isActive: before.isActive }, after: { name: updated.name, isActive: updated.isActive } },
-        },
-        tx,
-      );
+          before: { name: before.name, isActive: before.isActive },
+          after: { name: updated.name, isActive: updated.isActive },
+        };
+      },
     });
     revalidateCatalogRoutes();
     redirect(returnTo);
@@ -1759,40 +2097,42 @@ export async function upsertAdminEntitlementAction(planId: string, formData: For
     const actor = await assertAdminAccess();
     const payload = parseEntitlementPayload(formData);
     const entitlementId = String(formData.get("entitlementId") ?? "").trim() || null;
-    await prisma.$transaction(async (tx) => {
-      const plan = await tx.plan.findUnique({ where: { id: planId } });
-      if (!plan) throw new AdminValidationError("Paket bulunamadı.");
-      const entitlement = entitlementId
-        ? await tx.entitlement.update({
-            where: { id: entitlementId },
-            data: {
-              key: payload.key,
-              valueType: payload.valueType,
-              valueBool: payload.valueBool,
-              valueInt: payload.valueInt,
-              valueString: payload.valueString,
-            },
-          })
-        : await tx.entitlement.create({
-            data: {
-              planId,
-              key: payload.key,
-              valueType: payload.valueType,
-              valueBool: payload.valueBool,
-              valueInt: payload.valueInt,
-              valueString: payload.valueString,
-            },
-          });
-      await writeAdminAuditLog(
-        {
-          action: entitlementId ? "admin.entitlement.updated" : "admin.entitlement.created",
-          actor,
-          entityType: "Entitlement",
+    await runAdminMutation({
+      action: "entitlement.upsert",
+      actor,
+      entityType: "Entitlement",
+      entityId: entitlementId ?? undefined,
+      requestHashPayload: { planId, entitlementId, ...payload },
+      execute: async ({ tx }) => {
+        const plan = await tx.plan.findUnique({ where: { id: planId } });
+        if (!plan) throw new AdminValidationError("Paket bulunamadı.");
+        const entitlement = entitlementId
+          ? await tx.entitlement.update({
+              where: { id: entitlementId },
+              data: {
+                key: payload.key,
+                valueType: payload.valueType,
+                valueBool: payload.valueBool,
+                valueInt: payload.valueInt,
+                valueString: payload.valueString,
+              },
+            })
+          : await tx.entitlement.create({
+              data: {
+                planId,
+                key: payload.key,
+                valueType: payload.valueType,
+                valueBool: payload.valueBool,
+                valueInt: payload.valueInt,
+                valueString: payload.valueString,
+              },
+            });
+        return {
           entityId: entitlement.id,
-          metadata: { planId, key: entitlement.key, valueType: entitlement.valueType },
-        },
-        tx,
-      );
+          after: { planId, key: entitlement.key, valueType: entitlement.valueType },
+          transition: entitlementId ? "update" : "create",
+        };
+      },
     });
     revalidateCatalogRoutes();
     redirect(returnTo);
@@ -1809,7 +2149,52 @@ export async function setAdminEntitlementActiveAction(planId: string, entitlemen
     const actor = await assertAdminAccess();
     const isActive = String(formData.get("isActive") ?? "").trim() === "true";
     const note = String(formData.get("note") ?? "").trim() || null;
-    await setEntitlementActiveState({ actor, planId, entitlementId, isActive, note });
+    const confirm = readHighRiskConfirmation(formData);
+
+    await runAdminMutation({
+      action: isActive ? "entitlement.enable" : "entitlement.disable",
+      actor,
+      entityType: "Entitlement",
+      entityId: entitlementId,
+      confirmed: isActive ? undefined : confirm.confirmed,
+      reason: isActive ? note : confirm.reason || note,
+      requestHashPayload: { planId, entitlementId, isActive, note },
+      execute: async ({ tx }) => {
+        const entitlement = await tx.entitlement.findFirst({
+          where: { id: entitlementId, planId },
+          include: { plan: { select: { id: true, key: true, name: true } } },
+        });
+        if (!entitlement) throw new AdminValidationError("Limit kaydı bulunamadı.");
+
+        const previousIsActive = entitlement.isActive;
+        if (previousIsActive === isActive) {
+          return {
+            entityId: entitlementId,
+            before: { isActive: previousIsActive },
+            after: { isActive },
+            transition: "noop",
+            metadata: { planId, key: entitlement.key, note },
+          };
+        }
+
+        const updated = await tx.entitlement.update({
+          where: { id: entitlement.id },
+          data: {
+            isActive,
+            deactivatedAt: isActive ? null : new Date(),
+          },
+        });
+
+        return {
+          entityId: entitlementId,
+          before: { isActive: previousIsActive },
+          after: { isActive: updated.isActive },
+          transition: `${previousIsActive}->${updated.isActive}`,
+          metadata: { planId, key: entitlement.key, note },
+        };
+      },
+    });
+
     revalidateCatalogRoutes();
     redirect(returnTo);
   } catch (error) {
@@ -1835,62 +2220,41 @@ export async function createAdminSubscriptionAction(formData: FormData) {
   try {
     const actor = await assertAdminAccess();
     const payload = parseSubscriptionCreatePayload(formData);
+    const confirm = readHighRiskConfirmation(formData);
+    const mutationId = readMutationId(formData);
     await assertOrganization(payload.organizationId);
     const plan = await prisma.plan.findUnique({ where: { id: payload.planId }, include: { product: true } });
     if (!plan) throw new AdminValidationError("Paket bulunamadı.");
 
-    await prisma.$transaction(async (tx) => {
-      let license = await tx.license.findFirst({
-        where: { organizationId: payload.organizationId, productId: plan.productId, status: { in: ["ACTIVE", "TRIAL", "PAST_DUE"] } },
-      });
-      const periodEnd = payload.currentPeriodEnd ?? (payload.interval === "ONE_TIME" ? null : addPeriod(payload.currentPeriodStart, payload.interval === "YEARLY" ? "YEARLY" : "MONTHLY"));
-      if (!license) {
-        license = await tx.license.create({
-          data: {
-            organizationId: payload.organizationId,
-            productId: plan.productId,
-            planId: plan.id,
-            status: payload.status === "TRIALING" ? "TRIAL" : "ACTIVE",
-            licenseType: payload.interval === "YEARLY" ? "YEARLY" : payload.interval === "ONE_TIME" ? "ONE_TIME" : "MONTHLY",
-            startsAt: payload.currentPeriodStart,
-            endsAt: periodEnd,
-          },
-        });
-      }
-      const existingSubscription = await tx.subscription.findUnique({ where: { licenseId: license.id } });
-      if (existingSubscription) throw new AdminValidationError("Bu lisans için zaten abonelik var.");
-
-      const subscription = await tx.subscription.create({
-        data: {
+    await runAdminMutation({
+      action: "subscription.create",
+      actor,
+      organizationId: payload.organizationId,
+      entityType: "Subscription",
+      mutationId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: {
+        organizationId: payload.organizationId,
+        planId: payload.planId,
+        status: payload.status,
+        interval: payload.interval,
+        currentPeriodStart: payload.currentPeriodStart.toISOString(),
+        currentPeriodEnd: payload.currentPeriodEnd?.toISOString() ?? null,
+        provider: payload.provider,
+        providerRef: payload.providerRef,
+      },
+      execute: async ({ tx }) =>
+        executeCreateSubscription(tx, {
           organizationId: payload.organizationId,
-          licenseId: license.id,
-          planId: plan.id,
+          planId: payload.planId,
           status: payload.status,
-          interval: payload.interval,
+          interval: payload.interval as "MONTHLY" | "YEARLY" | "ONE_TIME",
           currentPeriodStart: payload.currentPeriodStart,
-          currentPeriodEnd: periodEnd,
+          currentPeriodEnd: payload.currentPeriodEnd,
           provider: payload.provider,
           providerRef: payload.providerRef,
-        },
-      });
-
-      await tx.appInstallation.upsert({
-        where: { organizationId_productId: { organizationId: payload.organizationId, productId: plan.productId } },
-        update: { status: "ACTIVE", licenseId: license.id },
-        create: { organizationId: payload.organizationId, productId: plan.productId, licenseId: license.id, status: "ACTIVE" },
-      });
-
-      await writeAdminAuditLog(
-        {
-          action: "admin.subscription.created",
-          actor,
-          organizationId: payload.organizationId,
-          entityType: "Subscription",
-          entityId: subscription.id,
-          metadata: { planId: plan.id, licenseId: license.id, status: subscription.status },
-        },
-        tx,
-      );
+        }),
     });
 
     revalidateCatalogRoutes();
@@ -1908,33 +2272,53 @@ export async function updateAdminLicenseDetailsAction(organizationId: string, li
   try {
     const actor = await assertAdminAccess();
     const payload = parseLicenseDetailsPayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const license = await tx.license.findFirst({ where: { id: licenseId, organizationId } });
-      if (!license) throw new AdminValidationError("Lisans bulunamadı.");
-      const updated = await tx.license.update({
-        where: { id: licenseId },
-        data: {
-          licenseType: payload.licenseType,
-          startsAt: payload.startsAt,
-          endsAt: payload.endsAt,
-          status: payload.status,
-        },
-      });
-      await writeAdminAuditLog(
-        {
-          action: "admin.license.updated",
-          actor,
-          organizationId,
-          entityType: "License",
-          entityId: licenseId,
-          metadata: {
-            before: { licenseType: license.licenseType, startsAt: license.startsAt, endsAt: license.endsAt, status: license.status },
-            after: { licenseType: updated.licenseType, startsAt: updated.startsAt, endsAt: updated.endsAt, status: updated.status },
+    const confirm = readHighRiskConfirmation(formData);
+
+    await runAdminMutation({
+      action: "license.details_change",
+      actor,
+      organizationId,
+      entityType: "License",
+      entityId: licenseId,
+      confirmed: confirm.confirmed,
+      reason: confirm.reason,
+      requestHashPayload: {
+        organizationId,
+        licenseId,
+        licenseType: payload.licenseType,
+        startsAt: payload.startsAt?.toISOString() ?? null,
+        endsAt: payload.endsAt?.toISOString() ?? null,
+      },
+      execute: async ({ tx }) => {
+        const license = await tx.license.findFirst({ where: { id: licenseId, organizationId } });
+        if (!license) throw new AdminValidationError("Lisans bulunamadı.");
+        const updated = await tx.license.update({
+          where: { id: licenseId },
+          data: {
+            licenseType: payload.licenseType,
+            startsAt: payload.startsAt,
+            endsAt: payload.endsAt,
           },
-        },
-        tx,
-      );
+        });
+        return {
+          organizationId,
+          entityId: licenseId,
+          before: {
+            licenseType: license.licenseType,
+            startsAt: license.startsAt,
+            endsAt: license.endsAt,
+            status: license.status,
+          },
+          after: {
+            licenseType: updated.licenseType,
+            startsAt: updated.startsAt,
+            endsAt: updated.endsAt,
+            status: updated.status,
+          },
+        };
+      },
     });
+
     revalidateLicenseRoutes(organizationId);
     redirect(returnTo);
   } catch (error) {
@@ -1948,35 +2332,51 @@ export async function createAdminApiKeyAction(formData: FormData) {
   try {
     const actor = await assertAdminAccess();
     const payload = parseApiKeyCreatePayload(formData);
+    const mutationId = readMutationId(formData);
     await assertOrganization(payload.organizationId);
-    const rawKey = `wex_${randomBytes(24).toString("base64url")}`;
-    const prefix = rawKey.slice(0, 12);
 
-    await prisma.$transaction(async (tx) => {
-      const apiKey = await tx.apiKey.create({
-        data: {
+    let flashKey: { name: string; prefix: string; rawKey: string } | null = null;
+
+    const result = await runAdminMutation({
+      action: "api_key.create",
+      actor,
+      organizationId: payload.organizationId,
+      entityType: "ApiKey",
+      mutationId,
+      requestHashPayload: {
+        organizationId: payload.organizationId,
+        productId: payload.productId,
+        name: payload.name,
+      },
+      execute: async ({ tx }) => {
+        const rawKey = `wex_${randomBytes(24).toString("base64url")}`;
+        const prefix = rawKey.slice(0, 12);
+        flashKey = { name: payload.name, prefix, rawKey };
+
+        const apiKey = await tx.apiKey.create({
+          data: {
+            organizationId: payload.organizationId,
+            productId: payload.productId,
+            name: payload.name,
+            prefix,
+            hashedKey: hashApiKey(rawKey),
+            scopes: ["wexpay:read", "wexpay:write"],
+          },
+        });
+
+        return {
           organizationId: payload.organizationId,
-          productId: payload.productId,
-          name: payload.name,
-          prefix,
-          hashedKey: hashApiKey(rawKey),
-          scopes: ["wexpay:read", "wexpay:write"],
-        },
-      });
-      await writeAdminAuditLog(
-        {
-          action: "admin.api_key.created",
-          actor,
-          organizationId: payload.organizationId,
-          entityType: "ApiKey",
           entityId: apiKey.id,
-          metadata: { name: apiKey.name, prefix: apiKey.prefix },
-        },
-        tx,
-      );
+          after: { name: apiKey.name, prefix: apiKey.prefix },
+          replayResult: { apiKeyId: apiKey.id, prefix: apiKey.prefix },
+        };
+      },
     });
 
-    await setAdminApiKeyFlashCookie({ name: payload.name, prefix, rawKey });
+    if (flashKey && !result.metadata?.idempotentReplay) {
+      await setAdminApiKeyFlashCookie(flashKey);
+    }
+
     revalidateIntegrationRoutes();
     redirect(returnTo);
   } catch (error) {
@@ -1990,30 +2390,42 @@ export async function createAdminWebhookAction(formData: FormData) {
   try {
     const actor = await assertAdminAccess();
     const payload = parseWebhookCreatePayload(formData);
+    const mutationId = readMutationId(formData);
     await assertOrganization(payload.organizationId);
-    await prisma.$transaction(async (tx) => {
-      const webhook = await tx.webhookEndpoint.create({
-        data: {
+
+    await runAdminMutation({
+      action: "webhook.create",
+      actor,
+      organizationId: payload.organizationId,
+      entityType: "WebhookEndpoint",
+      mutationId,
+      requestHashPayload: {
+        organizationId: payload.organizationId,
+        productId: payload.productId,
+        url: payload.url,
+        events: payload.events,
+      },
+      execute: async ({ tx }) => {
+        const webhook = await tx.webhookEndpoint.create({
+          data: {
+            organizationId: payload.organizationId,
+            productId: payload.productId,
+            url: payload.url,
+            secretHash: sha256(randomBytes(32).toString("base64url")),
+            events: payload.events,
+            isActive: true,
+          },
+        });
+
+        return {
           organizationId: payload.organizationId,
-          productId: payload.productId,
-          url: payload.url,
-          secretHash: sha256(randomBytes(32).toString("base64url")),
-          events: payload.events,
-          isActive: true,
-        },
-      });
-      await writeAdminAuditLog(
-        {
-          action: "admin.webhook.created",
-          actor,
-          organizationId: payload.organizationId,
-          entityType: "WebhookEndpoint",
           entityId: webhook.id,
-          metadata: { url: webhook.url, events: webhook.events },
-        },
-        tx,
-      );
+          after: { url: webhook.url, events: webhook.events },
+          replayResult: { webhookId: webhook.id },
+        };
+      },
     });
+
     revalidateIntegrationRoutes();
     redirect(returnTo);
   } catch (error) {
@@ -2027,32 +2439,40 @@ export async function updateAdminSupportTicketAction(ticketId: string, formData:
   try {
     const actor = await assertAdminAccess();
     const payload = parseSupportTicketUpdatePayload(formData);
-    const ticket = await prisma.auditLog.findUnique({ where: { id: ticketId } });
-    if (!ticket || ticket.action !== "customer.support_ticket.created") {
-      throw new AdminValidationError("Destek talebi bulunamadı.");
-    }
-    const currentMeta = typeof ticket.metadataJson === "object" && ticket.metadataJson !== null ? (ticket.metadataJson as Record<string, unknown>) : {};
-    const nextMeta = {
-      ...currentMeta,
-      status: payload.status,
-      adminReply: payload.adminReply ?? (typeof currentMeta.adminReply === "string" ? currentMeta.adminReply : null),
-      adminRepliedAt: payload.adminReply ? new Date().toISOString() : currentMeta.adminRepliedAt ?? null,
-      adminActor: actor.email,
-    };
-    await prisma.$transaction(async (tx) => {
-      await tx.auditLog.update({ where: { id: ticketId }, data: { metadataJson: nextMeta } });
-      await writeAdminAuditLog(
-        {
-          action: "admin.support_ticket.updated",
-          actor,
+
+    await runAdminMutation({
+      action: "support_ticket.update",
+      actor,
+      entityType: "SupportTicket",
+      entityId: ticketId,
+      requestHashPayload: { ticketId, status: payload.status, hasReply: Boolean(payload.adminReply) },
+      execute: async ({ tx }) => {
+        const ticket = await tx.auditLog.findUnique({ where: { id: ticketId } });
+        if (!ticket || ticket.action !== "customer.support_ticket.created") {
+          throw new AdminValidationError("Destek talebi bulunamadı.");
+        }
+        const currentMeta =
+          typeof ticket.metadataJson === "object" && ticket.metadataJson !== null
+            ? (ticket.metadataJson as Record<string, unknown>)
+            : {};
+        const nextMeta = {
+          ...currentMeta,
+          status: payload.status,
+          adminReply: payload.adminReply ?? (typeof currentMeta.adminReply === "string" ? currentMeta.adminReply : null),
+          adminRepliedAt: payload.adminReply ? new Date().toISOString() : currentMeta.adminRepliedAt ?? null,
+          adminActor: getAdminActionActor(actor),
+        };
+        await tx.auditLog.update({ where: { id: ticketId }, data: { metadataJson: nextMeta } });
+        return {
           organizationId: ticket.organizationId,
-          entityType: "SupportTicket",
           entityId: ticketId,
-          metadata: { status: payload.status, hasReply: Boolean(payload.adminReply) },
-        },
-        tx,
-      );
+          before: { status: currentMeta.status ?? null },
+          after: { status: payload.status },
+          metadata: { hasReply: Boolean(payload.adminReply) },
+        };
+      },
     });
+
     revalidatePath("/admin/support");
     revalidatePath("/admin");
     redirect(returnTo);
@@ -2067,29 +2487,33 @@ export async function updateAdminAppInstallationSettingsAction(organizationId: s
   try {
     const actor = await assertAdminAccess();
     const payload = parseAppInstallationSettingsPayload(formData);
-    await prisma.$transaction(async (tx) => {
-      const installation = await tx.appInstallation.findFirst({ where: { id: installationId, organizationId } });
-      if (!installation) throw new AdminValidationError("Kurulum kaydı bulunamadı.");
-      const settingsJson = {
-        ...(typeof installation.settingsJson === "object" && installation.settingsJson !== null ? installation.settingsJson : {}),
-        onboardingStatus: payload.onboardingStatus,
-        message: payload.message,
-        estimatedBusinessDays: payload.estimatedBusinessDays,
-        source: payload.source,
-      };
-      await tx.appInstallation.update({ where: { id: installationId }, data: { settingsJson } });
-      await writeAdminAuditLog(
-        {
-          action: "admin.installation.settings_updated",
-          actor,
+
+    await runAdminMutation({
+      action: "installation.settings_change",
+      actor,
+      organizationId,
+      entityType: "AppInstallation",
+      entityId: installationId,
+      requestHashPayload: { organizationId, installationId, ...payload },
+      execute: async ({ tx }) => {
+        const installation = await tx.appInstallation.findFirst({ where: { id: installationId, organizationId } });
+        if (!installation) throw new AdminValidationError("Kurulum kaydı bulunamadı.");
+        const settingsJson = {
+          ...(typeof installation.settingsJson === "object" && installation.settingsJson !== null ? installation.settingsJson : {}),
+          onboardingStatus: payload.onboardingStatus,
+          message: payload.message,
+          estimatedBusinessDays: payload.estimatedBusinessDays,
+          source: payload.source,
+        };
+        await tx.appInstallation.update({ where: { id: installationId }, data: { settingsJson } });
+        return {
           organizationId,
-          entityType: "AppInstallation",
           entityId: installationId,
-          metadata: settingsJson,
-        },
-        tx,
-      );
+          after: settingsJson,
+        };
+      },
     });
+
     revalidateOrganizationRoutes(organizationId);
     redirect(returnTo);
   } catch (error) {
@@ -2103,38 +2527,57 @@ export async function updateAdminDemoRequestStatusAction(demoRequestId: string, 
   try {
     const actor = await assertAdminAccess();
     const payload = parseDemoRequestLeadStatusPayload(formData);
-    const demoRequest = await prisma.auditLog.findUnique({ where: { id: demoRequestId } });
-    if (!demoRequest || demoRequest.action !== "public.demo_request.created") {
-      throw new AdminValidationError("Demo talebi bulunamadı.");
-    }
 
-    const statusUpdates = await prisma.auditLog.findMany({
-      where: {
-        action: "public.demo_request.status_updated",
-        entityId: demoRequestId,
+    await runAdminMutation({
+      action: "demo_request.status_change",
+      actor,
+      entityType: "DemoRequest",
+      entityId: demoRequestId,
+      requestHashPayload: { demoRequestId, leadStatus: payload.leadStatus },
+      execute: async ({ tx }) => {
+        const demoRequest = await tx.auditLog.findUnique({ where: { id: demoRequestId } });
+        if (!demoRequest || demoRequest.action !== "public.demo_request.created") {
+          throw new AdminValidationError("Demo talebi bulunamadı.");
+        }
+
+        const statusUpdates = await tx.auditLog.findMany({
+          where: {
+            action: "public.demo_request.status_updated",
+            entityId: demoRequestId,
+          },
+          orderBy: { createdAt: "asc" },
+          select: { metadataJson: true, createdAt: true },
+        });
+
+        const previousStatus = resolveDemoLeadStatus(demoRequest.metadataJson, statusUpdates);
+        const nextStatus = payload.leadStatus;
+
+        if (previousStatus !== nextStatus) {
+          await tx.auditLog.create({
+            data: {
+              action: "public.demo_request.status_updated",
+              entityType: "DemoRequest",
+              entityId: demoRequestId,
+              message: `Lead durumu ${previousStatus} → ${nextStatus}`,
+              metadataJson: {
+                source: "admin_demo_request_management",
+                originalDemoRequestId: demoRequestId,
+                previousStatus,
+                nextStatus,
+                actor: getAdminActionActor(actor),
+              },
+            },
+          });
+        }
+
+        return {
+          entityId: demoRequestId,
+          before: { leadStatus: previousStatus },
+          after: { leadStatus: nextStatus },
+          transition: previousStatus === nextStatus ? "noop" : `${previousStatus}->${nextStatus}`,
+        };
       },
-      orderBy: { createdAt: "asc" },
-      select: { metadataJson: true, createdAt: true },
     });
-
-    const previousStatus = resolveDemoLeadStatus(demoRequest.metadataJson, statusUpdates);
-    const nextStatus = payload.leadStatus;
-
-    if (previousStatus !== nextStatus) {
-      await writeAuditLog({
-        action: "public.demo_request.status_updated",
-        entityType: "DemoRequest",
-        entityId: demoRequestId,
-        source: "admin_demo_request_management",
-        message: `Lead durumu ${previousStatus} → ${nextStatus}`,
-        metadata: {
-          originalDemoRequestId: demoRequestId,
-          previousStatus,
-          nextStatus,
-          actor: getAdminActionActor(actor),
-        },
-      });
-    }
 
     revalidatePath("/admin/support");
     revalidatePath("/admin/applications");
@@ -2151,22 +2594,43 @@ export async function updateAdminDemoRequestFollowUpAction(demoRequestId: string
   try {
     const actor = await assertAdminAccess();
     const payload = parseDemoRequestFollowUpPayload(formData);
-    const demoRequest = await prisma.auditLog.findUnique({ where: { id: demoRequestId } });
-    if (!demoRequest || demoRequest.action !== "public.demo_request.created") {
-      throw new AdminValidationError("Demo talebi bulunamadı.");
-    }
 
-    await writeAuditLog({
-      action: "public.demo_request.followup_updated",
+    await runAdminMutation({
+      action: "demo_request.follow_up",
+      actor,
       entityType: "DemoRequest",
       entityId: demoRequestId,
-      source: "admin_demo_request_management",
-      message: payload.note ? "Lead takip notu güncellendi" : "Lead takip tarihi güncellendi",
-      metadata: {
-        originalDemoRequestId: demoRequestId,
+      requestHashPayload: {
+        demoRequestId,
         note: payload.note,
         followUpAt: payload.followUpAt,
-        actor: getAdminActionActor(actor),
+      },
+      execute: async ({ tx }) => {
+        const demoRequest = await tx.auditLog.findUnique({ where: { id: demoRequestId } });
+        if (!demoRequest || demoRequest.action !== "public.demo_request.created") {
+          throw new AdminValidationError("Demo talebi bulunamadı.");
+        }
+
+        await tx.auditLog.create({
+          data: {
+            action: "public.demo_request.followup_updated",
+            entityType: "DemoRequest",
+            entityId: demoRequestId,
+            message: payload.note ? "Lead takip notu güncellendi" : "Lead takip tarihi güncellendi",
+            metadataJson: {
+              source: "admin_demo_request_management",
+              originalDemoRequestId: demoRequestId,
+              note: payload.note,
+              followUpAt: payload.followUpAt,
+              actor: getAdminActionActor(actor),
+            },
+          },
+        });
+
+        return {
+          entityId: demoRequestId,
+          after: { note: payload.note, followUpAt: payload.followUpAt ?? null },
+        };
       },
     });
 

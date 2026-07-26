@@ -1,16 +1,21 @@
 import { AdminEmptyState, AdminPanel, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
 import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
-import { AdminInlineSelectForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
+import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import {
   createAdminBillingPaymentAction,
   createAdminInvoiceAction,
   updateAdminInvoiceStatusAction,
 } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminBillingData, getAdminOperationOptions } from "@/lib/wexon-admin";
+import { generateAdminMutationKey } from "@/lib/wexon-admin-mutation-idempotency";
 
-const invoiceStatusOptions = [
+const invoiceCreateStatusOptions = [
   { value: "DRAFT", label: "Taslak" },
   { value: "ISSUED", label: "Kesildi" },
+];
+
+const invoiceStatusOptions = [
+  ...invoiceCreateStatusOptions,
   { value: "PAID", label: "Ödendi" },
   { value: "OVERDUE", label: "Vadesi geçti" },
   { value: "VOID", label: "İptal" },
@@ -30,6 +35,8 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
   const paidInvoices = invoices.filter((invoice) => invoice.status === "PAID");
   const paidPayments = billingPayments.filter((payment) => payment.status === "PAID");
   const paytrPaid = subscriptionPayments.filter((payment) => payment.status === "PAID");
+  const invoiceMutationId = generateAdminMutationKey();
+  const paymentMutationId = generateAdminMutationKey();
 
   return (
     <div className="space-y-8">
@@ -60,8 +67,9 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
 
       <section className="grid gap-5 xl:grid-cols-2">
         <AdminFormPanel title="Yeni fatura oluştur" description="Manuel fatura kesimi ve tahsilat takibi." collapsible>
-          <form action={createAdminInvoiceAction} className="grid gap-4 md:grid-cols-2">
+          <form action={createAdminInvoiceAction} className="grid gap-4 md:grid-cols-2" data-testid="admin-invoice-create-form">
             <input type="hidden" name="returnTo" value="/admin/billing" />
+            <input type="hidden" name="mutationId" value={invoiceMutationId} />
             <AdminSelectField label="Müşteri" name="organizationId">
               <option value="">Seçin</option>
               {options.organizations.map((org) => (
@@ -80,7 +88,7 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
             </AdminSelectField>
             <AdminTextField label="Fatura no" name="invoiceNo" placeholder="Otomatik üretilir" />
             <AdminSelectField label="Durum" name="status" defaultValue="ISSUED">
-              {invoiceStatusOptions.map((opt) => (
+              {invoiceCreateStatusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -91,6 +99,11 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
             <AdminTextField label="Toplam" name="total" type="number" placeholder="Boş = ara+vergi" />
             <AdminTextField label="Para birimi" name="currency" defaultValue="TRY" />
             <AdminDateField label="Vade tarihi" name="dueAt" />
+            <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Fatura oluşturma gerekçesi" />
+            <label className="md:col-span-2 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+              <span className="text-sm font-semibold text-slate-700">Manuel fatura kaydının oluşturulacağını onaylıyorum.</span>
+            </label>
             <div className="md:col-span-2">
               <AdminSubmitButton>Fatura oluştur</AdminSubmitButton>
             </div>
@@ -98,8 +111,9 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
         </AdminFormPanel>
 
         <AdminFormPanel title="Tahsilat kaydet" description="Ödeme girişi yapın; fatura seçilirse otomatik ödendi işaretlenir." collapsible>
-          <form action={createAdminBillingPaymentAction} className="grid gap-4 md:grid-cols-2">
+          <form action={createAdminBillingPaymentAction} className="grid gap-4 md:grid-cols-2" data-testid="admin-billing-payment-create-form">
             <input type="hidden" name="returnTo" value="/admin/billing" />
+            <input type="hidden" name="mutationId" value={paymentMutationId} />
             <AdminSelectField label="Müşteri" name="organizationId">
               <option value="">Seçin</option>
               {options.organizations.map((org) => (
@@ -124,8 +138,15 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
                 </option>
               ))}
             </AdminSelectField>
-            <AdminTextField label="Sağlayıcı" name="provider" defaultValue="admin_manual" />
+            <AdminSelectField label="Sağlayıcı" name="provider" defaultValue="admin_manual">
+              <option value="admin_manual">Admin manuel</option>
+            </AdminSelectField>
             <AdminTextField label="Referans" name="providerRef" placeholder="Dekont / işlem no" />
+            <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Tahsilat gerekçesi" />
+            <label className="md:col-span-2 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+              <span className="text-sm font-semibold text-slate-700">Manuel tahsilat kaydının oluşturulacağını onaylıyorum.</span>
+            </label>
             <div className="md:col-span-2">
               <AdminSubmitButton>Tahsilat kaydet</AdminSubmitButton>
             </div>
@@ -165,13 +186,41 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
                       <AdminStatusPill active={invoice.status === "PAID"}>{formatAdminStatus(invoice.status)}</AdminStatusPill>
                     </td>
                     <td className="px-3 py-4 sm:px-5">
-                      <AdminInlineSelectForm
+                      <form
                         action={updateAdminInvoiceStatusAction.bind(null, invoice.id)}
-                        returnTo="/admin/billing"
-                        fieldName="status"
-                        value={invoice.status}
-                        options={invoiceStatusOptions}
-                      />
+                        className="flex w-full min-w-[180px] max-w-[260px] flex-col gap-2"
+                        data-testid={`invoice-status-form-${invoice.id}`}
+                      >
+                        <input type="hidden" name="returnTo" value="/admin/billing" />
+                        <select
+                          name="status"
+                          defaultValue={invoice.status}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+                        >
+                          {invoiceStatusOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          name="reason"
+                          required
+                          minLength={8}
+                          placeholder="İşlem gerekçesi (zorunlu)"
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs"
+                        />
+                        <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-500">
+                          <input type="checkbox" name="confirmed" value="1" className="mt-0.5" required />
+                          Fatura durumu değişikliğini onaylıyorum
+                        </label>
+                        <button
+                          type="submit"
+                          className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
+                        >
+                          Kaydet
+                        </button>
+                      </form>
                     </td>
                   </tr>
                 ))}

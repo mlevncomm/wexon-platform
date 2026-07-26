@@ -4,6 +4,7 @@ import { AdminActionNotice, AdminFormPanel, AdminSelectField, AdminSubmitButton,
 import { AdminInlineToggleForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { createAdminApiKeyAction, createAdminWebhookAction, revokeAdminApiKeyAction, toggleAdminWebhookAction } from "@/lib/wexon-admin-actions";
 import { getAdminIntegrationsData, getAdminOperationOptions } from "@/lib/wexon-admin";
+import { generateAdminMutationKey } from "@/lib/wexon-admin-mutation-idempotency";
 
 async function readApiKeyFlash() {
   try {
@@ -21,6 +22,8 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
   const [{ apiKeys, webhookEndpoints }, options] = await Promise.all([getAdminIntegrationsData(), getAdminOperationOptions()]);
   const activeKeys = apiKeys.filter((key) => !key.revokedAt);
   const apiKeyFlash = await readApiKeyFlash();
+  const apiKeyMutationId = generateAdminMutationKey();
+  const webhookMutationId = generateAdminMutationKey();
 
   return (
     <div className="space-y-8">
@@ -57,6 +60,7 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
         <AdminFormPanel title="API anahtarı oluştur" description="Müşteri adına tam yetkili anahtar üretir." collapsible>
           <form action={createAdminApiKeyAction} className="grid gap-4">
             <input type="hidden" name="returnTo" value="/admin/integrations" />
+            <input type="hidden" name="mutationId" value={apiKeyMutationId} />
             <AdminSelectField label="Müşteri" name="organizationId">
               <option value="">Seçin</option>
               {options.organizations.map((org) => (
@@ -81,6 +85,7 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
         <AdminFormPanel title="Webhook oluştur" description="HTTPS endpoint tanımlayın." collapsible>
           <form action={createAdminWebhookAction} className="grid gap-4">
             <input type="hidden" name="returnTo" value="/admin/integrations" />
+            <input type="hidden" name="mutationId" value={webhookMutationId} />
             <AdminSelectField label="Müşteri" name="organizationId">
               <option value="">Seçin</option>
               {options.organizations.map((org) => (

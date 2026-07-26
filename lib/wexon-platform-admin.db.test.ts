@@ -286,7 +286,7 @@ describe("PlatformAdmin foundation (db)", () => {
     assert.equal(after.displayName, before.displayName);
   });
 
-  it("public schema has 41 tables; PlatformAdmin RLS/grants deny anon/authenticated", async () => {
+  it("public schema has 43 tables; PlatformAdmin RLS/grants deny anon/authenticated", async () => {
     const tables = await prisma.$queryRaw<Array<{ table_name: string; rls: boolean; force: boolean }>>`
       SELECT c.relname AS table_name, c.relrowsecurity AS rls, c.relforcerowsecurity AS force
       FROM pg_class c
@@ -295,7 +295,7 @@ describe("PlatformAdmin foundation (db)", () => {
       ORDER BY c.relname
     `;
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 41);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 43);
 
     const platform = tables.find((t) => t.table_name === "PlatformAdmin");
     assert.ok(platform);

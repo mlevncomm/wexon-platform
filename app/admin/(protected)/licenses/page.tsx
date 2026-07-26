@@ -1,11 +1,12 @@
 import { AdminEmptyState, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
-import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton } from "@/components/marketing/WexonAdminForms";
+import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
 import { AdminInlineSelectForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import {
   changeAdminLicenseStatusAction,
   createAdminLicenseFromListAction,
 } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminLicensesData, getAdminOperationOptions } from "@/lib/wexon-admin";
+import { generateAdminMutationKey } from "@/lib/wexon-admin-mutation-idempotency";
 
 const licenseStatusOptions = [
   { value: "TRIAL", label: "Deneme" },
@@ -20,6 +21,7 @@ export default async function AdminLicensesPage({ searchParams }: { searchParams
   const { adminError } = await searchParams;
   const [licenses, options] = await Promise.all([getAdminLicensesData(), getAdminOperationOptions()]);
   const attention = licenses.filter((license) => license.status === "PAST_DUE" || license.status === "SUSPENDED" || license.status === "EXPIRED");
+  const licenseMutationId = generateAdminMutationKey();
 
   return (
     <div className="space-y-8">
@@ -51,6 +53,7 @@ export default async function AdminLicensesPage({ searchParams }: { searchParams
         <form action={createAdminLicenseFromListAction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <input type="hidden" name="returnTo" value="/admin/licenses" />
           <input type="hidden" name="productKey" value="wexpay" />
+          <input type="hidden" name="mutationId" value={licenseMutationId} />
           <AdminSelectField label="Müşteri" name="organizationId" defaultValue="">
             <option value="" disabled>
               Müşteri seçin
@@ -85,6 +88,11 @@ export default async function AdminLicensesPage({ searchParams }: { searchParams
           </AdminSelectField>
           <AdminDateField label="Başlangıç" name="startsAt" defaultValue={new Date().toISOString().slice(0, 10)} required />
           <AdminDateField label="Bitiş / yenileme" name="endsAt" />
+          <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Lisans oluşturma gerekçesi" />
+          <label className="md:col-span-2 xl:col-span-3 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+            <span className="text-sm font-semibold text-slate-700">Manuel lisans kaydının oluşturulacağını onaylıyorum.</span>
+          </label>
           <div className="md:col-span-2 xl:col-span-3">
             <AdminSubmitButton>Lisans oluştur</AdminSubmitButton>
           </div>
@@ -127,6 +135,7 @@ export default async function AdminLicensesPage({ searchParams }: { searchParams
                       fieldName="status"
                       value={license.status}
                       options={licenseStatusOptions}
+                      requireHighRiskConfirm
                     />
                   </td>
                 </tr>

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   assertCurrentSchemaPublicTableCount,
@@ -15,6 +15,7 @@ import {
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_STAFF_INVITE,
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_MENU_IMPORT,
   HISTORICAL_PUBLIC_TABLE_COUNT_PRE_PLATFORM_ADMIN,
+  HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ADMIN_MUTATION,
   parsePostgresMajorVersion,
   RECOVERY_STATUS,
   sanitizeBackupLog,
@@ -30,14 +31,16 @@ describe("parsePostgresMajorVersion", () => {
 });
 
 describe("current schema table count", () => {
-  it("expects 41 public tables after PlatformAdmin (PR2A)", () => {
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 41);
+  it("expects 43 public tables after AdminMutation hardening (PR5)", () => {
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 43);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER, 33);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_SMART_ACTIVATION, 34);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_STAFF_INVITE, 37);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_MENU_IMPORT, 38);
     assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_PLATFORM_ADMIN, 40);
-    assert.equal(assertCurrentSchemaPublicTableCount(41).ok, true);
+    assert.equal(HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ADMIN_MUTATION, 41);
+    assert.equal(assertCurrentSchemaPublicTableCount(43).ok, true);
+    assert.equal(assertCurrentSchemaPublicTableCount(41).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(40).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(38).ok, false);
     assert.equal(assertCurrentSchemaPublicTableCount(37).ok, false);
@@ -45,9 +48,20 @@ describe("current schema table count", () => {
     assert.equal(assertCurrentSchemaPublicTableCount(33).ok, false);
   });
 
-  it("accepts a current 41-table manifest contract", () => {
+  it("accepts a current 43-table manifest contract", () => {
     const rowCounts = Object.fromEntries(
-      Array.from({ length: 41 }, (_, i) => [`T${i}`, i]),
+      Array.from({ length: 43 }, (_, i) => [`T${i}`, i]),
+    );
+    const ok = evaluateRestoreTableCountContract({
+      restoredTableCount: 43,
+      manifest: { tableCount: 43, rowCounts },
+    });
+    assert.equal(ok.ok, true);
+  });
+
+  it("accepts a historical 41-table (pre-admin-mutation) manifest", () => {
+    const rowCounts = Object.fromEntries(
+      Array.from({ length: 41 }, (_, i) => [`A${i}`, i]),
     );
     const ok = evaluateRestoreTableCountContract({
       restoredTableCount: 41,

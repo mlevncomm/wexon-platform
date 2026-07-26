@@ -1,16 +1,21 @@
 import { AdminEmptyState, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
-import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton } from "@/components/marketing/WexonAdminForms";
+import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { createAdminSubscriptionAction, updateAdminSubscriptionStatusAction } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOperationOptions, getAdminSubscriptionsData } from "@/lib/wexon-admin";
+import { generateAdminMutationKey } from "@/lib/wexon-admin-mutation-idempotency";
 import {
   ADMIN_SUBSCRIPTION_PROVIDER_LABELS,
   ADMIN_SUBSCRIPTION_PROVIDERS,
 } from "@/lib/wexon-admin-commercial-policy";
 
-const subscriptionStatusOptions = [
+const subscriptionCreateStatusOptions = [
   { value: "TRIALING", label: "Deneme" },
   { value: "ACTIVE", label: "Aktif" },
+];
+
+const subscriptionStatusOptions = [
+  ...subscriptionCreateStatusOptions,
   { value: "PAST_DUE", label: "Gecikmiş" },
   { value: "CANCELLED", label: "İptal" },
   { value: "EXPIRED", label: "Süresi dolmuş" },
@@ -20,6 +25,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
   const { adminError } = await searchParams;
   const [subscriptions, options] = await Promise.all([getAdminSubscriptionsData(), getAdminOperationOptions()]);
   const today = new Date().toISOString().slice(0, 10);
+  const subscriptionMutationId = generateAdminMutationKey();
 
   return (
     <div className="space-y-8">
@@ -49,6 +55,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
       <AdminFormPanel title="Yeni abonelik oluştur" description="Müşteriye paket atar; gerekirse lisans ve kurulum da açılır." collapsible>
         <form action={createAdminSubscriptionAction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <input type="hidden" name="returnTo" value="/admin/subscriptions" />
+          <input type="hidden" name="mutationId" value={subscriptionMutationId} />
           <AdminSelectField label="Müşteri" name="organizationId">
             <option value="">Seçin</option>
             {options.organizations.map((org) => (
@@ -66,7 +73,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
             ))}
           </AdminSelectField>
           <AdminSelectField label="Durum" name="status" defaultValue="ACTIVE">
-            {subscriptionStatusOptions.map((opt) => (
+            {subscriptionCreateStatusOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -86,6 +93,11 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
               </option>
             ))}
           </AdminSelectField>
+          <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Abonelik oluşturma gerekçesi" />
+          <label className="md:col-span-2 xl:col-span-3 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+            <span className="text-sm font-semibold text-slate-700">Manuel abonelik kaydının oluşturulacağını onaylıyorum.</span>
+          </label>
           <div className="md:col-span-2 xl:col-span-3">
             <AdminSubmitButton>Abonelik oluştur</AdminSubmitButton>
           </div>
@@ -148,6 +160,10 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
                       <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-500">
                         <input type="checkbox" name="acknowledgePaytrPaid" value="true" className="mt-0.5" />
                         PAID PayTR varsa çift aktivasyonu onayla
+                      </label>
+                      <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-600">
+                        <input type="checkbox" name="confirmed" value="1" className="mt-0.5" required />
+                        Durum değişikliğini onaylıyorum
                       </label>
                       <button type="submit" className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
                         Kaydet

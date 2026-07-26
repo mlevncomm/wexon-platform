@@ -37,6 +37,8 @@ import {
   maskMerchantOid,
 } from "@/lib/wexon-admin-commercial-consistency";
 import { AdminActivationFeeWaiveForm, AdminLicensePlanChangeForm } from "@/components/admin/AdminCommercialConsistencyForms";
+import { AdminInlineSelectForm } from "@/components/marketing/WexonAdminOperations";
+import { generateAdminMutationKey } from "@/lib/wexon-admin-mutation-idempotency";
 import { prisma } from "@/lib/prisma";
 import { coreAccessDenialMessage, evaluateProductAccess } from "@/lib/wexon-core-access";
 import {
@@ -180,6 +182,8 @@ export default async function AdminOrganizationDetailPage({
     validationMetadata.result === "FAIL"
       ? `${validationMetadata.result} · ${Number(validationMetadata.passCount ?? 0)} geçti · ${Number(validationMetadata.warningCount ?? 0)} uyarı · ${Number(validationMetadata.failCount ?? 0)} başarısız`
       : "Henüz çalıştırılmadı";
+  const licenseMutationId = generateAdminMutationKey();
+  const permanentDeleteMutationId = generateAdminMutationKey();
 
   return (
     <div className="space-y-8">
@@ -426,6 +430,7 @@ export default async function AdminOrganizationDetailPage({
             <form action={createLicense} className="grid gap-4 md:grid-cols-2">
               <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
               <input type="hidden" name="productKey" value="wexpay" />
+              <input type="hidden" name="mutationId" value={licenseMutationId} />
               <AdminSelectField label="Paket" name="planId" defaultValue={options.wexPayPlans[0]?.id}>
                 {options.wexPayPlans.map((plan) => (
                   <option key={plan.id} value={plan.id}>
@@ -446,6 +451,11 @@ export default async function AdminOrganizationDetailPage({
                 <option value="CANCELLED">İptal</option>
                 <option value="EXPIRED">Süresi dolmuş</option>
               </AdminSelectField>
+              <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Lisans oluşturma gerekçesi" />
+              <label className="md:col-span-2 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+                <span className="text-sm font-semibold text-slate-700">Manuel lisans kaydının oluşturulacağını onaylıyorum.</span>
+              </label>
               <div className="md:col-span-2">
                 <AdminSubmitButton>Yeni lisans oluştur</AdminSubmitButton>
               </div>
@@ -480,18 +490,22 @@ export default async function AdminOrganizationDetailPage({
                     }))}
                     action={changeAdminLicensePlanAction}
                   />
-                  <form action={changeAdminLicenseStatusAction.bind(null, organization.id, wexPayLicense.id)} className="grid gap-4">
-                    <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
-                    <AdminSelectField label="Durum" name="status" defaultValue={wexPayLicense.status}>
-                      <option value="TRIAL">Deneme</option>
-                      <option value="ACTIVE">Aktif</option>
-                      <option value="PAST_DUE">Gecikmiş</option>
-                      <option value="SUSPENDED">Askıda</option>
-                      <option value="CANCELLED">İptal</option>
-                      <option value="EXPIRED">Süresi dolmuş</option>
-                    </AdminSelectField>
-                    <AdminSubmitButton>Durumu güncelle</AdminSubmitButton>
-                  </form>
+                  <AdminInlineSelectForm
+                    action={changeAdminLicenseStatusAction.bind(null, organization.id, wexPayLicense.id)}
+                    returnTo={`/admin/organizations/${organization.id}`}
+                    fieldName="status"
+                    value={wexPayLicense.status}
+                    options={[
+                      { value: "TRIAL", label: "Deneme" },
+                      { value: "ACTIVE", label: "Aktif" },
+                      { value: "PAST_DUE", label: "Gecikmiş" },
+                      { value: "SUSPENDED", label: "Askıda" },
+                      { value: "CANCELLED", label: "İptal" },
+                      { value: "EXPIRED", label: "Süresi dolmuş" },
+                    ]}
+                    submitLabel="Durumu güncelle"
+                    requireHighRiskConfirm
+                  />
                 </div>
                 <form action={updateAdminLicenseDetailsAction.bind(null, organization.id, wexPayLicense.id)} className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
                   <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
@@ -500,16 +514,13 @@ export default async function AdminOrganizationDetailPage({
                     <option value="YEARLY">Yıllık</option>
                     <option value="ONE_TIME">Tek seferlik</option>
                   </AdminSelectField>
-                  <AdminSelectField label="Durum" name="status" defaultValue={wexPayLicense.status}>
-                    <option value="TRIAL">Deneme</option>
-                    <option value="ACTIVE">Aktif</option>
-                    <option value="PAST_DUE">Gecikmiş</option>
-                    <option value="SUSPENDED">Askıda</option>
-                    <option value="CANCELLED">İptal</option>
-                    <option value="EXPIRED">Süresi dolmuş</option>
-                  </AdminSelectField>
                   <AdminDateField label="Başlangıç" name="startsAt" defaultValue={dateInput(wexPayLicense.startsAt)} required />
                   <AdminDateField label="Bitiş" name="endsAt" defaultValue={dateInput(wexPayLicense.endsAt)} />
+                  <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Lisans detay değişikliği gerekçesi" />
+                  <label className="md:col-span-2 flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+                    <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+                    <span className="text-sm font-semibold text-slate-700">Lisans detay değişikliğini onaylıyorum (durum ayrı formdan güncellenir).</span>
+                  </label>
                   <div className="md:col-span-2">
                     <AdminSubmitButton>Lisans detaylarını kaydet</AdminSubmitButton>
                   </div>
@@ -711,7 +722,19 @@ export default async function AdminOrganizationDetailPage({
             <AdminActionNotice tone="warning">
               Hard delete yapılmaz. Organizasyon pasife alınır, ilişkili kayıtlar korunur.
             </AdminActionNotice>
-            <form action={deactivateOrganization}>
+            <form action={deactivateOrganization} className="grid gap-3">
+              <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
+              <input
+                name="reason"
+                required
+                minLength={8}
+                placeholder="Pasife alma gerekçesi (min 8 karakter)"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none"
+              />
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+                <span className="text-sm font-semibold text-slate-700">Müşteriyi pasife almayı onaylıyorum.</span>
+              </label>
               <AdminSubmitButton>Müşteriyi pasife al</AdminSubmitButton>
             </form>
           </div>
@@ -724,7 +747,19 @@ export default async function AdminOrganizationDetailPage({
         >
           <div className="space-y-4">
             <AdminActionNotice>Bu müşteri pasif durumda. Tekrar aktif hale getirebilirsiniz.</AdminActionNotice>
-            <form action={reactivateOrganization}>
+            <form action={reactivateOrganization} className="grid gap-3">
+              <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
+              <input
+                name="reason"
+                required
+                minLength={8}
+                placeholder="Yeniden aktifleştirme gerekçesi (min 8 karakter)"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none"
+              />
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
+                <span className="text-sm font-semibold text-slate-700">Müşteriyi tekrar aktif etmeyi onaylıyorum.</span>
+              </label>
               <AdminSubmitButton>Müşteriyi tekrar aktif et</AdminSubmitButton>
             </form>
           </div>
@@ -743,8 +778,14 @@ export default async function AdminOrganizationDetailPage({
           <p className="text-sm font-semibold leading-relaxed text-slate-600">
             Kalıcı silmek için müşteri slug değerini yazın: <span className="font-black text-slate-950">{organization.slug}</span>
           </p>
-          <form action={permanentlyDeleteOrganization} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <form action={permanentlyDeleteOrganization} className="grid gap-4">
+            <input type="hidden" name="mutationId" value={permanentDeleteMutationId} />
             <AdminTextField label="Onay slug değeri" name="confirmSlug" placeholder={organization.slug} required />
+            <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Kalıcı silme gerekçesi" />
+            <label className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-rose-300" required />
+              <span className="text-sm font-semibold text-rose-950">Müşterinin kalıcı olarak silineceğini onaylıyorum.</span>
+            </label>
             <button
               type="submit"
               className="inline-flex w-full items-center justify-center rounded-2xl bg-rose-600 px-5 py-3 text-sm font-black text-white transition hover:bg-rose-700 md:w-auto"

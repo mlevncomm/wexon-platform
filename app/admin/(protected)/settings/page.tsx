@@ -142,14 +142,26 @@ export default async function AdminSettingsPage() {
           <p className="text-sm font-semibold leading-relaxed text-amber-900">
             Bu işlem yalnızca local geliştirme/test ortamı içindir. Fatura veya ödeme kaydı olan müşteriler silinmez.
           </p>
-          <form action={deleteAllTestOrganizationsAction} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <form action={deleteAllTestOrganizationsAction} className="grid gap-3">
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-amber-800">Onay metni</span>
               <input
                 name="confirmText"
                 placeholder="TÜM TEST MÜŞTERİLERİNİ SİL"
                 className="mt-2 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm font-semibold outline-none"
+                required
               />
+            </label>
+            <input
+              name="reason"
+              required
+              minLength={8}
+              placeholder="Toplu silme gerekçesi (min 8 karakter)"
+              className="w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm font-semibold outline-none"
+            />
+            <label className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-white p-4">
+              <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-amber-300" required />
+              <span className="text-sm font-semibold text-amber-950">Test müşterilerinin kalıcı olarak silineceğini onaylıyorum.</span>
             </label>
             <button type="submit" className="rounded-2xl bg-amber-700 px-5 py-3 text-sm font-black text-white hover:bg-amber-800">
               Tüm test müşterilerini sil
