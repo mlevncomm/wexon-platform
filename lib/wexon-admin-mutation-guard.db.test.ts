@@ -136,12 +136,36 @@ after(async () => {
     });
     await prisma.platformAdmin.delete({ where: { id: ids.platformAdmin } }).catch(() => undefined);
   }
+  await prisma.platformAdmin.deleteMany({
+    where: { emailNormalized: { contains: `padmin-pr5-` } },
+  }).catch(() => undefined);
   await prisma.$disconnect();
 });
 
 describe("PR5 admin mutation hardening DB", () => {
+  async function mintActor(label: string): Promise<AdminSession> {
+    const email = `padmin-pr5-${label}-${suffix}@wexon.dev`;
+    const subject = `cf-sub-pr5-${label}-${suffix}`;
+    const admin = await prisma.platformAdmin.create({
+      data: {
+        email,
+        emailNormalized: normalizePlatformAdminEmail(email),
+        displayName: `PR5 ${label}`,
+        isActive: true,
+        cloudflareSubject: subject,
+      },
+    });
+    return {
+      adminId: admin.id,
+      email: normalizePlatformAdminEmail(email),
+      cloudflareSubject: subject,
+      issuedAt: Date.now(),
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    };
+  }
+
   it("atomically increments rate-limit buckets under concurrency", async () => {
-    const adminId = ids.platformAdmin!;
+    const adminId = `rl-stress-${suffix}`;
     const results = await Promise.all(
       Array.from({ length: 12 }, () =>
         enforceAdminMutationRateLimit({
@@ -424,5 +448,266 @@ describe("PR5 admin mutation hardening DB", () => {
     );
     const afterInvoices = await prisma.invoice.count({ where: { organizationId: ids.orgA! } });
     assert.equal(afterInvoices, beforeInvoices);
+  });
+
+  it("persists FAILED idempotency row after known mutation failure", async () => {
+    const localActor = await mintActor("fail-finalizer");
+    const mutationId = generateAdminMutationKey();
+    await assert.rejects(
+      () =>
+        runAdminMutation({
+          action: "invoice.create",
+          actor: localActor,
+          organizationId: ids.orgA!,
+          entityType: "Invoice",
+          mutationId,
+          confirmed: true,
+          reason: "bilinen hata finalizer kanıtı",
+          requestHashPayload: { fail: true },
+          execute: async () => {
+            throw new AdminMutationGuardError("finance_invariant_failed", "bilinçli hata");
+          },
+        }),
+      (error: unknown) =>
+        error instanceof AdminMutationGuardError && error.code === "finance_invariant_failed",
+    );
+
+    const row = await prisma.adminMutationIdempotency.findUnique({
+      where: {
+        adminId_action_mutationKey: {
+          adminId: localActor.adminId,
+          action: "invoice.create",
+          mutationKey: mutationId,
+        },
+      },
+    });
+    assert.ok(row);
+    assert.equal(row!.status, "FAILED");
+    assert.equal(row!.denyCode, "finance_invariant_failed");
+
+    // Same key + same payload may retry after FAILED.
+    const invoiceNo = `INV-PR5-${suffix}-retry`;
+    const ok = await runAdminMutation({
+      action: "invoice.create",
+      actor: localActor,
+      organizationId: ids.orgA!,
+      entityType: "Invoice",
+      mutationId,
+      confirmed: true,
+      reason: "failed sonrası retry",
+      requestHashPayload: { fail: true },
+      execute: async ({ tx }) => {
+        const invoice = await tx.invoice.create({
+          data: {
+            organizationId: ids.orgA!,
+            invoiceNo,
+            status: "DRAFT",
+            subtotal: 5,
+            tax: 0,
+            total: 5,
+            currency: "TRY",
+          },
+        });
+        return { entityId: invoice.id, organizationId: ids.orgA!, replayResult: { invoiceId: invoice.id } };
+      },
+    });
+    assert.ok(ok.entityId);
+    const after = await prisma.adminMutationIdempotency.findUniqueOrThrow({
+      where: {
+        adminId_action_mutationKey: {
+          adminId: localActor.adminId,
+          action: "invoice.create",
+          mutationKey: mutationId,
+        },
+      },
+    });
+    assert.equal(after.status, "SUCCEEDED");
+  });
+
+  it("does not auto-PAID invoice on partial payment; settles on full outstanding", async () => {
+    const localActor = await mintActor("coverage");
+    const invoice = await prisma.invoice.create({
+      data: {
+        organizationId: ids.orgA!,
+        invoiceNo: `INV-PR5-${suffix}-cov`,
+        status: "ISSUED",
+        subtotal: 100,
+        tax: 0,
+        total: 100,
+        currency: "TRY",
+        issuedAt: new Date(),
+      },
+    });
+
+    await runAdminMutation({
+      action: "billing_payment.create",
+      actor: localActor,
+      organizationId: ids.orgA!,
+      entityType: "BillingPayment",
+      mutationId: generateAdminMutationKey(),
+      confirmed: true,
+      reason: "kısmi tahsilat kanıtı",
+      requestHashPayload: { invoiceId: invoice.id, amount: 40 },
+      execute: async ({ tx }) => {
+        const paidAgg = await tx.billingPayment.aggregate({
+          where: { invoiceId: invoice.id, status: "PAID" },
+          _sum: { amount: true },
+        });
+        const { evaluateInvoicePaymentCoverage, toMinorUnits } = await import(
+          "@/lib/wexon-admin-finance-policy"
+        );
+        const coverage = evaluateInvoicePaymentCoverage({
+          invoiceTotal: 100,
+          paidCoverageMinor: toMinorUnits(Number(paidAgg._sum.amount ?? 0)),
+          newPaymentAmount: 40,
+        });
+        assert.equal(coverage.invoiceAutoPaid, false);
+        const payment = await tx.billingPayment.create({
+          data: {
+            organizationId: ids.orgA!,
+            invoiceId: invoice.id,
+            amount: 40,
+            currency: "TRY",
+            status: "PAID",
+            provider: "admin_manual",
+            paidAt: new Date(),
+          },
+        });
+        return {
+          entityId: payment.id,
+          organizationId: ids.orgA!,
+          metadata: {
+            outstandingBefore: coverage.outstandingBeforeMinor / 100,
+            paidCoverageAfter: coverage.paidCoverageAfterMinor / 100,
+            invoiceAutoPaid: coverage.invoiceAutoPaid,
+          },
+          replayResult: { paymentId: payment.id },
+        };
+      },
+    });
+
+    let current = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    assert.equal(current.status, "ISSUED");
+
+    await runAdminMutation({
+      action: "billing_payment.create",
+      actor: localActor,
+      organizationId: ids.orgA!,
+      entityType: "BillingPayment",
+      mutationId: generateAdminMutationKey(),
+      confirmed: true,
+      reason: "kalan bakiyeyi kapatan tahsilat",
+      requestHashPayload: { invoiceId: invoice.id, amount: 60 },
+      execute: async ({ tx }) => {
+        const paidAgg = await tx.billingPayment.aggregate({
+          where: { invoiceId: invoice.id, status: "PAID" },
+          _sum: { amount: true },
+        });
+        const { evaluateInvoicePaymentCoverage, toMinorUnits, evaluateInvoiceStatusTransition } =
+          await import("@/lib/wexon-admin-finance-policy");
+        const coverage = evaluateInvoicePaymentCoverage({
+          invoiceTotal: 100,
+          paidCoverageMinor: toMinorUnits(Number(paidAgg._sum.amount ?? 0)),
+          newPaymentAmount: 60,
+        });
+        assert.equal(coverage.invoiceAutoPaid, true);
+        const payment = await tx.billingPayment.create({
+          data: {
+            organizationId: ids.orgA!,
+            invoiceId: invoice.id,
+            amount: 60,
+            currency: "TRY",
+            status: "PAID",
+            provider: "admin_manual",
+            paidAt: new Date(),
+          },
+        });
+        const inv = await tx.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+        const transition = evaluateInvoiceStatusTransition(inv.status, "PAID");
+        if (transition.ok && transition.kind === "apply") {
+          await tx.invoice.updateMany({
+            where: { id: invoice.id, status: inv.status },
+            data: { status: "PAID", paidAt: inv.paidAt ?? new Date() },
+          });
+        }
+        return {
+          entityId: payment.id,
+          organizationId: ids.orgA!,
+          metadata: { invoiceAutoPaid: true },
+          replayResult: { paymentId: payment.id },
+        };
+      },
+    });
+
+    current = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    assert.equal(current.status, "PAID");
+  });
+
+  it("denies invoice PAID status without sufficient PAID coverage", async () => {
+    const localActor = await mintActor("nocov");
+    const invoice = await prisma.invoice.create({
+      data: {
+        organizationId: ids.orgA!,
+        invoiceNo: `INV-PR5-${suffix}-nocov`,
+        status: "ISSUED",
+        subtotal: 80,
+        tax: 0,
+        total: 80,
+        currency: "TRY",
+        issuedAt: new Date(),
+      },
+    });
+    await assert.rejects(
+      () =>
+        runAdminMutation({
+          action: "invoice.status_change",
+          actor: localActor,
+          organizationId: ids.orgA!,
+          entityType: "Invoice",
+          entityId: invoice.id,
+          confirmed: true,
+          reason: "coverage olmadan paid denemesi",
+          execute: async ({ tx }) => {
+            const inv = await tx.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+            const paidAgg = await tx.billingPayment.aggregate({
+              where: { invoiceId: inv.id, status: "PAID" },
+              _sum: { amount: true },
+            });
+            const { assertInvoicePaidCoverageSufficient, toMinorUnits } = await import(
+              "@/lib/wexon-admin-finance-policy"
+            );
+            const coverage = assertInvoicePaidCoverageSufficient({
+              invoiceTotal: Number(inv.total),
+              paidCoverageMinor: toMinorUnits(Number(paidAgg._sum.amount ?? 0)),
+            });
+            if (!coverage.ok) {
+              throw new AdminMutationGuardError("finance_invariant_failed", coverage.message);
+            }
+            return { entityId: inv.id };
+          },
+        }),
+      (error: unknown) =>
+        error instanceof AdminMutationGuardError &&
+        error.code === "finance_invariant_failed" &&
+        /yeterli PAID tahsilat/i.test(error.safeMessage),
+    );
+  });
+
+  it("enforces global rate limit across different IPs for same admin", async () => {
+    const adminId = `global-rl-${suffix}`;
+    const results = await Promise.all(
+      Array.from({ length: 62 }, (_, i) =>
+        enforceAdminMutationRateLimit({
+          adminId,
+          riskClass: "NORMAL",
+          organizationId: null,
+          ipAddress: `10.0.0.${(i % 50) + 1}`,
+        }),
+      ),
+    );
+    const limited = results.filter((r) => !r.ok);
+    assert.ok(limited.length >= 1, "expected global 60/min backstop to deny some requests");
+    const firstDeny = limited.find((r) => !r.ok && "shouldAuditDeny" in r && r.shouldAuditDeny);
+    assert.ok(firstDeny, "expected coalesced first-deny audit marker");
   });
 });

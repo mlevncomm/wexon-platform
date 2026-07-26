@@ -43,6 +43,10 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
     await expect(form.locator('input[name="mutationId"]')).toHaveAttribute("value", /[0-9a-f-]{36}/i);
     await expect(form.locator('input[name="reason"]')).toBeVisible();
     await expect(form.locator('input[name="confirmed"]')).toBeVisible();
+    const statusValues = await form.locator('select[name="status"] option').evaluateAll((opts) =>
+      opts.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
+    );
+    expect(statusValues.sort()).toEqual(["DRAFT", "ISSUED"].sort());
   });
 
   test("PR5: double submit creates a single invoice", async ({ page }) => {
@@ -108,6 +112,66 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
     await expect(page.locator("body")).not.toContainText(/Prisma|P2002|PostgreSQL/i);
     const refreshed = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
     expect(refreshed.status).toBe("PAID");
+  });
+
+  test("PR5: subscription create requires mutationId reason confirmed", async ({ page }) => {
+    const { email } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await page.goto("/admin/subscriptions");
+    await openCollapsiblePanel(page, "Yeni abonelik oluştur");
+    const form = page.locator("form").filter({ has: page.locator('select[name="provider"]') }).first();
+    await expect(form.locator('input[name="mutationId"]')).toHaveAttribute("value", /[0-9a-f-]{36}/i);
+    await expect(form.locator('input[name="reason"]')).toBeVisible();
+    await expect(form.locator('input[name="confirmed"]')).toBeVisible();
+  });
+
+  test("PR5: subscription status requires explicit confirmed", async ({ page }) => {
+    const { email } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await page.goto("/admin/subscriptions");
+    const statusForm = page.locator("form").filter({ has: page.locator('input[name="auditNote"]') }).first();
+    await expect(statusForm.locator('input[name="confirmed"]')).toBeVisible();
+  });
+
+  test("PR5: licenses create and status expose high-risk fields", async ({ page }) => {
+    const { email } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await page.goto("/admin/licenses");
+    await openCollapsiblePanel(page, "Yeni lisans ata");
+    const createForm = page.locator("form").filter({ has: page.locator('input[name="mutationId"]') }).first();
+    await expect(createForm.locator('input[name="mutationId"]')).toHaveAttribute("value", /[0-9a-f-]{36}/i);
+    await expect(createForm.locator('input[name="reason"]')).toBeVisible();
+    await expect(createForm.locator('input[name="confirmed"]')).toBeVisible();
+    const statusForm = page.locator("form").filter({ has: page.locator('input[name="reason"]') }).filter({ has: page.locator('select[name="status"]') }).first();
+    if ((await statusForm.count()) > 0) {
+      await expect(statusForm.locator('input[name="confirmed"]')).toBeVisible();
+    }
+  });
+
+  test("PR5: integrations API key and webhook require mutationId", async ({ page }) => {
+    const { email } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await page.goto("/admin/integrations");
+    const keyForm = page.locator("form").filter({ has: page.locator('input[name="name"]') }).first();
+    await expect(keyForm.locator('input[name="mutationId"]')).toHaveAttribute("value", /[0-9a-f-]{36}/i);
+    const webhookForm = page.locator("form").filter({ has: page.locator('input[name="url"], input[name="targetUrl"]') }).first();
+    if ((await webhookForm.count()) > 0) {
+      await expect(webhookForm.locator('input[name="mutationId"]')).toHaveAttribute("value", /[0-9a-f-]{36}/i);
+    }
+  });
+
+  test("PR5: organization detail license details has no status bypass", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    await page.goto(`/admin/organizations/${orgId}`);
+    const detailsForm = page
+      .locator("form")
+      .filter({ has: page.getByRole("button", { name: /Lisans detaylarını kaydet/i }) });
+    if ((await detailsForm.count()) > 0) {
+      await expect(detailsForm.locator('select[name="status"]')).toHaveCount(0);
+      await expect(detailsForm.locator('input[name="reason"]')).toBeVisible();
+      await expect(detailsForm.locator('input[name="confirmed"]')).toBeVisible();
+    }
   });
 
   test("PR5: subscription providers remain allowlisted", async ({ page }) => {

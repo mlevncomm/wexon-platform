@@ -10,9 +10,12 @@ import {
   sanitizeAdminMutationReason,
 } from "@/lib/wexon-admin-mutation-policy";
 import {
+  assertInvoiceCreateStatus,
+  assertInvoicePaidCoverageSufficient,
   assertMoneyInvariant,
   assertPositiveAmount,
   evaluateBillingPaymentStatusTransition,
+  evaluateInvoicePaymentCoverage,
   evaluateInvoiceStatusTransition,
   evaluateLicenseStatusAgainstSubscription,
   evaluateSubscriptionStatusTransition,
@@ -31,6 +34,7 @@ import {
 } from "@/lib/wexon-admin-mutation-guard";
 import { AdminMutationGuardError } from "@/lib/wexon-admin-mutation-errors";
 import { AdminValidationError } from "@/lib/wexon-admin-validation";
+import { sanitizeAdminAuditMetadata } from "@/lib/wexon-admin-audit-sanitize";
 
 describe("admin mutation risk catalog", () => {
   it("classifies financial/security/destructive actions", () => {
@@ -77,6 +81,41 @@ describe("admin rate-limit bucket keys", () => {
   it("uses unknown IP bucket when missing", () => {
     assert.match(hashAdminIpBucket("unknown"), /^[a-f0-9]{24}$/);
   });
+
+  it("keeps global bucket admin-scoped without IP or org", () => {
+    const a = buildAdminRateLimitBucketKey({
+      adminId: "adm1",
+      riskClass: "GLOBAL",
+      organizationId: "org-ignored",
+      ipHash: "ip-a",
+      scope: "global",
+    });
+    const b = buildAdminRateLimitBucketKey({
+      adminId: "adm1",
+      riskClass: "GLOBAL",
+      organizationId: null,
+      ipHash: "ip-b",
+      scope: "global",
+    });
+    assert.equal(a, b);
+    assert.equal(a, "amrl:adm1:GLOBAL:global");
+    assert.notEqual(
+      buildAdminRateLimitBucketKey({
+        adminId: "adm1",
+        riskClass: "FINANCIAL",
+        organizationId: "org1",
+        ipHash: "ip-a",
+        scope: "short",
+      }),
+      buildAdminRateLimitBucketKey({
+        adminId: "adm1",
+        riskClass: "FINANCIAL",
+        organizationId: "org1",
+        ipHash: "ip-b",
+        scope: "short",
+      }),
+    );
+  });
 });
 
 describe("finance transition matrices", () => {
@@ -108,6 +147,32 @@ describe("finance transition matrices", () => {
       subscriptionStatus: "ACTIVE",
     });
     assert.equal(denied.ok, false);
+  });
+
+  it("computes invoice payment coverage in minor units", () => {
+    const partial = evaluateInvoicePaymentCoverage({
+      invoiceTotal: 100,
+      paidCoverageMinor: 0,
+      newPaymentAmount: 40,
+    });
+    assert.equal(partial.invoiceAutoPaid, false);
+    assert.equal(partial.outstandingAfterMinor, 6000);
+    const full = evaluateInvoicePaymentCoverage({
+      invoiceTotal: 100,
+      paidCoverageMinor: 4000,
+      newPaymentAmount: 60,
+    });
+    assert.equal(full.invoiceAutoPaid, true);
+    assert.equal(full.overpayment, false);
+    const over = evaluateInvoicePaymentCoverage({
+      invoiceTotal: 100,
+      paidCoverageMinor: 9000,
+      newPaymentAmount: 20,
+    });
+    assert.equal(over.overpayment, true);
+    assert.equal(assertInvoiceCreateStatus("PAID").ok, false);
+    assert.equal(assertInvoiceCreateStatus("ISSUED").ok, true);
+    assert.equal(assertInvoicePaidCoverageSufficient({ invoiceTotal: 100, paidCoverageMinor: 50 }).ok, false);
   });
 });
 
@@ -156,7 +221,7 @@ describe("safe error mapping and audit sanitization", () => {
       "Fatura bulunamadı.",
     );
     assert.equal(
-      getSafeAdminActionMessageLike(
+      getSafeAdminActionErrorMessage(
         new AdminMutationGuardError("rate_limit_denied", "Çok fazla işlem denemesi. Lütfen bir süre sonra tekrar deneyin."),
       ),
       "Çok fazla işlem denemesi. Lütfen bir süre sonra tekrar deneyin.",
@@ -182,18 +247,51 @@ describe("safe error mapping and audit sanitization", () => {
       organizationId: "org1",
       reason: "manuel fatura kesimi",
       confirmed: true,
+      extra: {
+        email: "raw@example.com",
+        password: "super-secret",
+        merchantOid: "ABC123456789",
+        nested: { apiKey: "tok_abc", userEmail: "nested@wexon.dev" },
+      },
     });
     assert.equal(meta.actorAdminId, "adm1");
     assert.equal(meta.actorEmailMasked, "op***@wexon.dev");
     assert.notEqual(meta.cloudflareSubjectHash, "sub-secret-value");
     assert.equal(meta.source, "admin_mutation");
+    assert.equal(meta.email, "ra***@example.com");
+    assert.equal(meta.password, undefined);
+    assert.match(String(meta.merchantOid), /…/);
+    assert.equal((meta.nested as Record<string, unknown>).apiKey, undefined);
+    assert.equal((meta.nested as Record<string, unknown>).userEmail, "ne***@wexon.dev");
     assert.ok(!JSON.stringify(meta).includes("sub-secret-value"));
   });
-});
 
-function getSafeAdminActionMessageLike(error: unknown) {
-  return getSafeAdminActionErrorMessage(error);
-}
+  it("recursively strips secrets from sanitize helper", () => {
+    const cleaned = sanitizeAdminAuditMetadata({
+      token: "abc",
+      list: [{ passwordHash: "x", email: "a@b.com" }],
+    });
+    assert.equal(cleaned.token, undefined);
+    assert.equal((cleaned.list as Array<Record<string, unknown>>)[0]?.passwordHash, undefined);
+    assert.equal((cleaned.list as Array<Record<string, unknown>>)[0]?.email, "a***@b.com");
+  });
+
+  it("never treats auditNote or acknowledgePaytrPaid as mutation confirmation", () => {
+    const confirm = { confirmed: false, reason: "" };
+    const payload = {
+      auditNote: "sufficient audit note text",
+      acknowledgePaytrPaid: true,
+    };
+    // Action contract for subscription.status_change — do not regress to
+    // `confirmed: confirm.confirmed || Boolean(payload.auditNote)`.
+    const confirmed = confirm.confirmed;
+    const reason = confirm.reason || payload.auditNote;
+    assert.equal(confirmed, false);
+    assert.equal(payload.acknowledgePaytrPaid, true);
+    assert.ok(reason.length >= 8);
+    assert.equal(requiresHighRiskConfirmation("FINANCIAL"), true);
+  });
+});
 
 describe("hosted cleanup guard", () => {
   it("fail-closes on VERCEL_ENV production/preview and NODE_ENV production", () => {

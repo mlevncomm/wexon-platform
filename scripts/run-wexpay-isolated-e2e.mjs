@@ -69,6 +69,11 @@ const mandatoryAdminMutationFinanceTests = [
   "PR5: billing create form requires reason confirmation and mutationId",
   "PR5: double submit creates a single invoice",
   "PR5: invalid invoice transition shows safe UI error",
+  "PR5: subscription create requires mutationId reason confirmed",
+  "PR5: subscription status requires explicit confirmed",
+  "PR5: licenses create and status expose high-risk fields",
+  "PR5: integrations API key and webhook require mutationId",
+  "PR5: organization detail license details has no status bypass",
   "PR5: subscription providers remain allowlisted",
   "PR5: logout clears admin session cookie",
 ];
@@ -197,7 +202,7 @@ async function runOnce(label) {
   }
   // Includes activation, auth/tenant, pricing, workspace, final closure, routing,
   // PlatformAdmin management, PR2B Cloudflare identity, and PR3 admin preview write specs.
-  const MIN_ISOLATED_PASSES = 65;
+  const MIN_ISOLATED_PASSES = 70;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
