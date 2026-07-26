@@ -9,9 +9,13 @@ import {
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminBillingData, getAdminOperationOptions } from "@/lib/wexon-admin";
 import { generateAdminMutationKey } from "@/lib/wexon-admin-mutation-idempotency";
 
-const invoiceStatusOptions = [
+const invoiceCreateStatusOptions = [
   { value: "DRAFT", label: "Taslak" },
   { value: "ISSUED", label: "Kesildi" },
+];
+
+const invoiceStatusOptions = [
+  ...invoiceCreateStatusOptions,
   { value: "PAID", label: "Ödendi" },
   { value: "OVERDUE", label: "Vadesi geçti" },
   { value: "VOID", label: "İptal" },
@@ -84,7 +88,7 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
             </AdminSelectField>
             <AdminTextField label="Fatura no" name="invoiceNo" placeholder="Otomatik üretilir" />
             <AdminSelectField label="Durum" name="status" defaultValue="ISSUED">
-              {invoiceStatusOptions.map((opt) => (
+              {invoiceCreateStatusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>

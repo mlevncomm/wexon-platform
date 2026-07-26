@@ -115,7 +115,7 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <AdminStatusPill active={plan.isActive}>{plan.isActive ? "Aktif" : "Pasif"}</AdminStatusPill>
-                  <AdminInlineToggleForm action={updateAdminPlanActiveAction.bind(null, plan.id)} returnTo="/admin/plans" isActive={plan.isActive} />
+                  <AdminInlineToggleForm action={updateAdminPlanActiveAction.bind(null, plan.id)} returnTo="/admin/plans" isActive={plan.isActive} requireHighRiskConfirm />
                 </div>
               </div>
 
@@ -245,12 +245,28 @@ export default async function AdminPlansPage({ searchParams }: { searchParams: P
                       <form action={toggleEntitlement} className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
                         <input type="hidden" name="returnTo" value="/admin/plans" />
                         <input type="hidden" name="isActive" value={entitlementActive ? "false" : "true"} />
-                        <AdminTextField
-                          label="Not (isteğe bağlı)"
-                          name="note"
-                          placeholder="Devre dışı bırakma veya yeniden etkinleştirme gerekçesi"
-                        />
-                        <div className="flex items-end">
+                        {entitlementActive ? (
+                          <>
+                            <input
+                              name="reason"
+                              required
+                              minLength={8}
+                              placeholder="Devre dışı bırakma gerekçesi (min 8 karakter)"
+                              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-300 md:col-span-2"
+                            />
+                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 md:col-span-2">
+                              <input type="checkbox" name="confirmed" value="1" required className="h-3.5 w-3.5 rounded border-slate-300" />
+                              Limit devre dışı bırakmayı onaylıyorum
+                            </label>
+                          </>
+                        ) : (
+                          <AdminTextField
+                            label="Not (isteğe bağlı)"
+                            name="note"
+                            placeholder="Yeniden etkinleştirme gerekçesi"
+                          />
+                        )}
+                        <div className="flex items-end md:col-span-2">
                           <AdminSubmitButton>
                             {entitlementActive ? "Devre Dışı Bırak" : "Yeniden Etkinleştir"}
                           </AdminSubmitButton>

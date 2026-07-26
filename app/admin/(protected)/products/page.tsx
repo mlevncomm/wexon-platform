@@ -75,6 +75,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
                   value={product.status}
                   options={productStatusOptions}
                   submitLabel="Durum"
+                  requireHighRiskConfirm
                 />
               </div>
               <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-950">{product.name}</h2>
