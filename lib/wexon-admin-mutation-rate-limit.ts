@@ -29,6 +29,10 @@ export function hashAdminIpBucket(ipAddress: string): string {
   return createHash("sha256").update(`admin-ip:${ipAddress || "unknown"}`).digest("hex").slice(0, 24);
 }
 
+/**
+ * Risk buckets may include org + IP.
+ * Global backstop is admin-scoped only: adminId + GLOBAL + global (no IP/org/risk split).
+ */
 export function buildAdminRateLimitBucketKey(input: {
   adminId: string;
   riskClass: AdminMutationRiskClass | "GLOBAL";
@@ -36,6 +40,9 @@ export function buildAdminRateLimitBucketKey(input: {
   ipHash: string;
   scope: "short" | "long" | "global";
 }): string {
+  if (input.scope === "global" || input.riskClass === "GLOBAL") {
+    return ["amrl", input.adminId, "GLOBAL", "global"].join(":");
+  }
   const org = input.organizationId?.trim() || "global";
   return ["amrl", input.adminId, input.riskClass, org, input.ipHash, input.scope].join(":");
 }
@@ -57,7 +64,7 @@ async function incrementBucket(
   const expiresAt = new Date(windowStart.getTime() + input.window.windowSeconds * 1000 + 60_000);
   const id = randomUUID();
 
-  await tx.$executeRaw`
+  const rows = await tx.$queryRaw<Array<{ count: number }>>`
     INSERT INTO "AdminMutationRateLimit" ("id", "bucketKey", "windowStart", "windowSeconds", "count", "expiresAt", "createdAt", "updatedAt")
     VALUES (${id}, ${input.bucketKey}, ${windowStart}, ${input.window.windowSeconds}, 1, ${expiresAt}, ${input.now}, ${input.now})
     ON CONFLICT ("bucketKey", "windowStart", "windowSeconds")
@@ -65,14 +72,7 @@ async function incrementBucket(
       "count" = "AdminMutationRateLimit"."count" + 1,
       "updatedAt" = ${input.now},
       "expiresAt" = GREATEST("AdminMutationRateLimit"."expiresAt", ${expiresAt})
-  `;
-
-  const rows = await tx.$queryRaw<Array<{ count: number }>>`
-    SELECT "count" FROM "AdminMutationRateLimit"
-    WHERE "bucketKey" = ${input.bucketKey}
-      AND "windowStart" = ${windowStart}
-      AND "windowSeconds" = ${input.window.windowSeconds}
-    LIMIT 1
+    RETURNING "count"
   `;
   const count = rows[0]?.count ?? 1;
   return { count, limited: count > input.window.maxCount };
@@ -104,12 +104,23 @@ export async function enforceAdminMutationRateLimit(input: {
   ipAddress: string;
   now?: Date;
   client?: RateLimitClient;
-}): Promise<{ ok: true; bucketHashes: string[] } | { ok: false; retryAfterSeconds: number; bucketHash: string }> {
+}): Promise<
+  | { ok: true; bucketHashes: string[]; increments: Array<{ bucketHash: string; count: number; maxCount: number }> }
+  | {
+      ok: false;
+      retryAfterSeconds: number;
+      bucketHash: string;
+      /** True only when this request crossed the limit (count === max + 1). */
+      shouldAuditDeny: boolean;
+      count: number;
+      maxCount: number;
+    }
+> {
   const client = input.client ?? (prisma as unknown as RateLimitClient);
   const now = input.now ?? new Date();
   const ipHash = hashAdminIpBucket(input.ipAddress || "unknown");
   const limits = ADMIN_MUTATION_RATE_LIMITS[input.riskClass];
-  const bucketHashes: string[] = [];
+  const increments: Array<{ bucketHash: string; count: number; maxCount: number }> = [];
 
   try {
     void maybeCleanupExpiredAdminRateLimits(client, now);
@@ -140,7 +151,7 @@ export async function enforceAdminMutationRateLimit(input: {
           adminId: input.adminId,
           riskClass: "GLOBAL",
           organizationId: null,
-          ipHash,
+          ipHash: "n/a",
           scope: "global",
         }),
         window: { windowSeconds: 60, maxCount: ADMIN_MUTATION_GLOBAL_PER_MINUTE },
@@ -148,22 +159,27 @@ export async function enforceAdminMutationRateLimit(input: {
     ];
 
     for (const check of checks) {
-      bucketHashes.push(createHash("sha256").update(check.key).digest("hex").slice(0, 16));
+      const bucketHash = createHash("sha256").update(check.key).digest("hex").slice(0, 16);
       const result = await incrementBucket(client, {
         bucketKey: check.key,
         window: check.window,
         now,
       });
+      increments.push({ bucketHash, count: result.count, maxCount: check.window.maxCount });
       if (result.limited) {
         return {
           ok: false,
           retryAfterSeconds: check.window.windowSeconds,
-          bucketHash: bucketHashes[bucketHashes.length - 1]!,
+          bucketHash,
+          // Serverless-safe coalescing: only the request that crossed the threshold audits.
+          shouldAuditDeny: result.count === check.window.maxCount + 1,
+          count: result.count,
+          maxCount: check.window.maxCount,
         };
       }
     }
 
-    return { ok: true, bucketHashes };
+    return { ok: true, bucketHashes: increments.map((i) => i.bucketHash), increments };
   } catch (error) {
     throw new AdminMutationGuardError(
       "rate_limit_unavailable",
