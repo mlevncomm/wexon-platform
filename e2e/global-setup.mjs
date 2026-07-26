@@ -4,11 +4,46 @@ import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
+/** Keys pinned by isolated E2E orchestration — must not be overwritten by .env.local. */
+const isolatedPinnedKeys = new Set([
+  "DATABASE_URL",
+  "DIRECT_URL",
+  "WEXON_E2E_TARGET",
+  "WEXON_E2E_CONFIRM_ISOLATED",
+  "WEXON_E2E_CONFIRM_PRODUCTION",
+  "WEXON_E2E_RELAX_RATE_LIMIT",
+  "VERCEL_ENV",
+  "E2E_BASE_URL",
+  "SMOKE_BASE_URL",
+  "SMOKE_PORT",
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN",
+  "WEXPAY_PAYTR_ENABLE_API",
+  "WEXPAY_PAYTR_ENABLE",
+  "PAYTR_ENABLED",
+  "WEXPAY_CREDENTIAL_ENCRYPTION_KEY",
+  "WEXON_EMAIL_PROVIDER",
+  "ADMIN_EMAILS",
+  "E2E_ADMIN_EMAIL",
+  "ADMIN_LOGIN_PASSWORD",
+  "E2E_ADMIN_PASSWORD",
+  "ADMIN_SESSION_SECRET",
+  "CLOUDFLARE_ACCESS_TEAM_DOMAIN",
+  "CLOUDFLARE_ACCESS_AUD",
+  "WEXON_CF_ACCESS_TEST_MODE",
+  "WEXON_CF_ACCESS_TEST_PRIVATE_JWK",
+  "WEXON_CF_ACCESS_TEST_PUBLIC_JWKS",
+]);
+
 function loadLocalEnvFile(fileName, { override = false } = {}) {
   const fullPath = resolve(process.cwd(), fileName);
   if (!existsSync(fullPath)) return;
   const parsed = dotenv.parse(readFileSync(fullPath));
+  const isolatedPinned = process.env.WEXON_E2E_CONFIRM_ISOLATED === "true";
   for (const [key, value] of Object.entries(parsed)) {
+    if (isolatedPinned && isolatedPinnedKeys.has(key)) {
+      continue;
+    }
     if (override || !process.env[key]) {
       process.env[key] = value;
     }

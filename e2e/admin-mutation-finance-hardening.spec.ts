@@ -55,7 +55,11 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
     await page.goto("/admin/billing");
     await openCollapsiblePanel(page, "Yeni fatura oluştur");
     const form = page.getByTestId("admin-invoice-create-form");
-    const invoiceNo = `INV-E2E-PR5-${Date.now()}`;
+    // Unique per attempt — Date.now alone can collide under parallel/fast restarts.
+    const invoiceNo = `INV-E2E-PR5-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const mutationId = await form.locator('input[name="mutationId"]').inputValue();
+    expect(mutationId).toMatch(/[0-9a-f-]{36}/i);
+
     await form.locator('select[name="organizationId"]').selectOption(orgId);
     await form.locator('input[name="invoiceNo"]').fill(invoiceNo);
     await form.locator('input[name="subtotal"]').fill("100");
@@ -65,8 +69,20 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
     await form.locator('input[name="confirmed"]').check();
 
     const submit = form.getByRole("button", { name: /Fatura oluştur/i });
+    // Do NOT waitForURL(/\/admin\/billing/) — we are already there, so it resolves
+    // immediately and the DB assertion races ahead of the server-action commit.
+    const postPromise = page.waitForResponse(
+      (res) => {
+        const req = res.request();
+        if (req.method() !== "POST") return false;
+        if (!req.url().includes("/admin/billing")) return false;
+        return Boolean(req.headers()["next-action"] || req.postData());
+      },
+      { timeout: 20_000 },
+    );
+
     await Promise.all([
-      page.waitForURL(/\/admin\/billing/),
+      postPromise,
       (async () => {
         await submit.click({ noWaitAfter: true });
         await submit.click({ noWaitAfter: true }).catch(() => undefined);
@@ -78,8 +94,16 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
       throw new Error(`invoice create redirected with adminError; body snippet: ${body.slice(0, 500)}`);
     }
 
-    const count = await prisma.invoice.count({ where: { invoiceNo } });
-    expect(count).toBe(1);
+    await expect
+      .poll(async () => prisma.invoice.count({ where: { invoiceNo } }), {
+        message: `invoice ${invoiceNo} (mutationId=${mutationId}) should commit exactly once`,
+        timeout: 15_000,
+        intervals: [100, 250, 500, 1000],
+      })
+      .toBe(1);
+
+    // Idempotent double-submit must not create a second row after settle.
+    expect(await prisma.invoice.count({ where: { invoiceNo } })).toBe(1);
   });
 
   test("PR5: invalid invoice transition shows safe UI error", async ({ page }) => {
