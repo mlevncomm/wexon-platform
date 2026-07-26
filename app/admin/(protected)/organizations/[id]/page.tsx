@@ -109,10 +109,10 @@ export default async function AdminOrganizationDetailPage({
   const licenseSubscriptionSynced =
     !wexPayLicense ? null : !wexPaySubscription ? "Abonelik yok" : wexPayLicense.planId === wexPaySubscription.planId ? "Senkron" : "Tutarsız";
   const usageSnapshot = await collectOrganizationUsageSnapshot(prisma, organization.id);
-  const activationFeeLedger =
-    organization.activationFeeLedgers.find((ledger) => ledger.productId === wexPayLicense?.productId) ??
-    organization.activationFeeLedgers[0] ??
-    null;
+  // WexPay panel must only show the WexPay product ledger — never fall back to another product.
+  const activationFeeLedger = wexPayLicense
+    ? organization.activationFeeLedgers.find((ledger) => ledger.productId === wexPayLicense.productId) ?? null
+    : null;
   const activationWaivePolicy = activationFeeLedger
     ? evaluateActivationFeeWaivePolicy({
         status: activationFeeLedger.status,
@@ -122,7 +122,11 @@ export default async function AdminOrganizationDetailPage({
       })
     : null;
   const activationReservationFresh = activationWaivePolicy?.reservationFresh ?? false;
-  const activationCanWaive = Boolean(activationWaivePolicy?.canWaive);
+  const activationCanWaive = Boolean(
+    activationWaivePolicy?.canWaive &&
+      wexPayLicense &&
+      activationFeeLedger?.productId === wexPayLicense.productId,
+  );
   const updateOrganization = updateAdminOrganizationAction.bind(null, organization.id);
   const enableWexPayAccess = enableWexPayAccessAction.bind(null, organization.id);
   const activateWexPayAccess = updateWexPayAccessStatusAction.bind(null, organization.id, "ACTIVE");
@@ -578,7 +582,9 @@ export default async function AdminOrganizationDetailPage({
               )}
             </>
           ) : (
-            <AdminActionNotice>Bu organizasyon için aktivasyon ücreti kaydı yok.</AdminActionNotice>
+            <AdminActionNotice data-testid="activation-fee-wexpay-missing">
+              Bu organizasyon için WexPay aktivasyon ücreti kaydı yok
+            </AdminActionNotice>
           )}
         </div>
       </AdminFormPanel>
