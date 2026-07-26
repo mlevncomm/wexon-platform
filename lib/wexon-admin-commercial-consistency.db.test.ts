@@ -7,11 +7,18 @@ import { prisma } from "@/lib/prisma";
 import {
   __clearCommercialAuditWriterForTests,
   __setCommercialAuditWriterForTests,
+  ACTIVATION_FEE_LOCK_NAMESPACE,
+  activationFeeLockEntity,
   changeLicensePlanWithSubscriptionSync,
-  commercialLicensePlanLockEntity,
-  COMMERCIAL_LICENSE_PLAN_LOCK_NAMESPACE,
   waiveActivationFeeAsAdmin,
 } from "@/lib/wexon-admin-commercial-consistency";
+import {
+  ActivationFeeError,
+  markActivationFeePaid,
+  reserveActivationFeeForCheckout,
+} from "@/lib/wexon-activation-fee";
+import { buildCheckoutQuote } from "@/lib/wexon-billing-tax-policy";
+import { getCanonicalTier } from "@/lib/wexpay-canonical-catalog";
 import type { AdminSession } from "@/lib/wexon-admin-auth";
 import { AdminValidationError } from "@/lib/wexon-admin-validation";
 import { syncSubscriptionAccessState } from "@/lib/wexon-subscription-lifecycle";
@@ -75,6 +82,55 @@ async function waitForAdvisoryWaiters(
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(`Timed out waiting for ${minWaiters} advisory lock waiter(s)`);
+}
+
+/**
+ * Waiters blocked on another transaction's row lock (e.g. PlatformAdmin FOR UPDATE).
+ * PostgreSQL may expose these as ungranted `transactionid` and/or `tuple` locks.
+ */
+async function waitForRowLockWaiters(
+  monitor: pg.PoolClient,
+  minWaiters: number,
+  timeoutMs = 10_000,
+) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const rows = await monitor.query<{ c: string }>(
+      `SELECT COUNT(*)::int AS c
+       FROM pg_locks
+       WHERE NOT granted
+         AND locktype IN ('transactionid', 'tuple')`,
+    );
+    if (Number(rows.rows[0]?.c ?? 0) >= minWaiters) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${minWaiters} row-lock waiter(s)`);
+}
+
+async function createCheckoutPayment(planId: string, quote: ReturnType<typeof buildCheckoutQuote>) {
+  return prisma.subscriptionPayment.create({
+    data: {
+      organizationId: ids.orgA!,
+      planId,
+      provider: "PAYTR",
+      providerMode: "iframe",
+      merchantOid: `pr4race${randomUUID().slice(0, 10)}`,
+      amount: quote.grossAmountMinor / 100,
+      amountMinor: quote.grossAmountMinor,
+      subscriptionAmountMinor: quote.subscriptionAmountMinor,
+      activationFeeAmountMinor: quote.activationFeeAmountMinor,
+      netAmountMinor: quote.netAmountMinor,
+      taxRateBps: quote.taxRateBps,
+      taxAmountMinor: quote.taxAmountMinor,
+      grossAmountMinor: quote.grossAmountMinor,
+      taxEnabledAtPurchase: quote.taxEnabledAtPurchase,
+      taxModeAtPurchase: quote.taxModeAtPurchase,
+      currency: "TRY",
+      taxRatePct: 20,
+      billingInterval: "MONTHLY",
+      status: "PENDING_CALLBACK",
+    },
+  });
 }
 
 async function ensurePendingLedger(opts?: {
@@ -459,6 +515,9 @@ describe("admin commercial consistency (DB-backed)", () => {
   it("deterministic concurrent upgrade-then-downgrade rejects stale Essential target", async () => {
     await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
     await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
 
     const restaurant = await prisma.restaurant.create({
       data: {
@@ -484,40 +543,39 @@ describe("admin commercial consistency (DB-backed)", () => {
     const pool = new pg.Pool({ connectionString: databaseUrl, max: 4 });
     const holder = await pool.connect();
     const monitor = await pool.connect();
-    const lockEntity = commercialLicensePlanLockEntity(ids.orgA!, ids.licenseA!);
+    let upgradePromise: ReturnType<typeof changeLicensePlanWithSubscriptionSync> | undefined;
+    let downgradePromise: ReturnType<typeof changeLicensePlanWithSubscriptionSync> | undefined;
 
     try {
+      // Barrier on PlatformAdmin row lock (first lock in commercial order).
       await holder.query("BEGIN");
-      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
-        COMMERCIAL_LICENSE_PLAN_LOCK_NAMESPACE,
-        lockEntity,
-      ]);
+      await holder.query(`SELECT id FROM "PlatformAdmin" WHERE id = $1 FOR UPDATE`, [ids.platformAdmin!]);
 
-      const upgradePromise = changeLicensePlanWithSubscriptionSync({
+      upgradePromise = changeLicensePlanWithSubscriptionSync({
         organizationId: ids.orgA!,
         licenseId: ids.licenseA!,
         targetPlanId: ids.growth!,
-        reason: "Concurrent upgrade under advisory barrier",
+        reason: "Concurrent upgrade under PlatformAdmin barrier",
         confirmed: true,
         actor,
       });
-      await waitForAdvisoryWaiters(monitor, 1);
+      await waitForRowLockWaiters(monitor, 1);
 
-      const downgradePromise = changeLicensePlanWithSubscriptionSync({
+      downgradePromise = changeLicensePlanWithSubscriptionSync({
         organizationId: ids.orgA!,
         licenseId: ids.licenseA!,
         targetPlanId: ids.essential!,
-        reason: "Concurrent stale downgrade under advisory barrier",
+        reason: "Concurrent stale downgrade under PlatformAdmin barrier",
         confirmed: true,
         actor,
       });
-      await waitForAdvisoryWaiters(monitor, 2);
+      await waitForRowLockWaiters(monitor, 2);
 
       await holder.query("COMMIT");
 
       const upgrade = await upgradePromise;
       assert.equal(upgrade.changeType, "upgrade");
-      await assert.rejects(() => downgradePromise, /Paket düşürme reddedildi/);
+      await assert.rejects(() => downgradePromise!, /Paket düşürme reddedildi/);
 
       const license = await prisma.license.findUniqueOrThrow({ where: { id: ids.licenseA! } });
       const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: ids.subscriptionA! } });
@@ -540,6 +598,7 @@ describe("admin commercial consistency (DB-backed)", () => {
       } catch {
         /* already committed */
       }
+      await Promise.allSettled([upgradePromise, downgradePromise].filter(Boolean));
       holder.release();
       monitor.release();
       await pool.end();
@@ -898,5 +957,578 @@ describe("admin commercial consistency (DB-backed)", () => {
     assert.equal(afterB.planId, beforeB.planId);
     assert.equal(afterOtherInstall.status, "ACTIVE");
     await prisma.appInstallation.delete({ where: { id: otherInstall.id } });
+  });
+
+  it("fails closed when PlatformAdmin is deactivated mid-transaction (plan change)", async () => {
+    await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
+    await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
+    const beforeLicense = await prisma.license.findUniqueOrThrow({ where: { id: ids.licenseA! } });
+    const beforeSub = await prisma.subscription.findUniqueOrThrow({ where: { id: ids.subscriptionA! } });
+    const beforeAudits = await prisma.auditLog.count({
+      where: { organizationId: ids.orgA!, action: "admin.license.plan_changed" },
+    });
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    let planChangePromise: ReturnType<typeof changeLicensePlanWithSubscriptionSync> | undefined;
+    try {
+      await holder.query("BEGIN");
+      await holder.query(`SELECT id FROM "PlatformAdmin" WHERE id = $1 FOR UPDATE`, [ids.platformAdmin!]);
+      await holder.query(`UPDATE "PlatformAdmin" SET "isActive" = false, "updatedAt" = NOW() WHERE id = $1`, [
+        ids.platformAdmin!,
+      ]);
+
+      planChangePromise = changeLicensePlanWithSubscriptionSync({
+        organizationId: ids.orgA!,
+        licenseId: ids.licenseA!,
+        targetPlanId: ids.growth!,
+        reason: "Mid-tx deactivation must fail closed",
+        confirmed: true,
+        actor,
+      });
+      await waitForRowLockWaiters(monitor, 1);
+      await holder.query("COMMIT");
+
+      await assert.rejects(
+        () => planChangePromise!,
+        (error: unknown) => error instanceof AdminValidationError && /yetkiniz yok/i.test(error.message),
+      );
+
+      const afterLicense = await prisma.license.findUniqueOrThrow({ where: { id: ids.licenseA! } });
+      const afterSub = await prisma.subscription.findUniqueOrThrow({ where: { id: ids.subscriptionA! } });
+      const afterAudits = await prisma.auditLog.count({
+        where: { organizationId: ids.orgA!, action: "admin.license.plan_changed" },
+      });
+      assert.equal(afterLicense.planId, beforeLicense.planId);
+      assert.equal(afterSub.planId, beforeSub.planId);
+      assert.equal(afterAudits, beforeAudits);
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      await Promise.allSettled([planChangePromise].filter(Boolean));
+      holder.release();
+      monitor.release();
+      await pool.end();
+      await prisma.platformAdmin.update({ where: { id: ids.platformAdmin! }, data: { isActive: true } });
+    }
+  });
+
+  it("fails closed when PlatformAdmin is deactivated mid-transaction (fee waive)", async () => {
+    await ensurePendingLedger({ paymentStatus: null, reservedUntil: null });
+    const before = await prisma.activationFeeLedger.findUniqueOrThrow({
+      where: { organizationId_productId: { organizationId: ids.orgA!, productId: ids.product! } },
+    });
+    const beforeAudits = await prisma.auditLog.count({
+      where: { organizationId: ids.orgA!, action: "admin.activation_fee.waived" },
+    });
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    let waivePromise: ReturnType<typeof waiveActivationFeeAsAdmin> | undefined;
+    try {
+      await holder.query("BEGIN");
+      await holder.query(`SELECT id FROM "PlatformAdmin" WHERE id = $1 FOR UPDATE`, [ids.platformAdmin!]);
+      await holder.query(`UPDATE "PlatformAdmin" SET "isActive" = false, "updatedAt" = NOW() WHERE id = $1`, [
+        ids.platformAdmin!,
+      ]);
+
+      waivePromise = waiveActivationFeeAsAdmin({
+        organizationId: ids.orgA!,
+        productId: ids.product!,
+        reason: "Mid-tx deactivation waive must fail closed",
+        confirmed: true,
+        actor,
+      });
+      await waitForRowLockWaiters(monitor, 1);
+      await holder.query("COMMIT");
+
+      await assert.rejects(() => waivePromise!, /yetkiniz yok/i);
+      const after = await prisma.activationFeeLedger.findUniqueOrThrow({ where: { id: before.id } });
+      const afterAudits = await prisma.auditLog.count({
+        where: { organizationId: ids.orgA!, action: "admin.activation_fee.waived" },
+      });
+      assert.equal(after.status, "PENDING");
+      assert.equal(afterAudits, beforeAudits);
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      await Promise.allSettled([waivePromise].filter(Boolean));
+      holder.release();
+      monitor.release();
+      await pool.end();
+      await prisma.platformAdmin.update({ where: { id: ids.platformAdmin! }, data: { isActive: true } });
+    }
+  });
+
+  it("ACTIVE PlatformAdmin can still change plan and waive after concurrency proofs", async () => {
+    await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
+    await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
+    const upgraded = await changeLicensePlanWithSubscriptionSync({
+      organizationId: ids.orgA!,
+      licenseId: ids.licenseA!,
+      targetPlanId: ids.growth!,
+      reason: "Active admin still succeeds after lock proofs",
+      confirmed: true,
+      actor,
+    });
+    assert.equal(upgraded.changeType, "upgrade");
+
+    await ensurePendingLedger({ paymentStatus: null, reservedUntil: null });
+    const waived = await waiveActivationFeeAsAdmin({
+      organizationId: ids.orgA!,
+      productId: ids.product!,
+      reason: "Active admin waive still succeeds",
+      confirmed: true,
+      actor,
+    });
+    assert.equal(waived.status, "WAIVED");
+  });
+
+  it("deterministic reservation-then-waiver: fresh PENDING blocks waive and keeps payment link", async () => {
+    await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
+    await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
+    const fee = getCanonicalTier("essential").activationFeeMinor;
+    const quote = buildCheckoutQuote({
+      subscriptionAmountMinor: getCanonicalTier("essential").monthlyPriceMinor,
+      activationFeeAmountMinor: fee,
+    });
+    const payment = await createCheckoutPayment(ids.essential!, quote);
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    const lockEntity = activationFeeLockEntity(ids.orgA!, ids.product!);
+    let reservePromise: Promise<unknown> | undefined;
+    let waivePromise: Promise<unknown> | undefined;
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        ACTIVATION_FEE_LOCK_NAMESPACE,
+        lockEntity,
+      ]);
+
+      reservePromise = prisma.$transaction(async (tx) => {
+        return reserveActivationFeeForCheckout(tx, {
+          organizationId: ids.orgA!,
+          productId: ids.product!,
+          planId: ids.essential!,
+          activationFeeMinor: fee,
+          quote,
+          subscriptionPaymentId: payment.id,
+          isDemo: false,
+        });
+      });
+      await waitForAdvisoryWaiters(monitor, 1);
+
+      waivePromise = waiveActivationFeeAsAdmin({
+        organizationId: ids.orgA!,
+        productId: ids.product!,
+        reason: "Waiver after reservation must see fresh PENDING",
+        confirmed: true,
+        actor,
+      });
+      await waitForAdvisoryWaiters(monitor, 2);
+      await holder.query("COMMIT");
+
+      const reserved = await reservePromise;
+      assert.equal((reserved as { status: string }).status, "PENDING");
+      await assert.rejects(() => waivePromise!, AdminValidationError);
+
+      const ledger = await prisma.activationFeeLedger.findUniqueOrThrow({
+        where: { organizationId_productId: { organizationId: ids.orgA!, productId: ids.product! } },
+      });
+      assert.equal(ledger.status, "PENDING");
+      assert.equal(ledger.subscriptionPaymentId, payment.id);
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      await Promise.allSettled([reservePromise, waivePromise].filter(Boolean));
+      holder.release();
+      monitor.release();
+      await pool.end();
+    }
+  });
+
+  it("deterministic waiver-then-reservation: WAIVED is not overwritten to PENDING", async () => {
+    await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
+    await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
+    await ensurePendingLedger({ paymentStatus: null, reservedUntil: null });
+    const fee = getCanonicalTier("essential").activationFeeMinor;
+    const quote = buildCheckoutQuote({
+      subscriptionAmountMinor: getCanonicalTier("essential").monthlyPriceMinor,
+      activationFeeAmountMinor: fee,
+    });
+    const payment = await createCheckoutPayment(ids.essential!, quote);
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    const lockEntity = activationFeeLockEntity(ids.orgA!, ids.product!);
+    let reservePromise: Promise<unknown> | undefined;
+    let waivePromise: Promise<unknown> | undefined;
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        ACTIVATION_FEE_LOCK_NAMESPACE,
+        lockEntity,
+      ]);
+
+      waivePromise = waiveActivationFeeAsAdmin({
+        organizationId: ids.orgA!,
+        productId: ids.product!,
+        reason: "Waiver first under shared activation lock",
+        confirmed: true,
+        actor,
+      });
+      await waitForAdvisoryWaiters(monitor, 1);
+
+      reservePromise = prisma.$transaction(async (tx) => {
+        return reserveActivationFeeForCheckout(tx, {
+          organizationId: ids.orgA!,
+          productId: ids.product!,
+          planId: ids.essential!,
+          activationFeeMinor: fee,
+          quote,
+          subscriptionPaymentId: payment.id,
+          isDemo: false,
+        });
+      });
+      await waitForAdvisoryWaiters(monitor, 2);
+      await holder.query("COMMIT");
+
+      const waived = await waivePromise;
+      assert.equal((waived as { status: string }).status, "WAIVED");
+      const reserved = await reservePromise;
+      assert.equal((reserved as { status: string; ledgerId: string | null }).status, "WAIVED");
+      assert.equal((reserved as { ledgerId: string | null }).ledgerId, (waived as { id: string }).id);
+
+      const ledger = await prisma.activationFeeLedger.findUniqueOrThrow({
+        where: { organizationId_productId: { organizationId: ids.orgA!, productId: ids.product! } },
+      });
+      assert.equal(ledger.status, "WAIVED");
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      await Promise.allSettled([reservePromise, waivePromise].filter(Boolean));
+      holder.release();
+      monitor.release();
+      await pool.end();
+    }
+  });
+
+  it("deterministic callback-then-waiver: PAID blocks waive", async () => {
+    await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
+    await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
+    const fee = getCanonicalTier("essential").activationFeeMinor;
+    const quote = buildCheckoutQuote({
+      subscriptionAmountMinor: getCanonicalTier("essential").monthlyPriceMinor,
+      activationFeeAmountMinor: fee,
+    });
+    const payment = await createCheckoutPayment(ids.essential!, quote);
+    await prisma.$transaction(async (tx) => {
+      await reserveActivationFeeForCheckout(tx, {
+        organizationId: ids.orgA!,
+        productId: ids.product!,
+        planId: ids.essential!,
+        activationFeeMinor: fee,
+        quote,
+        subscriptionPaymentId: payment.id,
+        isDemo: false,
+      });
+    });
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    const lockEntity = activationFeeLockEntity(ids.orgA!, ids.product!);
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        ACTIVATION_FEE_LOCK_NAMESPACE,
+        lockEntity,
+      ]);
+
+      const paidPromise = prisma.$transaction(async (tx) => {
+        return markActivationFeePaid(tx, {
+          organizationId: ids.orgA!,
+          productId: ids.product!,
+          subscriptionPaymentId: payment.id,
+          activationFeeAmountMinor: fee,
+        });
+      });
+      await waitForAdvisoryWaiters(monitor, 1);
+
+      const waivePromise = waiveActivationFeeAsAdmin({
+        organizationId: ids.orgA!,
+        productId: ids.product!,
+        reason: "Waiver after callback must see PAID",
+        confirmed: true,
+        actor,
+      });
+      await waitForAdvisoryWaiters(monitor, 2);
+      await holder.query("COMMIT");
+
+      const paid = await paidPromise;
+      assert.equal(paid.updated, true);
+      await assert.rejects(() => waivePromise, /değiştirilemez|tahsilat|uzlaştırma/i);
+
+      const ledger = await prisma.activationFeeLedger.findUniqueOrThrow({
+        where: { organizationId_productId: { organizationId: ids.orgA!, productId: ids.product! } },
+      });
+      assert.equal(ledger.status, "PAID");
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      holder.release();
+      monitor.release();
+      await pool.end();
+    }
+  });
+
+  it("deterministic waiver-then-callback: WAIVED is not overwritten by markPaid", async () => {
+    await ensurePendingLedger({ paymentStatus: "PENDING_CALLBACK", reservedUntil: new Date(Date.now() + 20 * 60 * 1000) });
+    const ledgerBefore = await prisma.activationFeeLedger.findUniqueOrThrow({
+      where: { organizationId_productId: { organizationId: ids.orgA!, productId: ids.product! } },
+    });
+    // Clear payment link so waive policy allows; keep payment id for callback ownership attempt after waive.
+    const paymentId = ledgerBefore.subscriptionPaymentId!;
+    await prisma.activationFeeLedger.update({
+      where: { id: ledgerBefore.id },
+      data: { subscriptionPaymentId: null, reservedUntil: null },
+    });
+    // Re-link payment id into a second PENDING path: waive first on clear ledger, then callback with payment.
+    const fee = getCanonicalTier("essential").activationFeeMinor;
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    const lockEntity = activationFeeLockEntity(ids.orgA!, ids.product!);
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        ACTIVATION_FEE_LOCK_NAMESPACE,
+        lockEntity,
+      ]);
+
+      const waivePromise = waiveActivationFeeAsAdmin({
+        organizationId: ids.orgA!,
+        productId: ids.product!,
+        reason: "Waiver before callback under shared lock",
+        confirmed: true,
+        actor,
+      });
+      await waitForAdvisoryWaiters(monitor, 1);
+
+      const paidPromise = prisma.$transaction(async (tx) => {
+        return markActivationFeePaid(tx, {
+          organizationId: ids.orgA!,
+          productId: ids.product!,
+          subscriptionPaymentId: paymentId,
+          activationFeeAmountMinor: fee,
+        });
+      });
+      await waitForAdvisoryWaiters(monitor, 2);
+      await holder.query("COMMIT");
+
+      const waived = await waivePromise;
+      assert.equal(waived.status, "WAIVED");
+      await assert.rejects(
+        () => paidPromise,
+        (error: unknown) => error instanceof ActivationFeeError && error.code === "ACTIVATION_FEE_IMMUTABLE",
+      );
+
+      const ledger = await prisma.activationFeeLedger.findUniqueOrThrow({ where: { id: waived.id } });
+      assert.equal(ledger.status, "WAIVED");
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      holder.release();
+      monitor.release();
+      await pool.end();
+    }
+  });
+
+  it("deterministic reservation-before-plan-change rejects plan change after fresh PENDING", async () => {
+    await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
+    await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
+    const beforeAudits = await prisma.auditLog.count({
+      where: { organizationId: ids.orgA!, action: "admin.license.plan_changed" },
+    });
+    const fee = getCanonicalTier("essential").activationFeeMinor;
+    const quote = buildCheckoutQuote({
+      subscriptionAmountMinor: getCanonicalTier("essential").monthlyPriceMinor,
+      activationFeeAmountMinor: fee,
+    });
+    const payment = await createCheckoutPayment(ids.essential!, quote);
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    const lockEntity = activationFeeLockEntity(ids.orgA!, ids.product!);
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        ACTIVATION_FEE_LOCK_NAMESPACE,
+        lockEntity,
+      ]);
+
+      const reservePromise = prisma.$transaction(async (tx) => {
+        return reserveActivationFeeForCheckout(tx, {
+          organizationId: ids.orgA!,
+          productId: ids.product!,
+          planId: ids.essential!,
+          activationFeeMinor: fee,
+          quote,
+          subscriptionPaymentId: payment.id,
+          isDemo: false,
+        });
+      });
+      await waitForAdvisoryWaiters(monitor, 1);
+
+      const planChangePromise = changeLicensePlanWithSubscriptionSync({
+        organizationId: ids.orgA!,
+        licenseId: ids.licenseA!,
+        targetPlanId: ids.growth!,
+        reason: "Plan change after reservation must re-read ledger",
+        confirmed: true,
+        actor,
+      });
+      await waitForAdvisoryWaiters(monitor, 2);
+      await holder.query("COMMIT");
+
+      await reservePromise;
+      await assert.rejects(() => planChangePromise, /rezervasyon/);
+
+      const license = await prisma.license.findUniqueOrThrow({ where: { id: ids.licenseA! } });
+      const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: ids.subscriptionA! } });
+      const afterAudits = await prisma.auditLog.count({
+        where: { organizationId: ids.orgA!, action: "admin.license.plan_changed" },
+      });
+      assert.equal(license.planId, ids.essential);
+      assert.equal(subscription.planId, ids.essential);
+      assert.equal(afterAudits, beforeAudits);
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      holder.release();
+      monitor.release();
+      await pool.end();
+    }
+  });
+
+  it("deterministic plan-change-before-reservation rejects stale Essential quote after Growth", async () => {
+    await prisma.license.update({ where: { id: ids.licenseA! }, data: { planId: ids.essential! } });
+    await prisma.subscription.update({ where: { id: ids.subscriptionA! }, data: { planId: ids.essential! } });
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: ids.orgA!, productId: ids.product! },
+    });
+    const fee = getCanonicalTier("essential").activationFeeMinor;
+    const quote = buildCheckoutQuote({
+      subscriptionAmountMinor: getCanonicalTier("essential").monthlyPriceMinor,
+      activationFeeAmountMinor: fee,
+    });
+    const payment = await createCheckoutPayment(ids.essential!, quote);
+
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 4 });
+    const holder = await pool.connect();
+    const monitor = await pool.connect();
+    const lockEntity = activationFeeLockEntity(ids.orgA!, ids.product!);
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        ACTIVATION_FEE_LOCK_NAMESPACE,
+        lockEntity,
+      ]);
+
+      const planChangePromise = changeLicensePlanWithSubscriptionSync({
+        organizationId: ids.orgA!,
+        licenseId: ids.licenseA!,
+        targetPlanId: ids.growth!,
+        reason: "Plan change first under shared activation lock",
+        confirmed: true,
+        actor,
+      });
+      await waitForAdvisoryWaiters(monitor, 1);
+
+      const reservePromise = prisma.$transaction(async (tx) => {
+        return reserveActivationFeeForCheckout(tx, {
+          organizationId: ids.orgA!,
+          productId: ids.product!,
+          planId: ids.essential!,
+          activationFeeMinor: fee,
+          quote,
+          subscriptionPaymentId: payment.id,
+          isDemo: false,
+        });
+      });
+      await waitForAdvisoryWaiters(monitor, 2);
+      await holder.query("COMMIT");
+
+      const changed = await planChangePromise;
+      assert.equal(changed.changeType, "upgrade");
+      await assert.rejects(
+        () => reservePromise,
+        (error: unknown) => error instanceof ActivationFeeError && error.code === "ACTIVATION_FEE_STALE_QUOTE",
+      );
+
+      const license = await prisma.license.findUniqueOrThrow({ where: { id: ids.licenseA! } });
+      const subscription = await prisma.subscription.findUniqueOrThrow({ where: { id: ids.subscriptionA! } });
+      assert.equal(license.planId, ids.growth);
+      assert.equal(subscription.planId, ids.growth);
+      const ledger = await prisma.activationFeeLedger.findUnique({
+        where: { organizationId_productId: { organizationId: ids.orgA!, productId: ids.product! } },
+      });
+      assert.equal(ledger, null);
+    } finally {
+      try {
+        await holder.query("ROLLBACK");
+      } catch {
+        /* committed */
+      }
+      holder.release();
+      monitor.release();
+      await pool.end();
+    }
   });
 });

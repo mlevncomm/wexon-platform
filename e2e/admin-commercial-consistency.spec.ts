@@ -367,6 +367,64 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await expect(page.getByTestId("activation-fee-panel")).toContainText(/muafiyet işlemi uygun değil|Ödendi|PAID/i);
   });
 
+  test("PR4C: cross-product ledger is not shown as WexPay activation fee", async ({ page }) => {
+    const { email, orgId } = requireFixtures();
+    await loginAdmin(page, email, password);
+    const license = await ensureOrgHasSubscription(orgId);
+
+    // Remove WexPay ledger so only another product's ledger remains.
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: orgId, productId: license.productId },
+    });
+
+    const otherProduct = await prisma.product.upsert({
+      where: { key: "wexb2b-pr4c-e2e" },
+      create: {
+        key: "wexb2b-pr4c-e2e",
+        name: "WexB2B PR4C E2E",
+        status: "ACTIVE",
+        isActive: true,
+      },
+      update: { isActive: true, status: "ACTIVE" },
+    });
+    await prisma.activationFeeLedger.upsert({
+      where: {
+        organizationId_productId: { organizationId: orgId, productId: otherProduct.id },
+      },
+      create: {
+        organizationId: orgId,
+        productId: otherProduct.id,
+        status: "PENDING",
+        activationFeeMinor: 99900,
+        taxAmountMinor: 0,
+        grossAmountMinor: 99900,
+        reservedUntil: null,
+        subscriptionPaymentId: null,
+      },
+      update: {
+        status: "PENDING",
+        activationFeeMinor: 99900,
+        waivedReason: null,
+        reservedUntil: null,
+        subscriptionPaymentId: null,
+        paidAt: null,
+      },
+    });
+
+    await page.goto(`/admin/organizations/${orgId}`);
+    await openCommercialPanels(page);
+    await expect(page.getByTestId("activation-fee-wexpay-missing")).toContainText(
+      /WexPay aktivasyon ücreti kaydı yok/i,
+    );
+    await expect(page.getByTestId("activation-fee-waive-form")).toHaveCount(0);
+    await expect(page.getByTestId("activation-fee-panel")).not.toContainText("999");
+    await expect(page.getByTestId("activation-fee-status")).toHaveCount(0);
+
+    await prisma.activationFeeLedger.deleteMany({
+      where: { organizationId: orgId, productId: otherProduct.id },
+    });
+  });
+
   test("PR4C: cross-tenant license plan change is rejected", async ({ page }) => {
     const { email, orgId } = requireFixtures();
     await loginAdmin(page, email, password);

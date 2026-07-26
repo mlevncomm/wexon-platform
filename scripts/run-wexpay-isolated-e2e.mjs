@@ -59,6 +59,7 @@ const mandatoryAdminCommercialTests = [
   "PR4C: suitable downgrade succeeds when usage fits",
   "PR4C: activation fee panel and suitable waive",
   "PR4C: settled ledger waive is rejected",
+  "PR4C: cross-product ledger is not shown as WexPay activation fee",
   "PR4C: cross-tenant license plan change is rejected",
   "PR4C: subscription create form providers are allowlisted",
   "PR4C: PR3 read-only preview regression still holds",
