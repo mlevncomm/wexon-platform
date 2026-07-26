@@ -144,3 +144,71 @@ export function assertPositiveAmount(amount: number, label = "Tutar"): { ok: tru
   }
   return { ok: true };
 }
+
+/** Minor-unit (cents) helpers — avoid float comparison for invoice settlement. */
+export function toMinorUnits(amount: number): number {
+  return Math.round(amount * 100);
+}
+
+export function fromMinorUnits(minor: number): number {
+  return Math.round(minor) / 100;
+}
+
+export type InvoicePaymentCoverageInput = {
+  invoiceTotal: number;
+  /** Sum of BillingPayment amounts with status PAID only. */
+  paidCoverageMinor: number;
+  /** New PAID payment amount being applied (0 when checking status-only). */
+  newPaymentAmount?: number;
+};
+
+export type InvoicePaymentCoverageResult = {
+  invoiceTotalMinor: number;
+  outstandingBeforeMinor: number;
+  paidCoverageAfterMinor: number;
+  outstandingAfterMinor: number;
+  invoiceAutoPaid: boolean;
+  overpayment: boolean;
+};
+
+/**
+ * Compute settlement coverage for a BillingPayment against an Invoice.
+ * Only PAID payments count; REFUNDED/FAILED/PENDING do not.
+ */
+export function evaluateInvoicePaymentCoverage(input: InvoicePaymentCoverageInput): InvoicePaymentCoverageResult {
+  const invoiceTotalMinor = toMinorUnits(input.invoiceTotal);
+  const newPaymentMinor = toMinorUnits(input.newPaymentAmount ?? 0);
+  const outstandingBeforeMinor = Math.max(0, invoiceTotalMinor - input.paidCoverageMinor);
+  const paidCoverageAfterMinor = input.paidCoverageMinor + newPaymentMinor;
+  const outstandingAfterMinor = invoiceTotalMinor - paidCoverageAfterMinor;
+  const overpayment = outstandingAfterMinor < 0;
+  const invoiceAutoPaid = !overpayment && outstandingAfterMinor === 0 && paidCoverageAfterMinor > 0;
+  return {
+    invoiceTotalMinor,
+    outstandingBeforeMinor,
+    paidCoverageAfterMinor,
+    outstandingAfterMinor: Math.max(0, outstandingAfterMinor),
+    invoiceAutoPaid,
+    overpayment,
+  };
+}
+
+export function assertInvoicePaidCoverageSufficient(input: {
+  invoiceTotal: number;
+  paidCoverageMinor: number;
+}): { ok: true } | { ok: false; message: string } {
+  const totalMinor = toMinorUnits(input.invoiceTotal);
+  if (input.paidCoverageMinor < totalMinor) {
+    return { ok: false, message: "Fatura için yeterli PAID tahsilat bulunmuyor." };
+  }
+  return { ok: true };
+}
+
+/** Invoice create may only start as DRAFT or ISSUED — never PAID/VOID/OVERDUE. */
+export function assertInvoiceCreateStatus(status: string): { ok: true } | { ok: false; message: string } {
+  if (status === "DRAFT" || status === "ISSUED") return { ok: true };
+  return {
+    ok: false,
+    message: "Yeni fatura yalnız Taslak veya Kesildi durumunda oluşturulabilir. Ödeme ayrı tahsilat kaydı ile yapılır.",
+  };
+}

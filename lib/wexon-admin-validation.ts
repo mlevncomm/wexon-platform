@@ -433,7 +433,6 @@ export function parseLicenseDetailsPayload(formData: FormData) {
     licenseType: oneOf(requiredString(formData, "licenseType", "Lisans tipi"), licenseTypes, "Lisans tipi") as LicenseTypeInput,
     startsAt: parseDate(formData, "startsAt", "Başlangıç tarihi", true) as Date,
     endsAt: parseDate(formData, "endsAt", "Bitiş tarihi", false),
-    status: oneOf(requiredString(formData, "status", "Lisans durumu"), licenseStatuses, "Lisans durumu") as LicenseStatusInput,
   };
 }
 

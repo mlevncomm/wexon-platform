@@ -72,6 +72,28 @@ export const ADMIN_MUTATION_ACTION_RISK: Record<string, AdminMutationRiskClass> 
   "product.disable": "DESTRUCTIVE",
   "plan.disable": "DESTRUCTIVE",
   "entitlement.disable": "DESTRUCTIVE",
+
+  "organization.create": "NORMAL",
+  "organization.update": "NORMAL",
+  "restaurant.create": "NORMAL",
+  "product.create": "NORMAL",
+  "product.update": "NORMAL",
+  "product.enable": "NORMAL",
+  "plan.create": "NORMAL",
+  "plan.update": "NORMAL",
+  "plan.enable": "NORMAL",
+  "entitlement.upsert": "NORMAL",
+  "entitlement.enable": "NORMAL",
+  "wexpay_access.enable": "NORMAL",
+  "wexpay_access.status_change": "NORMAL",
+  "installation.settings_change": "NORMAL",
+  "support_ticket.update": "NORMAL",
+  "demo_request.status_change": "NORMAL",
+  "demo_request.follow_up": "NORMAL",
+  "membership.add": "NORMAL",
+  "wexpay_activation.block": "SECURITY",
+  "wexpay_activation.unblock": "SECURITY",
+  "wexpay_activation.assisted_go_live": "SECURITY",
 };
 
 /** Creates that require durable AdminMutationIdempotency. */
