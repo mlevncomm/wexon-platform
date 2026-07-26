@@ -22,7 +22,11 @@ const statePath = resolve(root, "e2e", ".db-runtime.json");
 const embeddedDataDir = resolve(root, "e2e", ".pgdata");
 
 function run(cmd, args, options = {}) {
-  const result = spawnSync(cmd, args, {
+  // On Windows, shell:true + unquoted paths with spaces (e.g. C:\Program Files\nodejs\node.exe)
+  // split into `C:\Program` — quote when needed.
+  const needsQuote = process.platform === "win32" && /\s/.test(cmd) && !/^".*"$/.test(cmd);
+  const resolvedCmd = needsQuote ? `"${cmd}"` : cmd;
+  const result = spawnSync(resolvedCmd, args, {
     stdio: "inherit",
     shell: process.platform === "win32",
     env: { ...process.env, ...(options.env || {}) },

@@ -1,7 +1,15 @@
 import dotenv from "dotenv";
 
 dotenv.config({ path: ".env", quiet: true });
+
+// Preserve caller-injected DB targets (e.g. isolated e2e Postgres) across .env.local.
+const injectedDatabaseUrl = process.env.DATABASE_URL;
+const injectedDirectUrl = process.env.DIRECT_URL;
+
 dotenv.config({ path: ".env.local", override: true, quiet: true });
+
+if (injectedDatabaseUrl) process.env.DATABASE_URL = injectedDatabaseUrl;
+if (injectedDirectUrl) process.env.DIRECT_URL = injectedDirectUrl;
 
 /**
  * Strip ephemeral public-QR security E2E pins so a polluted parent shell
