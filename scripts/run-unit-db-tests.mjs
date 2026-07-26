@@ -48,6 +48,7 @@ const files = [
   "lib/wexon-admin-preview-write.db.test.ts",
   "lib/wexon-admin-commercial-consistency.db.test.ts",
   "lib/wexon-admin-mutation-guard.db.test.ts",
+  "lib/wexon-admin-finance-concurrency.db.test.ts",
 ];
 
 const credentialEncryptionKey = randomBytes(32).toString("hex");
