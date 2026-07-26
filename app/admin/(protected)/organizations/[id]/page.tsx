@@ -582,9 +582,9 @@ export default async function AdminOrganizationDetailPage({
               )}
             </>
           ) : (
-            <AdminActionNotice data-testid="activation-fee-wexpay-missing">
-              Bu organizasyon için WexPay aktivasyon ücreti kaydı yok
-            </AdminActionNotice>
+            <div data-testid="activation-fee-wexpay-missing">
+              <AdminActionNotice>Bu organizasyon için WexPay aktivasyon ücreti kaydı yok</AdminActionNotice>
+            </div>
           )}
         </div>
       </AdminFormPanel>
