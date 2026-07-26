@@ -196,6 +196,8 @@ export function applyIsolatedE2eEnv() {
   process.env.WEXON_E2E_TARGET = "isolated";
   process.env.WEXON_E2E_CONFIRM_ISOLATED = "true";
   delete process.env.WEXON_E2E_CONFIRM_PRODUCTION;
+  // Clear hosted markers inherited from developer shells / `vercel link`.
+  process.env.VERCEL_ENV = "";
   if (!process.env.E2E_BASE_URL && !process.env.SMOKE_BASE_URL) {
     process.env.SMOKE_BASE_URL = `http://localhost:${process.env.SMOKE_PORT || "3100"}`;
   }

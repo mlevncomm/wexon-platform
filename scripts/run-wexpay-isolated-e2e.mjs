@@ -114,6 +114,10 @@ function isolatedEnv() {
     WEXON_ALLOW_LOCAL_DB_TESTS: "1",
     WEXON_E2E_TARGET: "isolated",
     WEXON_E2E_CONFIRM_ISOLATED: "true",
+    // Match CI: clear hosted/production markers so next start + CF test JWKS work locally
+    // even when the developer shell has VERCEL_ENV=production from `vercel link`.
+    VERCEL_ENV: "",
+    WEXON_E2E_CONFIRM_PRODUCTION: "",
     E2E_BASE_URL: `http://localhost:${port}`,
     SMOKE_BASE_URL: `http://localhost:${port}`,
     SMOKE_PORT: port,
