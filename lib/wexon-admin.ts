@@ -31,6 +31,8 @@ export function formatAdminStatus(status: string) {
     ONE_TIME: "Tek seferlik",
     PENDING: "Bekliyor",
     PAID: "Ödendi",
+    WAIVED: "Muaf",
+    WAIVED_LEGACY: "Legacy muaf",
     FAILED: "Başarısız",
     REFUNDED: "İade",
     DRAFT: "Taslak",
@@ -75,6 +77,22 @@ const organizationInclude = {
       plan: {
         include: {
           entitlements: true,
+        },
+      },
+      subscription: {
+        include: {
+          plan: true,
+        },
+      },
+    },
+  },
+  activationFeeLedgers: {
+    include: {
+      subscriptionPayment: {
+        select: {
+          id: true,
+          status: true,
+          merchantOid: true,
         },
       },
     },

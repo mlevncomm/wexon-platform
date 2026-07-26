@@ -1,3 +1,8 @@
+import {
+  ADMIN_SUBSCRIPTION_PROVIDERS,
+  isAllowedAdminSubscriptionProvider,
+} from "@/lib/wexon-admin-commercial-policy";
+
 export class AdminValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -156,8 +161,20 @@ export function parseLicensePayload(formData: FormData) {
 }
 
 export function parseLicensePlanPayload(formData: FormData) {
+  const reason = requiredString(formData, "reason", "İşlem gerekçesi");
+  const confirmed = readString(formData, "confirmed") === "1" || readString(formData, "confirmed") === "true";
   return {
     planId: requiredString(formData, "planId", "Paket"),
+    reason,
+    confirmed,
+  };
+}
+
+export function parseActivationFeeWaivePayload(formData: FormData) {
+  return {
+    productId: requiredString(formData, "productId", "Ürün"),
+    reason: requiredString(formData, "reason", "Muafiyet gerekçesi"),
+    confirmed: readString(formData, "confirmed") === "1" || readString(formData, "confirmed") === "true",
   };
 }
 
@@ -395,6 +412,10 @@ export function parseEntitlementPayload(formData: FormData) {
 }
 
 export function parseSubscriptionCreatePayload(formData: FormData) {
+  const providerRaw = nullableString(formData, "provider") ?? "admin_manual";
+  if (!isAllowedAdminSubscriptionProvider(providerRaw)) {
+    throw new AdminValidationError("Abonelik sağlayıcısı yalnız admin_manual veya paytr olabilir.");
+  }
   return {
     organizationId: requiredString(formData, "organizationId", "Müşteri"),
     planId: requiredString(formData, "planId", "Paket"),
@@ -402,7 +423,7 @@ export function parseSubscriptionCreatePayload(formData: FormData) {
     interval: oneOf(requiredString(formData, "interval", "Dönem"), billingIntervals, "Dönem"),
     currentPeriodStart: parseDate(formData, "currentPeriodStart", "Dönem başlangıcı", true) as Date,
     currentPeriodEnd: parseDate(formData, "currentPeriodEnd", "Dönem bitişi", false),
-    provider: nullableString(formData, "provider") ?? "admin_manual",
+    provider: providerRaw as (typeof ADMIN_SUBSCRIPTION_PROVIDERS)[number],
     providerRef: nullableString(formData, "providerRef"),
   };
 }

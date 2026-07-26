@@ -52,6 +52,19 @@ const mandatoryAdminPreviewWriteTests = [
   "PR3: logout clears capability",
   "PR3: app/core legacy admin preview does not grant write",
 ];
+const mandatoryAdminCommercialTests = [
+  "PR4C: session v3 opens commercial org detail",
+  "PR4C: upgrade succeeds and keeps License/Subscription synced",
+  "PR4C: over-limit downgrade is rejected without mutation",
+  "PR4C: suitable downgrade succeeds when usage fits",
+  "PR4C: activation fee panel and suitable waive",
+  "PR4C: settled ledger waive is rejected",
+  "PR4C: cross-product ledger is not shown as WexPay activation fee",
+  "PR4C: cross-tenant license plan change is rejected",
+  "PR4C: subscription create form providers are allowlisted",
+  "PR4C: PR3 read-only preview regression still holds",
+  "PR4C: logout clears admin session cookie",
+];
 
 function run(cmd, args, env = {}) {
   console.log(`[isolated-e2e] $ ${cmd} ${args.join(" ")}`);
@@ -146,6 +159,7 @@ async function runOnce(label) {
       "e2e/admin-platform-admins.spec.ts",
       "e2e/admin-cloudflare-identity.spec.ts",
       "e2e/admin-wexpay-preview-write.spec.ts",
+      "e2e/admin-commercial-consistency.spec.ts",
       "--reporter=list",
     ],
     {
@@ -175,7 +189,7 @@ async function runOnce(label) {
   }
   // Includes activation, auth/tenant, pricing, workspace, final closure, routing,
   // PlatformAdmin management, PR2B Cloudflare identity, and PR3 admin preview write specs.
-  const MIN_ISOLATED_PASSES = 50;
+  const MIN_ISOLATED_PASSES = 60;
   if (passed < MIN_ISOLATED_PASSES) {
     throw new Error(
       `[isolated-e2e] ${label}: fail-closed — need ≥${MIN_ISOLATED_PASSES} passing tests (got passed=${passed}, skipped=${skipped})`,
@@ -186,6 +200,7 @@ async function runOnce(label) {
     ...mandatoryPlatformAdminTests,
     ...mandatoryAdminIdentityTests,
     ...mandatoryAdminPreviewWriteTests,
+    ...mandatoryAdminCommercialTests,
   ]) {
     const resultLine = combined
       .split(/\r?\n/)

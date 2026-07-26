@@ -157,14 +157,15 @@ export async function resolvePlatformAdminForCloudflareAccess(
   return admin;
 }
 
-/** Non-mutating lookup used when validating an existing session against PlatformAdmin. */
-export async function assertActivePlatformAdminMatchesIdentity(
-  client: PlatformAdminClient,
-  input: { adminId: string; emailNormalized: string; cloudflareSubject: string },
-): Promise<PlatformAdminRecord> {
-  const admin = await client.platformAdmin.findUnique({ where: { id: input.adminId } });
-  if (!admin || !admin.isActive) {
-    throw new PlatformAdminCloudflareAccessError(admin ? "inactive" : "not_found");
+function assertPlatformAdminIdentityMatches(
+  admin: PlatformAdminRecord | null,
+  input: { emailNormalized: string; cloudflareSubject: string },
+): PlatformAdminRecord {
+  if (!admin) {
+    throw new PlatformAdminCloudflareAccessError("not_found");
+  }
+  if (!admin.isActive) {
+    throw new PlatformAdminCloudflareAccessError("inactive");
   }
   if (normalizePlatformAdminEmail(admin.emailNormalized) !== normalizePlatformAdminEmail(input.emailNormalized)) {
     throw new PlatformAdminCloudflareAccessError("email_mismatch");
@@ -173,6 +174,28 @@ export async function assertActivePlatformAdminMatchesIdentity(
     throw new PlatformAdminCloudflareAccessError("subject_mismatch");
   }
   return admin;
+}
+
+/** Non-mutating lookup used when validating an existing session against PlatformAdmin. */
+export async function assertActivePlatformAdminMatchesIdentity(
+  client: PlatformAdminClient,
+  input: { adminId: string; emailNormalized: string; cloudflareSubject: string },
+): Promise<PlatformAdminRecord> {
+  const admin = await client.platformAdmin.findUnique({ where: { id: input.adminId } });
+  return assertPlatformAdminIdentityMatches(admin, input);
+}
+
+/**
+ * Transaction-lifetime authorization for commercial mutations.
+ * Locks the PlatformAdmin row with FOR UPDATE so mid-tx deactivation is fail-closed.
+ * Technical mismatch details stay behind the generic access-denied message.
+ */
+export async function lockActivePlatformAdminMatchesIdentity(
+  client: Pick<PlatformAdminClient, "$queryRaw">,
+  input: { adminId: string; emailNormalized: string; cloudflareSubject: string },
+): Promise<PlatformAdminRecord> {
+  const admin = await lockPlatformAdminForUpdate(client, input.adminId);
+  return assertPlatformAdminIdentityMatches(admin, input);
 }
 
 export async function findActivePlatformAdminByEmail(

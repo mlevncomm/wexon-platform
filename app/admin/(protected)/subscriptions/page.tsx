@@ -3,6 +3,10 @@ import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, Ad
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { createAdminSubscriptionAction, updateAdminSubscriptionStatusAction } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOperationOptions, getAdminSubscriptionsData } from "@/lib/wexon-admin";
+import {
+  ADMIN_SUBSCRIPTION_PROVIDER_LABELS,
+  ADMIN_SUBSCRIPTION_PROVIDERS,
+} from "@/lib/wexon-admin-commercial-policy";
 
 const subscriptionStatusOptions = [
   { value: "TRIALING", label: "Deneme" },
@@ -76,9 +80,11 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
           <AdminDateField label="Dönem başlangıcı" name="currentPeriodStart" defaultValue={today} required />
           <AdminDateField label="Dönem bitişi" name="currentPeriodEnd" />
           <AdminSelectField label="Sağlayıcı" name="provider" defaultValue="admin_manual">
-            <option value="admin_manual">Admin manuel</option>
-            <option value="mock">Mock</option>
-            <option value="stripe">Stripe</option>
+            {ADMIN_SUBSCRIPTION_PROVIDERS.map((provider) => (
+              <option key={provider} value={provider}>
+                {ADMIN_SUBSCRIPTION_PROVIDER_LABELS[provider]}
+              </option>
+            ))}
           </AdminSelectField>
           <div className="md:col-span-2 xl:col-span-3">
             <AdminSubmitButton>Abonelik oluştur</AdminSubmitButton>

@@ -28,8 +28,16 @@ import {
   updateAdminOrganizationAction,
   updateWexPayAccessStatusAction,
   unblockAdminWexPayActivationAction,
+  waiveAdminActivationFeeAction,
 } from "@/lib/wexon-admin-actions";
 import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminOrganizationDetail, getAdminOrganizationMutationOptions } from "@/lib/wexon-admin";
+import {
+  collectOrganizationUsageSnapshot,
+  evaluateActivationFeeWaivePolicy,
+  maskMerchantOid,
+} from "@/lib/wexon-admin-commercial-consistency";
+import { AdminActivationFeeWaiveForm, AdminLicensePlanChangeForm } from "@/components/admin/AdminCommercialConsistencyForms";
+import { prisma } from "@/lib/prisma";
 import { coreAccessDenialMessage, evaluateProductAccess } from "@/lib/wexon-core-access";
 import {
   ACTIVATION_STEP_LABELS,
@@ -97,6 +105,28 @@ export default async function AdminOrganizationDetailPage({
   const primaryLicense = organization.licenses[0];
   const wexPayLicense = organization.licenses.find((license) => license.product.key === "wexpay");
   const wexPayInstallation = organization.appInstallations.find((installation) => installation.product.key === "wexpay");
+  const wexPaySubscription = wexPayLicense?.subscription ?? null;
+  const licenseSubscriptionSynced =
+    !wexPayLicense ? null : !wexPaySubscription ? "Abonelik yok" : wexPayLicense.planId === wexPaySubscription.planId ? "Senkron" : "Tutarsız";
+  const usageSnapshot = await collectOrganizationUsageSnapshot(prisma, organization.id);
+  // WexPay panel must only show the WexPay product ledger — never fall back to another product.
+  const activationFeeLedger = wexPayLicense
+    ? organization.activationFeeLedgers.find((ledger) => ledger.productId === wexPayLicense.productId) ?? null
+    : null;
+  const activationWaivePolicy = activationFeeLedger
+    ? evaluateActivationFeeWaivePolicy({
+        status: activationFeeLedger.status,
+        reservedUntil: activationFeeLedger.reservedUntil,
+        subscriptionPaymentId: activationFeeLedger.subscriptionPaymentId,
+        paymentStatus: activationFeeLedger.subscriptionPayment?.status ?? null,
+      })
+    : null;
+  const activationReservationFresh = activationWaivePolicy?.reservationFresh ?? false;
+  const activationCanWaive = Boolean(
+    activationWaivePolicy?.canWaive &&
+      wexPayLicense &&
+      activationFeeLedger?.productId === wexPayLicense.productId,
+  );
   const updateOrganization = updateAdminOrganizationAction.bind(null, organization.id);
   const enableWexPayAccess = enableWexPayAccessAction.bind(null, organization.id);
   const activateWexPayAccess = updateWexPayAccessStatusAction.bind(null, organization.id, "ACTIVE");
@@ -391,8 +421,8 @@ export default async function AdminOrganizationDetailPage({
           <AdminActionNotice>WexHotel ve WexB2B write yönetimi bu fazda kapalıdır.</AdminActionNotice>
         </AdminFormPanel>
 
-        <AdminFormPanel title="Lisans ve paket" description="WexPay lisansı oluşturun, paketini veya durumunu güncelleyin." collapsible>
-          <div className="space-y-6">
+        <AdminFormPanel title="Lisans ve paket" description="WexPay lisansı, abonelik senkronu ve paket değişikliği." collapsible defaultOpen>
+          <div className="space-y-6" data-testid="license-commercial-panel">
             <form action={createLicense} className="grid gap-4 md:grid-cols-2">
               <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
               <input type="hidden" name="productKey" value="wexpay" />
@@ -423,18 +453,33 @@ export default async function AdminOrganizationDetailPage({
 
             {wexPayLicense ? (
               <div className="space-y-6">
+                <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2" data-testid="license-sync-summary">
+                  <AdminInfoRow label="Lisans paketi" value={displayPlanName(wexPayLicense.plan.name)} />
+                  <AdminInfoRow
+                    label="Abonelik paketi"
+                    value={wexPaySubscription ? displayPlanName(wexPaySubscription.plan.name) : "Bağlı abonelik yok"}
+                  />
+                  <AdminInfoRow label="Senkron durumu" value={licenseSubscriptionSynced ?? "-"} />
+                  <AdminInfoRow
+                    label="Mevcut kullanım"
+                    value={`Restoran ${usageSnapshot.restaurants} · Şube ${usageSnapshot.branches} · Masa ${usageSnapshot.tables} · Ürün ${usageSnapshot.products} · Personel ${usageSnapshot.staff}`}
+                  />
+                </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <form action={changeAdminLicensePlanAction.bind(null, organization.id, wexPayLicense.id)} className="grid gap-4">
-                    <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
-                    <AdminSelectField label="Yeni paket" name="planId" defaultValue={wexPayLicense.planId}>
-                      {options.wexPayPlans.map((plan) => (
-                        <option key={plan.id} value={plan.id}>
-                          {displayPlanName(plan.name)}
-                        </option>
-                      ))}
-                    </AdminSelectField>
-                    <AdminSubmitButton>Paketi güncelle</AdminSubmitButton>
-                  </form>
+                  <AdminLicensePlanChangeForm
+                    organizationId={organization.id}
+                    licenseId={wexPayLicense.id}
+                    currentPlanId={wexPayLicense.planId}
+                    currentSortOrder={wexPayLicense.plan.sortOrder}
+                    plans={options.wexPayPlans.map((plan) => ({
+                      id: plan.id,
+                      name: displayPlanName(plan.name),
+                      tierKey: plan.tierKey,
+                      key: plan.key,
+                      sortOrder: plan.sortOrder,
+                    }))}
+                    action={changeAdminLicensePlanAction}
+                  />
                   <form action={changeAdminLicenseStatusAction.bind(null, organization.id, wexPayLicense.id)} className="grid gap-4">
                     <input type="hidden" name="returnTo" value={`/admin/organizations/${organization.id}`} />
                     <AdminSelectField label="Durum" name="status" defaultValue={wexPayLicense.status}>
@@ -476,6 +521,73 @@ export default async function AdminOrganizationDetailPage({
           </div>
         </AdminFormPanel>
       </section>
+
+      <AdminFormPanel
+        title="Aktivasyon ücreti"
+        description="Smart Activation ledger özeti ve güvenli muafiyet işlemi."
+        collapsible
+        defaultOpen
+      >
+        <div className="space-y-4" data-testid="activation-fee-panel">
+          {activationFeeLedger ? (
+            <>
+              <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+                <div data-testid="activation-fee-status">
+                  <AdminInfoRow label="Durum" value={formatAdminStatus(activationFeeLedger.status)} />
+                </div>
+                <AdminInfoRow
+                  label="Rezervasyon"
+                  value={
+                    activationReservationFresh
+                      ? "Aktif rezervasyon"
+                      : activationFeeLedger.reservedUntil
+                        ? "Süresi dolmuş / boşta"
+                        : "Yok"
+                  }
+                />
+                <AdminInfoRow
+                  label="Aktivasyon ücreti"
+                  value={`${(activationFeeLedger.activationFeeMinor / 100).toFixed(2)} ₺`}
+                />
+                <AdminInfoRow
+                  label="Vergi / Brüt"
+                  value={`${(activationFeeLedger.taxAmountMinor / 100).toFixed(2)} ₺ / ${(activationFeeLedger.grossAmountMinor / 100).toFixed(2)} ₺`}
+                />
+                <AdminInfoRow
+                  label="Ödeme durumu"
+                  value={activationFeeLedger.subscriptionPayment?.status ? formatAdminStatus(activationFeeLedger.subscriptionPayment.status) : "Bağlı ödeme yok"}
+                />
+                <AdminInfoRow
+                  label="Merchant OID"
+                  value={maskMerchantOid(activationFeeLedger.subscriptionPayment?.merchantOid) ?? "-"}
+                />
+                <AdminInfoRow
+                  label="Ödeme tarihi"
+                  value={activationFeeLedger.paidAt ? formatAdminDate(activationFeeLedger.paidAt) : "-"}
+                />
+                <AdminInfoRow label="Muafiyet gerekçesi" value={activationFeeLedger.waivedReason ?? "-"} />
+              </div>
+              {activationCanWaive && wexPayLicense ? (
+                <AdminActivationFeeWaiveForm
+                  organizationId={organization.id}
+                  productId={wexPayLicense.productId}
+                  action={waiveAdminActivationFeeAction}
+                />
+              ) : (
+                <AdminActionNotice>
+                  {activationWaivePolicy && !activationWaivePolicy.canWaive
+                    ? activationWaivePolicy.message
+                    : "Bu kayıt için muafiyet işlemi uygun değil."}
+                </AdminActionNotice>
+              )}
+            </>
+          ) : (
+            <div data-testid="activation-fee-wexpay-missing">
+              <AdminActionNotice>Bu organizasyon için WexPay aktivasyon ücreti kaydı yok</AdminActionNotice>
+            </div>
+          )}
+        </div>
+      </AdminFormPanel>
 
       <section className="grid gap-5 xl:grid-cols-2">
         <AdminFormPanel title="İşletme ekle" description="Müşteriye bağlı işletme kaydı oluşturur." collapsible>

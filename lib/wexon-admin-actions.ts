@@ -31,6 +31,7 @@ import {
 } from "@/lib/wexon-active-owner";
 import {
   AdminValidationError,
+  parseActivationFeeWaivePayload,
   parseApiKeyCreatePayload,
   parseAppInstallationSettingsPayload,
   parseAppInstallationStatus,
@@ -63,6 +64,11 @@ import {
   parseWebhookCreatePayload,
   readReturnTo,
 } from "@/lib/wexon-admin-validation";
+import {
+  changeLicensePlanWithSubscriptionSync,
+  waiveActivationFeeAsAdmin,
+} from "@/lib/wexon-admin-commercial-consistency";
+import { PlatformAdminCloudflareAccessError } from "@/lib/wexon-platform-admin-cloudflare-bind";
 
 type AuditClient = {
   auditLog: {
@@ -130,6 +136,7 @@ function isUniqueConflict(error: unknown) {
 
 function getActionErrorMessage(error: unknown, fallback: string) {
   if (error instanceof AdminValidationError) return error.message;
+  if (error instanceof PlatformAdminCloudflareAccessError) return fallback;
   if (error instanceof Error && error.message) return error.message;
   return fallback;
 }
@@ -906,24 +913,13 @@ export async function changeAdminLicensePlanAction(organizationId: string, licen
     }
     await assertWexPayPlan(payload.planId, product.id);
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.license.update({
-        where: { id: licenseId },
-        data: { planId: payload.planId },
-        include: { plan: true },
-      });
-
-      await writeAdminAuditLog(
-        {
-          action: "admin.license.plan_changed",
-          actor,
-          organizationId,
-          entityType: "License",
-          entityId: licenseId,
-          metadata: { before: { planId: license.planId, planName: license.plan.name }, after: { planId: updated.planId, planName: updated.plan.name } },
-        },
-        tx,
-      );
+    await changeLicensePlanWithSubscriptionSync({
+      organizationId,
+      licenseId,
+      targetPlanId: payload.planId,
+      reason: payload.reason,
+      confirmed: payload.confirmed,
+      actor,
     });
 
     revalidateLicenseRoutes(organizationId);
@@ -931,6 +927,29 @@ export async function changeAdminLicensePlanAction(organizationId: string, licen
   } catch (error) {
     throwIfRedirectError(error);
     redirectWithError(formData, `/admin/organizations/${organizationId}`, error, "Paket değiştirilemedi.");
+  }
+}
+
+export async function waiveAdminActivationFeeAction(organizationId: string, formData: FormData) {
+  try {
+    const actor = await assertAdminAccess();
+    const payload = parseActivationFeeWaivePayload(formData);
+    await assertOrganization(organizationId);
+
+    await waiveActivationFeeAsAdmin({
+      organizationId,
+      productId: payload.productId,
+      reason: payload.reason,
+      confirmed: payload.confirmed,
+      actor,
+    });
+
+    revalidateLicenseRoutes(organizationId);
+    revalidatePath("/admin/billing");
+    redirect(readReturnTo(formData, `/admin/organizations/${organizationId}`));
+  } catch (error) {
+    throwIfRedirectError(error);
+    redirectWithError(formData, `/admin/organizations/${organizationId}`, error, "Aktivasyon ücreti muafiyeti tamamlanamadı.");
   }
 }
 

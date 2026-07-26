@@ -46,22 +46,40 @@ const files = [
   "lib/wexon-platform-admin.db.test.ts",
   "lib/wexon-platform-admin-cloudflare-bind.db.test.ts",
   "lib/wexon-admin-preview-write.db.test.ts",
+  "lib/wexon-admin-commercial-consistency.db.test.ts",
 ];
 
 const credentialEncryptionKey = randomBytes(32).toString("hex");
-const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "--test-reporter=spec", ...files], {
-  cwd: root,
-  encoding: "utf8",
-  maxBuffer: 32 * 1024 * 1024,
-  env: {
-    ...process.env,
-    WEXPAY_CREDENTIAL_ENCRYPTION_KEY: credentialEncryptionKey,
-    // PayTR callback URL builders require a public origin in local DB tests.
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-    NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN:
-      process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+const result = spawnSync(
+  process.execPath,
+  [
+    "--import",
+    "tsx",
+    "--test",
+    // Serialize files: PlatformAdmin last-active proofs race if another suite
+    // creates ACTIVE admins concurrently.
+    "--test-concurrency=1",
+    "--test-reporter=spec",
+    ...files,
+  ],
+  {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+    env: {
+      ...process.env,
+      // Commercial audit override seam and other test-only gates require NODE_ENV=test.
+      NODE_ENV: "test",
+      // Concurrent advisory-lock proofs need >1 pooled connection.
+      PRISMA_PG_POOL_MAX: process.env.PRISMA_PG_POOL_MAX || "8",
+      WEXPAY_CREDENTIAL_ENCRYPTION_KEY: credentialEncryptionKey,
+      // PayTR callback URL builders require a public origin in local DB tests.
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+      NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN:
+        process.env.NEXT_PUBLIC_WEXON_PUBLIC_ORIGIN || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    },
   },
-});
+);
 
 if (result.error) {
   console.error(result.error);
