@@ -4,8 +4,8 @@
  */
 
 export const MIN_PG_DUMP_MAJOR = 17;
-/** Current public schema expectation after Menu Import (MenuImportJob + RowError). */
-export const EXPECTED_PUBLIC_TABLE_COUNT = 40;
+/** Current public schema expectation after AdminMutation rate-limit/idempotency (PR5). */
+export const EXPECTED_PUBLIC_TABLE_COUNT = 43;
 /** Pre-ActivationFeeLedger recovery archives remain valid via their own manifests. */
 export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER = 33;
 /** Pre-Smart-Activation (ActivationFeeLedger era) archives remain valid via their own manifests. */
@@ -14,6 +14,10 @@ export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_SMART_ACTIVATION = 34;
 export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_STAFF_INVITE = 37;
 /** Pre-Menu-Import (StaffInvite era) archives remain valid via their own manifests. */
 export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_MENU_IMPORT = 38;
+/** Pre-PlatformAdmin (Menu Import era) archives remain valid via their own manifests. */
+export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_PLATFORM_ADMIN = 40;
+/** Pre-AdminMutation hardening (PlatformAdmin era) archives remain valid via their own manifests. */
+export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ADMIN_MUTATION = 41;
 export const RECOVERY_STATUS = {
   NOT_VERIFIED: "RECOVERY BACKUP OLARAK DOĞRULANMADI",
   RESTORE_VERIFIED: "RESTORE VERIFIED",

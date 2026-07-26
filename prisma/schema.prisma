@@ -1194,3 +1194,48 @@ model PublicIdempotencyRecord {
 
   @@index([expiresAt])
 }
+
+/// Postgres-backed admin mutation rate-limit buckets (serverless-safe).
+model AdminMutationRateLimit {
+  id            String   @id @default(cuid())
+  bucketKey     String
+  windowStart   DateTime
+  windowSeconds Int
+  count         Int      @default(0)
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([bucketKey, windowStart, windowSeconds])
+  @@index([expiresAt])
+  @@index([bucketKey])
+}
+
+enum AdminMutationIdempotencyStatus {
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+/// Durable admin financial/destructive mutation idempotency (not PublicIdempotencyRecord).
+model AdminMutationIdempotency {
+  id             String                         @id @default(cuid())
+  adminId        String
+  action         String
+  mutationKey    String
+  requestHash    String
+  status         AdminMutationIdempotencyStatus @default(PROCESSING)
+  organizationId String?
+  entityType     String?
+  entityId       String?
+  resultJson     Json?
+  denyCode       String?
+  expiresAt      DateTime
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+
+  @@unique([adminId, action, mutationKey])
+  @@index([expiresAt])
+  @@index([adminId, action])
+  @@index([organizationId])
+}
