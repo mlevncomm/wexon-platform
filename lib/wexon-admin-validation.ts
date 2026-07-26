@@ -14,6 +14,7 @@ const licenseStatuses = ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED"
 const invoiceStatuses = ["DRAFT", "ISSUED", "PAID", "VOID", "OVERDUE"] as const;
 const productStatuses = ["ACTIVE", "UPCOMING", "INTERNAL", "DISABLED"] as const;
 const subscriptionStatuses = ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELLED", "EXPIRED"] as const;
+const subscriptionCreateStatuses = ["ACTIVE", "TRIALING"] as const;
 const licenseTypes = ["MONTHLY", "YEARLY", "ONE_TIME"] as const;
 const appInstallationStatuses = ["ACTIVE", "DISABLED"] as const;
 const membershipRoles = ["OWNER", "ADMIN", "MANAGER", "STAFF", "BILLING", "VIEWER"] as const;
@@ -419,7 +420,7 @@ export function parseSubscriptionCreatePayload(formData: FormData) {
   return {
     organizationId: requiredString(formData, "organizationId", "Müşteri"),
     planId: requiredString(formData, "planId", "Paket"),
-    status: oneOf(readString(formData, "status") || "ACTIVE", subscriptionStatuses, "Abonelik durumu"),
+    status: oneOf(readString(formData, "status") || "ACTIVE", subscriptionCreateStatuses, "Abonelik durumu"),
     interval: oneOf(requiredString(formData, "interval", "Dönem"), billingIntervals, "Dönem"),
     currentPeriodStart: parseDate(formData, "currentPeriodStart", "Dönem başlangıcı", true) as Date,
     currentPeriodEnd: parseDate(formData, "currentPeriodEnd", "Dönem bitişi", false),

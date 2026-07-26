@@ -79,16 +79,18 @@ import { AdminMutationGuardError } from "@/lib/wexon-admin-mutation-errors";
 import { isHostedDeploymentCleanupForbidden, isAllowedAdminBillingPaymentProvider } from "@/lib/wexon-admin-mutation-policy";
 import {
   assertInvoiceCreateStatus,
-  assertInvoicePaidCoverageSufficient,
   assertMoneyInvariant,
   assertPositiveAmount,
-  evaluateBillingPaymentStatusTransition,
-  evaluateInvoicePaymentCoverage,
-  evaluateInvoiceStatusTransition,
   evaluateLicenseStatusAgainstSubscription,
   evaluateSubscriptionStatusTransition,
-  toMinorUnits,
 } from "@/lib/wexon-admin-finance-policy";
+import {
+  executeCreateBillingPayment,
+  executeCreateLicense,
+  executeCreateSubscription,
+  executeUpdateBillingPaymentStatus,
+  executeUpdateInvoiceStatus,
+} from "@/lib/wexon-admin-finance-operations";
 import { maskMerchantOid } from "@/lib/wexon-admin-commercial-consistency";
 import { maskEmailForAudit, sanitizeAdminAuditMetadata } from "@/lib/wexon-admin-audit-sanitize";
 
@@ -266,13 +268,6 @@ async function setAdminApiKeyFlashCookie(value: { name: string; prefix: string; 
     path: "/admin/integrations",
     maxAge: 5 * 60,
   });
-}
-
-function addPeriod(date: Date, interval: "MONTHLY" | "YEARLY") {
-  const next = new Date(date);
-  if (interval === "YEARLY") next.setFullYear(next.getFullYear() + 1);
-  else next.setMonth(next.getMonth() + 1);
-  return next;
 }
 
 async function deleteOrganizationGraph(tx: DeleteClient, organizationId: string) {
@@ -867,37 +862,17 @@ export async function createAdminLicenseAction(organizationId: string, formData:
         endsAt: payload.endsAt?.toISOString() ?? null,
         status: payload.status,
       },
-      execute: async ({ tx }) => {
-        const license = await tx.license.create({
-          data: {
-            organizationId,
-            productId: product.id,
-            planId: payload.planId,
-            licenseType: payload.licenseType,
-            startsAt: payload.startsAt,
-            endsAt: payload.endsAt,
-            status: payload.status,
-          },
-        });
-
-        await tx.appInstallation.upsert({
-          where: { organizationId_productId: { organizationId, productId: product.id } },
-          update: { status: "ACTIVE", licenseId: license.id },
-          create: {
-            organizationId,
-            productId: product.id,
-            licenseId: license.id,
-            status: "ACTIVE",
-          },
-        });
-
-        return {
+      execute: async ({ tx }) =>
+        executeCreateLicense(tx, {
           organizationId,
-          entityId: license.id,
-          after: { productKey: payload.productKey, status: license.status, planId: license.planId },
-          replayResult: { licenseId: license.id },
-        };
-      },
+          productId: product.id,
+          productKey: payload.productKey,
+          planId: payload.planId,
+          licenseType: payload.licenseType,
+          startsAt: payload.startsAt,
+          endsAt: payload.endsAt,
+          status: payload.status,
+        }),
     });
 
     revalidateLicenseRoutes(organizationId);
@@ -1172,69 +1147,7 @@ export async function updateAdminInvoiceStatusAction(invoiceId: string, formData
       confirmed: confirm.confirmed,
       reason: confirm.reason,
       requestHashPayload: { invoiceId, status: payload.status },
-      execute: async ({ tx }) => {
-        const invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
-        if (!invoice) throw new AdminValidationError("Fatura bulunamadı.");
-
-        const transition = evaluateInvoiceStatusTransition(invoice.status, payload.status);
-        if (!transition.ok) {
-          throw new AdminMutationGuardError("invalid_state_transition", transition.message);
-        }
-        if (transition.kind === "noop") {
-          return {
-            organizationId: invoice.organizationId,
-            entityId: invoice.id,
-            before: { status: invoice.status },
-            after: { status: invoice.status },
-            transition: "noop",
-          };
-        }
-
-        if (payload.status === "PAID") {
-          const paidAgg = await tx.billingPayment.aggregate({
-            where: { invoiceId: invoice.id, status: "PAID" },
-            _sum: { amount: true },
-          });
-          const paidCoverageMinor = toMinorUnits(Number(paidAgg._sum.amount ?? 0));
-          const coverage = assertInvoicePaidCoverageSufficient({
-            invoiceTotal: Number(invoice.total),
-            paidCoverageMinor,
-          });
-          if (!coverage.ok) {
-            throw new AdminMutationGuardError("finance_invariant_failed", coverage.message);
-          }
-        }
-
-        const paidAt =
-          payload.status === "PAID" ? invoice.paidAt ?? new Date() : invoice.paidAt;
-        const issuedAt =
-          payload.status === "ISSUED" || payload.status === "PAID" || payload.status === "OVERDUE"
-            ? invoice.issuedAt ?? new Date()
-            : invoice.issuedAt;
-
-        const updated = await tx.invoice.updateMany({
-          where: { id: invoiceId, status: invoice.status },
-          data: {
-            status: payload.status,
-            paidAt,
-            issuedAt,
-          },
-        });
-        if (updated.count === 0) {
-          throw new AdminMutationGuardError(
-            "stale_version",
-            "Fatura durumu başka bir işlem tarafından değiştirilmiş. Sayfayı yenileyin.",
-          );
-        }
-
-        return {
-          organizationId: invoice.organizationId,
-          entityId: invoice.id,
-          before: { status: invoice.status },
-          after: { status: payload.status },
-          transition: `${invoice.status}->${payload.status}`,
-        };
-      },
+      execute: async ({ tx }) => executeUpdateInvoiceStatus(tx, invoiceId, payload.status),
     });
 
     revalidateBillingRoutes();
@@ -1999,96 +1912,17 @@ export async function createAdminBillingPaymentAction(formData: FormData) {
         provider: payload.provider,
         providerRef: payload.providerRef,
       },
-      execute: async ({ tx }) => {
-        let coverageMeta: Record<string, unknown> | null = null;
-        if (payload.invoiceId) {
-          const invoice = await tx.invoice.findUnique({ where: { id: payload.invoiceId } });
-          if (!invoice || invoice.organizationId !== payload.organizationId) {
-            throw new AdminMutationGuardError("tenant_mismatch", "Fatura bu organizasyona ait değil.");
-          }
-          if (invoice.currency !== payload.currency) {
-            throw new AdminValidationError("Tahsilat para birimi fatura ile uyuşmalıdır.");
-          }
-        }
-        if (payload.subscriptionId) {
-          const subscription = await tx.subscription.findUnique({ where: { id: payload.subscriptionId } });
-          if (!subscription || subscription.organizationId !== payload.organizationId) {
-            throw new AdminMutationGuardError("tenant_mismatch", "Abonelik bu organizasyona ait değil.");
-          }
-        }
-
-        const payment = await tx.billingPayment.create({
-          data: {
-            organizationId: payload.organizationId,
-            invoiceId: payload.invoiceId,
-            subscriptionId: payload.subscriptionId,
-            amount: payload.amount,
-            currency: payload.currency,
-            status: payload.status,
-            provider: payload.provider,
-            providerRef: payload.providerRef,
-            paidAt: payload.status === "PAID" ? new Date() : null,
-          },
-        });
-        if (payload.invoiceId && payload.status === "PAID") {
-          const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: payload.invoiceId } });
-          const paidAgg = await tx.billingPayment.aggregate({
-            where: { invoiceId: payload.invoiceId, status: "PAID", id: { not: payment.id } },
-            _sum: { amount: true },
-          });
-          const paidCoverageMinor = toMinorUnits(Number(paidAgg._sum.amount ?? 0));
-          const coverage = evaluateInvoicePaymentCoverage({
-            invoiceTotal: Number(invoice.total),
-            paidCoverageMinor,
-            newPaymentAmount: Number(payload.amount),
-          });
-          coverageMeta = {
-            outstandingBefore: coverage.outstandingBeforeMinor / 100,
-            paidCoverageAfter: coverage.paidCoverageAfterMinor / 100,
-            invoiceAutoPaid: coverage.invoiceAutoPaid,
-          };
-          if (coverage.overpayment) {
-            throw new AdminMutationGuardError(
-              "finance_invariant_failed",
-              "Tahsilat tutarı fatura kalan bakiyesini aşıyor.",
-            );
-          }
-          if (coverage.invoiceAutoPaid) {
-            const transition = evaluateInvoiceStatusTransition(invoice.status, "PAID");
-            if (transition.ok && transition.kind === "apply") {
-              const settled = await tx.invoice.updateMany({
-                where: { id: payload.invoiceId, status: invoice.status },
-                data: { status: "PAID", paidAt: invoice.paidAt ?? new Date() },
-              });
-              if (settled.count === 0) {
-                throw new AdminMutationGuardError(
-                  "stale_version",
-                  "Fatura durumu başka bir işlem tarafından değiştirilmiş. Sayfayı yenileyin.",
-                );
-              }
-            } else if (!transition.ok && invoice.status !== "PAID") {
-              throw new AdminMutationGuardError("invalid_state_transition", transition.message);
-            }
-          }
-        }
-        return {
+      execute: async ({ tx }) =>
+        executeCreateBillingPayment(tx, {
           organizationId: payload.organizationId,
-          entityId: payment.id,
-          after: {
-            amount: String(payment.amount),
-            status: payment.status,
-            invoiceId: payment.invoiceId,
-            provider: payment.provider,
-          },
-          metadata: {
-            providerRefMasked: payment.providerRef
-              ? `${payment.providerRef.slice(0, 4)}…`
-              : null,
-            ...(coverageMeta ?? {}),
-          },
-          replayResult: { paymentId: payment.id },
-        };
-      },
+          invoiceId: payload.invoiceId,
+          subscriptionId: payload.subscriptionId,
+          amount: payload.amount,
+          currency: payload.currency,
+          status: payload.status as "PENDING" | "PAID" | "FAILED" | "REFUNDED",
+          provider: payload.provider,
+          providerRef: payload.providerRef,
+        }),
     });
     revalidateBillingRoutes();
     revalidateOrganizationRoutes(payload.organizationId);
@@ -2114,43 +1948,7 @@ export async function updateAdminBillingPaymentStatusAction(paymentId: string, f
       confirmed: confirm.confirmed,
       reason: confirm.reason,
       requestHashPayload: { paymentId, status },
-      execute: async ({ tx }) => {
-        const payment = await tx.billingPayment.findUnique({ where: { id: paymentId } });
-        if (!payment) throw new AdminValidationError("Tahsilat bulunamadı.");
-        const transition = evaluateBillingPaymentStatusTransition(payment.status, status);
-        if (!transition.ok) {
-          throw new AdminMutationGuardError("invalid_state_transition", transition.message);
-        }
-        if (transition.kind === "noop") {
-          return {
-            organizationId: payment.organizationId,
-            entityId: payment.id,
-            before: { status: payment.status },
-            after: { status: payment.status },
-            transition: "noop",
-          };
-        }
-        const updated = await tx.billingPayment.updateMany({
-          where: { id: paymentId, status: payment.status },
-          data: {
-            status: status as "PENDING" | "PAID" | "FAILED" | "REFUNDED",
-            paidAt: status === "PAID" ? payment.paidAt ?? new Date() : payment.paidAt,
-          },
-        });
-        if (updated.count === 0) {
-          throw new AdminMutationGuardError(
-            "stale_version",
-            "Tahsilat durumu başka bir işlem tarafından değiştirilmiş. Sayfayı yenileyin.",
-          );
-        }
-        return {
-          organizationId: payment.organizationId,
-          entityId: payment.id,
-          before: { status: payment.status },
-          after: { status },
-          transition: `${payment.status}->${status}`,
-        };
-      },
+      execute: async ({ tx }) => executeUpdateBillingPaymentStatus(tx, paymentId, status),
     });
 
     revalidateBillingRoutes();
@@ -2446,70 +2244,17 @@ export async function createAdminSubscriptionAction(formData: FormData) {
         provider: payload.provider,
         providerRef: payload.providerRef,
       },
-      execute: async ({ tx }) => {
-        let license = await tx.license.findFirst({
-          where: {
-            organizationId: payload.organizationId,
-            productId: plan.productId,
-            status: { in: ["ACTIVE", "TRIAL", "PAST_DUE"] },
-          },
-        });
-        const periodEnd =
-          payload.currentPeriodEnd ??
-          (payload.interval === "ONE_TIME"
-            ? null
-            : addPeriod(payload.currentPeriodStart, payload.interval === "YEARLY" ? "YEARLY" : "MONTHLY"));
-        if (!license) {
-          license = await tx.license.create({
-            data: {
-              organizationId: payload.organizationId,
-              productId: plan.productId,
-              planId: plan.id,
-              status: payload.status === "TRIALING" ? "TRIAL" : "ACTIVE",
-              licenseType:
-                payload.interval === "YEARLY" ? "YEARLY" : payload.interval === "ONE_TIME" ? "ONE_TIME" : "MONTHLY",
-              startsAt: payload.currentPeriodStart,
-              endsAt: periodEnd,
-            },
-          });
-        }
-        const existingSubscription = await tx.subscription.findUnique({ where: { licenseId: license.id } });
-        if (existingSubscription) throw new AdminValidationError("Bu lisans için zaten abonelik var.");
-
-        const subscription = await tx.subscription.create({
-          data: {
-            organizationId: payload.organizationId,
-            licenseId: license.id,
-            planId: plan.id,
-            status: payload.status,
-            interval: payload.interval,
-            currentPeriodStart: payload.currentPeriodStart,
-            currentPeriodEnd: periodEnd,
-            provider: payload.provider,
-            providerRef: payload.providerRef,
-          },
-        });
-
-        await tx.appInstallation.upsert({
-          where: {
-            organizationId_productId: { organizationId: payload.organizationId, productId: plan.productId },
-          },
-          update: { status: "ACTIVE", licenseId: license.id },
-          create: {
-            organizationId: payload.organizationId,
-            productId: plan.productId,
-            licenseId: license.id,
-            status: "ACTIVE",
-          },
-        });
-
-        return {
+      execute: async ({ tx }) =>
+        executeCreateSubscription(tx, {
           organizationId: payload.organizationId,
-          entityId: subscription.id,
-          after: { planId: plan.id, licenseId: license.id, status: subscription.status },
-          replayResult: { subscriptionId: subscription.id, licenseId: license.id },
-        };
-      },
+          planId: payload.planId,
+          status: payload.status,
+          interval: payload.interval as "MONTHLY" | "YEARLY" | "ONE_TIME",
+          currentPeriodStart: payload.currentPeriodStart,
+          currentPeriodEnd: payload.currentPeriodEnd,
+          provider: payload.provider,
+          providerRef: payload.providerRef,
+        }),
     });
 
     revalidateCatalogRoutes();

@@ -9,9 +9,13 @@ import {
   ADMIN_SUBSCRIPTION_PROVIDERS,
 } from "@/lib/wexon-admin-commercial-policy";
 
-const subscriptionStatusOptions = [
+const subscriptionCreateStatusOptions = [
   { value: "TRIALING", label: "Deneme" },
   { value: "ACTIVE", label: "Aktif" },
+];
+
+const subscriptionStatusOptions = [
+  ...subscriptionCreateStatusOptions,
   { value: "PAST_DUE", label: "Gecikmiş" },
   { value: "CANCELLED", label: "İptal" },
   { value: "EXPIRED", label: "Süresi dolmuş" },
@@ -69,7 +73,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
             ))}
           </AdminSelectField>
           <AdminSelectField label="Durum" name="status" defaultValue="ACTIVE">
-            {subscriptionStatusOptions.map((opt) => (
+            {subscriptionCreateStatusOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
