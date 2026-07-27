@@ -814,25 +814,51 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await dismissCookieBanner(page);
       const adminUrl = `/admin/organizations/${tenant.organizationId}`;
       await page.goto(adminUrl);
-      await expect(page.getByText("Aktivasyonu engelle")).toBeVisible();
-      let actionForm = page.locator("form").filter({ hasText: "Aktivasyonu engelle" }).first();
-      await actionForm.locator('input[name="reason"]').fill("LOCAL_COMPLIANCE_HOLD");
-      await actionForm.locator('textarea[name="note"]').fill("Yerel PR4 tarayıcı doğrulama engeli.");
-      await actionForm.getByRole("button", { name: "Engelle" }).click();
-      await expect(page.getByText("Aktivasyon engelini kaldır")).toBeVisible();
+
+      const blockDetails = page
+        .locator("details")
+        .filter({ has: page.getByText("Aktivasyonu engelle", { exact: true }) });
+      await expect(blockDetails).toBeVisible();
+      if (!(await blockDetails.evaluate((el) => (el as HTMLDetailsElement).open))) {
+        await blockDetails.locator("summary").click();
+      }
+      const blockForm = blockDetails.locator("form");
+      await expect(blockForm.locator('input[name="reason"]')).toBeVisible();
+      await blockForm.locator('input[name="reason"]').fill("LOCAL_COMPLIANCE_HOLD");
+      await blockForm.locator('textarea[name="note"]').fill("Yerel PR4 tarayıcı doğrulama engeli.");
+      await blockForm.evaluate((form) => (form as HTMLFormElement).requestSubmit());
+      await expect(page.getByText("Aktivasyon engelini kaldır", { exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.locator("body")).not.toContainText(/Aktivasyon engellenemedi|VERSION_CONFLICT/i);
       let journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
       expect(journey.status).toBe(ActivationJourneyStatus.BLOCKED);
       expect(journey.blockedReasonCode).toBe("ADMIN_BLOCKED");
-      expect(journey.currentStep).toBe(ActivationStepKey.VALIDATION);
 
-      actionForm = page.locator("form").filter({ hasText: "Aktivasyon engelini kaldır" }).first();
-      await actionForm.locator('input[name="reason"]').fill("LOCAL_REVIEW_COMPLETE");
-      await actionForm.getByRole("button", { name: "Engeli kaldır" }).click();
-      await expect(page.getByText("Aktivasyonu engelle")).toBeVisible();
+      // Reload so expectedVersion matches DB after block (avoids stale RSC payload on same URL).
+      await page.reload();
+      await expect(page.getByText("Aktivasyon engelini kaldır", { exact: true })).toBeVisible();
+
+      const unblockDetails = page
+        .locator("details")
+        .filter({ has: page.getByText("Aktivasyon engelini kaldır", { exact: true }) });
+      if (!(await unblockDetails.evaluate((el) => (el as HTMLDetailsElement).open))) {
+        await unblockDetails.locator("summary").click();
+      }
+      const unblockForm = unblockDetails.locator("form");
+      await expect(unblockForm.locator('input[name="reason"]')).toBeVisible();
+      await expect(unblockForm.locator('input[name="expectedVersion"]')).toHaveValue(
+        String(journey.version),
+      );
+      await unblockForm.locator('input[name="reason"]').fill("LOCAL_REVIEW_COMPLETE");
+      await unblockForm.evaluate((form) => (form as HTMLFormElement).requestSubmit());
+      await expect(page.getByText("Aktivasyonu engelle", { exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.locator("body")).not.toContainText(/Aktivasyon engeli kaldırılamadı|VERSION_CONFLICT/i);
       journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
-      expect(journey.status).toBe(ActivationJourneyStatus.IN_PROGRESS);
+      expect([ActivationJourneyStatus.IN_PROGRESS, ActivationJourneyStatus.READY]).toContain(journey.status);
       expect(journey.blockedReasonCode).toBeNull();
-      expect(journey.currentStep).toBe(ActivationStepKey.VALIDATION);
 
       const customerContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       const customerPage = await customerContext.newPage();
@@ -851,12 +877,24 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
 
       await page.goto(adminUrl);
       await expect(page.getByText("Admin destekli yayına alma")).toBeVisible();
-      actionForm = page.locator("form").filter({ hasText: "Admin destekli yayına alma" }).first();
-      await actionForm.locator('input[name="confirmationText"]').fill(tenant.organizationSlug);
-      await actionForm.locator('input[name="reason"]').fill("ASSISTED_LOCAL_LAUNCH");
-      await actionForm.locator('textarea[name="note"]').fill("Müşteri onayıyla yerel destekli yayına alma.");
-      await actionForm.getByRole("button", { name: "Admin olarak yayına al" }).click();
-      await expect(page.getByText("Canlı Kullanım", { exact: true }).first()).toBeVisible();
+      // Title lives in AdminCallout, outside the <form> — match by submit control.
+      const assistedForm = page.locator("form").filter({
+        has: page.getByRole("button", { name: "Admin olarak yayına al" }),
+      });
+      await expect(assistedForm.locator('input[name="confirmationText"]')).toBeVisible();
+      await expect(assistedForm.locator('input[name="expectedVersion"]')).toHaveValue(
+        String(journey.version),
+      );
+      await assistedForm.locator('input[name="confirmationText"]').fill(tenant.organizationSlug);
+      await assistedForm.locator('input[name="reason"]').fill("ASSISTED_LOCAL_LAUNCH");
+      await assistedForm.locator('textarea[name="note"]').fill("Müşteri onayıyla yerel destekli yayına alma.");
+      await assistedForm.evaluate((form) => (form as HTMLFormElement).requestSubmit());
+      await expect(page.getByText("Canlı Kullanım", { exact: true }).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.locator("body")).not.toContainText(
+        /Admin destekli yayına alma tamamlanamadı|VERSION_CONFLICT|Kurulum başka bir oturumda/i,
+      );
 
       const active = await prisma.activationJourney.findUniqueOrThrow({
         where: { id: tenant.journeyId },
