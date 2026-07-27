@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { sessionCookieClearOptions, sessionCookieOptions } from "@/lib/wexon-canonical-host";
@@ -56,10 +57,10 @@ function parseSessionCookie(value: string | undefined): CustomerSession | null {
   return { userId, expiresAt };
 }
 
-export async function getCustomerSession() {
+export const getCustomerSession = cache(async function getCustomerSession() {
   const cookieStore = await cookies();
   return parseSessionCookie(cookieStore.get(CUSTOMER_SESSION_COOKIE)?.value);
-}
+});
 
 export async function assertCustomerSession() {
   const session = await getCustomerSession();
@@ -83,25 +84,38 @@ export async function clearCustomerSessionCookie() {
   cookieStore.set(CUSTOMER_SESSION_COOKIE, "", sessionCookieClearOptions());
 }
 
-export async function getCurrentCustomerUser() {
+export const getCurrentCustomerUser = cache(async function getCurrentCustomerUser() {
   const session = await getCustomerSession();
   if (!session) return null;
 
+  // Shell + role gates only need membership/org identity — not the full license graph.
   return prisma.user.findUnique({
     where: { id: session.userId },
-    include: {
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      phone: true,
+      isActive: true,
+      mustChangePassword: true,
+      lastLoginAt: true,
       memberships: {
         where: { status: "ACTIVE" },
-        include: {
+        select: {
+          id: true,
+          organizationId: true,
+          role: true,
+          status: true,
           organization: {
-            include: {
-              licenses: {
-                include: {
-                  product: true,
-                  plan: true,
-                },
-                orderBy: { createdAt: "asc" },
-              },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              email: true,
+              phone: true,
+              country: true,
+              isActive: true,
+              isDemo: true,
             },
           },
         },
@@ -109,7 +123,7 @@ export async function getCurrentCustomerUser() {
       },
     },
   });
-}
+});
 
 export async function resolveCustomerOrganization(
   selector: { organizationId?: string; organizationSlug?: string } | undefined,

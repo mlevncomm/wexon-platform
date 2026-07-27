@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import type { DashboardOrganizationSelector } from "@/lib/wexon-core-dashboard";
 import { adminNavigationUrl, appNavigationUrl, coreNavigationUrl } from "@/lib/wexon/urls";
@@ -38,7 +39,7 @@ export async function readActiveOrganizationId() {
   return readActiveOrganizationIdFromCookie();
 }
 
-export async function resolvePlatformOrganizationSelector(
+export const resolvePlatformOrganizationSelector = cache(async function resolvePlatformOrganizationSelector(
   explicit?: PlatformOrganizationSelector,
 ): Promise<PlatformOrganizationSelector | undefined> {
   if (explicit?.organizationId?.trim() || explicit?.organizationSlug?.trim()) {
@@ -59,7 +60,7 @@ export async function resolvePlatformOrganizationSelector(
   }
 
   return undefined;
-}
+});
 
 export function buildOrganizationSearchParams(selector?: PlatformOrganizationSelector, extra?: Record<string, string>) {
   const params = new URLSearchParams();

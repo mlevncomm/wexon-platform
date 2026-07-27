@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "crypto";
+import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
@@ -150,7 +151,7 @@ export function parseAdminSessionCookieValue(value: string | undefined): AdminSe
   return parsed;
 }
 
-export async function getAdminSession(): Promise<AdminSession | null> {
+export const getAdminSession = cache(async function getAdminSession(): Promise<AdminSession | null> {
   const cookieStore = await cookies();
   const value = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
   adminDebug("session:get", {
@@ -159,7 +160,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
     cookieName: ADMIN_SESSION_COOKIE,
   });
   return parseAdminSessionCookieValue(value);
-}
+});
 
 async function adminLoginRedirectPath() {
   if (!isWexonProductionDeployment()) {
@@ -176,8 +177,9 @@ async function adminLoginRedirectPath() {
 
 /**
  * Full admin gate: host + Cloudflare JWT + v3 session consistency + active PlatformAdmin.
+ * Request-scoped cache so layout + page share one verification.
  */
-export async function assertAdminAccess() {
+export const assertAdminAccess = cache(async function assertAdminAccess() {
   adminDebug("assert:start");
   const productionWexon = isWexonProductionDeployment();
   const host = await readRequestHost();
@@ -231,7 +233,7 @@ export async function assertAdminAccess() {
 
   adminDebug("assert:ok", { emailMasked: maskPlatformAdminEmail(session.email) });
   return session;
-}
+});
 
 export async function createAdminSessionCookie(input: {
   adminId: string;

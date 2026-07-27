@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { evaluateProductAccess } from "@/lib/wexon-core-access";
 import {
@@ -528,12 +529,8 @@ export type AdminHeaderSnapshot = {
   }>;
 };
 
-function readSupportMeta(value: unknown) {
-  return typeof value === "object" && value !== null ? (value as { status?: string }) : {};
-}
-
-export async function getAdminHeaderSnapshot(): Promise<AdminHeaderSnapshot> {
-  const [organizations, organizationCount, pendingInvoices, attentionLicenses, supportTickets, recentLogs] =
+export const getAdminHeaderSnapshot = cache(async function getAdminHeaderSnapshot(): Promise<AdminHeaderSnapshot> {
+  const [organizations, organizationCount, pendingInvoices, attentionLicenses, openSupportTickets, recentLogs] =
     await Promise.all([
       prisma.organization.findMany({
         select: { id: true, name: true, slug: true },
@@ -543,11 +540,12 @@ export async function getAdminHeaderSnapshot(): Promise<AdminHeaderSnapshot> {
       prisma.organization.count(),
       prisma.invoice.count({ where: { status: { in: ["ISSUED", "OVERDUE"] } } }),
       prisma.license.count({ where: { status: { in: ["TRIAL", "PAST_DUE"] } } }),
-      prisma.auditLog.findMany({
-        where: { action: "customer.support_ticket.created" },
-        select: { metadataJson: true },
-        orderBy: { createdAt: "desc" },
-        take: 100,
+      // Count OPEN tickets in Postgres instead of fetching 100 rows and filtering in JS.
+      prisma.auditLog.count({
+        where: {
+          action: "customer.support_ticket.created",
+          metadataJson: { path: ["status"], equals: "OPEN" },
+        },
       }),
       prisma.auditLog.findMany({
         select: {
@@ -560,10 +558,6 @@ export async function getAdminHeaderSnapshot(): Promise<AdminHeaderSnapshot> {
         take: 6,
       }),
     ]);
-
-  const openSupportTickets = supportTickets.filter(
-    (ticket) => readSupportMeta(ticket.metadataJson).status === "OPEN",
-  ).length;
 
   return {
     stats: {
@@ -581,4 +575,4 @@ export async function getAdminHeaderSnapshot(): Promise<AdminHeaderSnapshot> {
       createdAt: log.createdAt.toISOString(),
     })),
   };
-}
+});
