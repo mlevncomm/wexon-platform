@@ -1,12 +1,13 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { ADMIN_FIELD_SURFACE } from "@/components/marketing/admin-ui/adminFieldStyles";
 import {
   continueAdminCloudflareLoginAction,
   continueLocalAdminCloudflareTestLoginAction,
 } from "@/lib/wexon-admin-auth-actions";
 import { defaultAdminPostLoginPath, safeAdminNextPath } from "@/lib/wexon-admin-login-next";
-import { isCloudflareAccessTestMode } from "@/lib/wexon-cloudflare-access-config";
 import { defaultLocalAdminTestEmail } from "@/lib/wexon-cloudflare-access-test-login";
+import { isLocalCloudflareAccessTestRuntime } from "@/lib/wexon-cloudflare-access-test-runtime";
 import { isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
 import { publicUrl } from "@/lib/wexon/urls";
 
@@ -17,7 +18,9 @@ export default async function AdminLoginPage({
 }) {
   const { next, adminError } = await searchParams;
   const productionWexon = isWexonProductionDeployment();
-  const localCfTest = isCloudflareAccessTestMode();
+  const headerStore = await headers();
+  const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
+  const localCfTest = isLocalCloudflareAccessTestRuntime(host);
   // Only honor an explicit query `next`. Direct /login visits default to admin root
   // so logout → login cannot resurrect a prior /applications target.
   const nextPath = next?.trim()

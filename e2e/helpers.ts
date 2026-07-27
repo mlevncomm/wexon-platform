@@ -162,6 +162,9 @@ export async function loginAdmin(page: Page, email: string, password?: string) {
   await expect(page, "admin continue login must not stay on login with denial").not.toHaveURL(
     /adminError=/,
   );
+  // Wait for shell (not profile menu) so a transient /admin redirect that bounces
+  // back to login cannot be mistaken for a successful session.
+  await expect(page.locator(".admin-shell")).toBeVisible({ timeout: 30_000 });
 }
 
 export async function loginCustomer(page: Page, email: string, password: string) {

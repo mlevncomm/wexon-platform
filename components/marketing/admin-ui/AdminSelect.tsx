@@ -23,8 +23,8 @@ type MenuCoords = {
 };
 
 /**
- * Premium popup select for admin forms/filters.
- * Keeps a hidden input so native form submit / server actions stay unchanged.
+ * Accessible combobox for admin forms/filters.
+ * Native `<select>` stays in the form for required validation + submit values.
  */
 export function AdminSelect({
   name,
@@ -57,6 +57,7 @@ export function AdminSelect({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  const optionIdPrefix = useId();
 
   if (defaultValue !== prevDefaultValue) {
     setPrevDefaultValue(defaultValue);
@@ -72,6 +73,11 @@ export function AdminSelect({
     () => options.filter((option) => !option.disabled),
     [options],
   );
+
+  const activeOption = enabledOptions[activeIndex] ?? null;
+  const activeDescendantId = activeOption
+    ? `${optionIdPrefix}-opt-${enabledOptions.findIndex((item) => item.value === activeOption.value)}`
+    : undefined;
 
   useLayoutEffect(() => {
     if (!open || !buttonRef.current) return;
@@ -121,6 +127,7 @@ export function AdminSelect({
       const target = event.target as Node;
       if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
       setOpen(false);
+      buttonRef.current?.focus();
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -128,6 +135,18 @@ export function AdminSelect({
         event.preventDefault();
         setOpen(false);
         buttonRef.current?.focus();
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        setActiveIndex(0);
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        setActiveIndex(Math.max(0, enabledOptions.length - 1));
         return;
       }
 
@@ -161,13 +180,25 @@ export function AdminSelect({
     };
   }, [open, activeIndex, enabledOptions]);
 
+  useEffect(() => {
+    if (!open || !menuRef.current) return;
+    const active = menuRef.current.querySelector<HTMLElement>("[data-active='true']");
+    active?.scrollIntoView({ block: "nearest" });
+  }, [open, activeIndex]);
+
+  function closeAndRestoreFocus() {
+    setOpen(false);
+    buttonRef.current?.focus();
+  }
+
   const menu =
     open && mounted && coords ? (
       <div
         ref={menuRef}
         id={listId}
         role="listbox"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel ?? placeholder}
+        tabIndex={-1}
         style={{
           position: "fixed",
           top: coords.top,
@@ -186,23 +217,25 @@ export function AdminSelect({
             const isSelected = option.value === value;
             const enabledIndex = enabledOptions.findIndex((item) => item.value === option.value);
             const isActive = !option.disabled && enabledIndex === activeIndex;
+            const optionId =
+              enabledIndex >= 0 ? `${optionIdPrefix}-opt-${enabledIndex}` : `${optionIdPrefix}-disabled-${option.value}`;
             return (
-              <button
+              <div
                 key={`${option.value}::${option.label}`}
-                type="button"
+                id={optionId}
                 role="option"
                 aria-selected={isSelected}
-                disabled={option.disabled}
+                aria-disabled={option.disabled || undefined}
+                data-active={isActive ? "true" : undefined}
                 onMouseEnter={() => {
                   if (!option.disabled && enabledIndex >= 0) setActiveIndex(enabledIndex);
                 }}
                 onClick={() => {
                   if (option.disabled) return;
                   setValue(option.value);
-                  setOpen(false);
-                  buttonRef.current?.focus();
+                  closeAndRestoreFocus();
                 }}
-                className={`flex w-full items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left text-sm font-semibold transition ${
+                className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left text-sm font-semibold transition ${
                   option.disabled
                     ? "cursor-not-allowed text-slate-300"
                     : isSelected
@@ -218,7 +251,7 @@ export function AdminSelect({
                     ✓
                   </span>
                 ) : null}
-              </button>
+              </div>
             );
           })
         )}
@@ -227,15 +260,36 @@ export function AdminSelect({
 
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
-      <input type="hidden" name={name} value={value} required={required} />
+      <select
+        name={name}
+        value={value}
+        required={required}
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
+        onChange={(event) => setValue(event.target.value)}
+      >
+        <option value="" disabled={required}>
+          {placeholder}
+        </option>
+        {options.map((option) => (
+          <option key={`${option.value}::${option.label}`} value={option.value} disabled={option.disabled}>
+            {option.label}
+          </option>
+        ))}
+      </select>
       <button
         ref={buttonRef}
         type="button"
         disabled={disabled}
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-label={ariaLabel}
+        aria-activedescendant={open ? activeDescendantId : undefined}
+        aria-label={ariaLabel ?? placeholder}
+        aria-required={required || undefined}
         onClick={() => {
           if (disabled) return;
           setOpen((current) => !current);

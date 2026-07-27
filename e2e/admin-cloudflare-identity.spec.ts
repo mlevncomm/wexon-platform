@@ -104,8 +104,26 @@ test.describe.serial("admin cloudflare identity (PR2B)", () => {
     await loginAdmin(page, email, password);
     await expectAdminSessionCookieHostOnly(page);
 
-    // Drop CF JWT header but keep cookies.
+    // Drop CF JWT header AND the local test JWT cookie (local login mints both).
+    // Session v3 alone must not grant admin access.
     await page.context().setExtraHTTPHeaders({});
+    const cookies = await page.context().cookies();
+    await page.context().clearCookies();
+    const retain = cookies.filter((cookie) => cookie.name !== "wexon_cf_access_test_jwt");
+    if (retain.length > 0) {
+      await page.context().addCookies(
+        retain.map((cookie) => ({
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain,
+          path: cookie.path,
+          expires: cookie.expires,
+          httpOnly: cookie.httpOnly,
+          secure: cookie.secure,
+          sameSite: cookie.sameSite as "Strict" | "Lax" | "None" | undefined,
+        })),
+      );
+    }
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/admin\/login/);
   });

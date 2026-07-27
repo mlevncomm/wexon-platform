@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 function subscribeNoop() {
@@ -16,8 +24,9 @@ type MenuCoords = {
 };
 
 /**
- * Compact overflow / popup action menu for cards and table rows.
- * Renders via portal so table overflow never clips or scrolls the menu.
+ * Overflow / popup action panel for cards and table rows.
+ * Uses dialog semantics because panels commonly contain forms (not menuitem lists).
+ * Renders via portal so table overflow never clips the panel.
  */
 export function AdminActionMenu({
   label = "İşlemler",
@@ -39,6 +48,7 @@ export function AdminActionMenu({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const titleId = useId();
 
   useLayoutEffect(() => {
     if (!open || !buttonRef.current) return;
@@ -79,6 +89,18 @@ export function AdminActionMenu({
   useEffect(() => {
     if (!open) return;
 
+    const triggerButton = buttonRef.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const focusFirst = window.setTimeout(() => {
+      const panel = menuRef.current;
+      if (!panel) return;
+      const focusable = panel.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (focusable ?? panel).focus();
+    }, 0);
+
     function onPointerDown(event: MouseEvent) {
       const target = event.target as Node;
       if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
@@ -86,14 +108,22 @@ export function AdminActionMenu({
     }
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+      }
     }
 
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
+      window.clearTimeout(focusFirst);
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      const restoreTarget = triggerButton ?? previouslyFocused;
+      if (restoreTarget && typeof restoreTarget.focus === "function") {
+        restoreTarget.focus();
+      }
     };
   }, [open]);
 
@@ -102,7 +132,10 @@ export function AdminActionMenu({
       <div
         ref={menuRef}
         id={menuId}
-        role="menu"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         style={{
           position: "fixed",
           top: coords.top,
@@ -112,8 +145,11 @@ export function AdminActionMenu({
           maxHeight: coords.maxHeight,
           zIndex: 80,
         }}
-        className={`overflow-y-auto overscroll-contain rounded-[12px] border border-slate-200 bg-white p-3 shadow-xl shadow-slate-900/15 ${widthClassName}`}
+        className={`overflow-y-auto overscroll-contain rounded-[12px] border border-slate-200 bg-white p-3 shadow-xl shadow-slate-900/15 outline-none ${widthClassName}`}
       >
+        <p id={titleId} className="sr-only">
+          {ariaLabel ?? label}
+        </p>
         <div className="space-y-3">{children}</div>
       </div>
     ) : null;
@@ -124,7 +160,7 @@ export function AdminActionMenu({
         ref={buttonRef}
         type="button"
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-controls={menuId}
         aria-label={ariaLabel ?? label}
         onClick={() => setOpen((value) => !value)}

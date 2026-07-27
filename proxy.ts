@@ -24,9 +24,9 @@ import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
 import { ADMIN_SESSION_COOKIE } from "@/lib/wexon-admin-session-cookie";
 import {
   CF_ACCESS_JWT_HEADER,
-  isCloudflareAccessTestMode,
 } from "@/lib/wexon-cloudflare-access-config";
 import { CF_ACCESS_TEST_JWT_COOKIE } from "@/lib/wexon-cloudflare-access-test-cookie";
+import { isLocalCloudflareAccessTestRuntime } from "@/lib/wexon-cloudflare-access-test-runtime";
 
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
 const MAINTENANCE_MODE_ENABLED = process.env.MAINTENANCE_MODE === "true";
@@ -46,9 +46,10 @@ function hasCloudflareAccessJwtAssertion(request: NextRequest) {
   return Boolean(token && token.trim());
 }
 
-/** Local/CI: copy test JWT cookie onto the CF Access assertion header for page gates. */
+/** Local/CI loopback only: copy test JWT cookie onto the CF Access assertion header. */
 function applyLocalCfAccessTestJwt(request: NextRequest, requestHeaders: Headers) {
-  if (!isCloudflareAccessTestMode()) return;
+  const host = request.headers.get("host") ?? request.nextUrl.host;
+  if (!isLocalCloudflareAccessTestRuntime(host)) return;
   if (hasCloudflareAccessJwtAssertion(request)) return;
   const token = request.cookies.get(CF_ACCESS_TEST_JWT_COOKIE)?.value?.trim();
   if (token) {
