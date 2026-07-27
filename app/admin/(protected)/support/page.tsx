@@ -1,6 +1,13 @@
 import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStatusPill, AdminSummaryCard } from "@/components/marketing/WexonAdminCards";
 import AdminDemoRequestsPanel from "@/components/marketing/AdminDemoRequestsPanel";
-import { AdminActionNotice, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
+import {
+  AdminActionNotice,
+  AdminActionMenu,
+  AdminActionMenuSection,
+  AdminSelectField,
+  AdminSubmitButton,
+  AdminTextField,
+} from "@/components/marketing/WexonAdminForms";
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { updateAdminSupportTicketAction } from "@/lib/wexon-admin-actions";
 import { formatAdminDate, getAdminDemoRequestsData, getAdminSupportTicketsData } from "@/lib/wexon-admin";
@@ -103,19 +110,31 @@ export default async function AdminSupportPage({
               const status = meta.status ?? "OPEN";
               const updateTicket = updateAdminSupportTicketAction.bind(null, ticket.id);
               return (
-                <div key={ticket.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div key={ticket.id} className="rounded-[12px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40 sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-lg font-black text-slate-950">{meta.subject ?? "Destek talebi"}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-lg font-black text-slate-950">{meta.subject ?? "Destek talebi"}</p>
                       <p className="mt-1 text-xs font-semibold text-slate-500">
                         {formatAdminDate(ticket.createdAt)} · {ticket.organization ? <AdminOrgLink id={ticket.organizationId!} name={ticket.organization.name} /> : "—"}
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <AdminStatusPill active={isHighPriority(priority)}>{priorityLabels[priority] ?? priority}</AdminStatusPill>
-                      <AdminStatusPill active={status === "RESOLVED" || status === "CLOSED"}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AdminStatusPill tone={isHighPriority(priority) ? "failed" : "info"}>
+                        {priorityLabels[priority] ?? priority}
+                      </AdminStatusPill>
+                      <AdminStatusPill tone={status === "RESOLVED" || status === "CLOSED" ? "active" : "pending"}>
                         {ticketStatusOptions.find((s) => s.value === status)?.label ?? status}
                       </AdminStatusPill>
+                      <AdminActionMenu label="Yanıtla" ariaLabel="Talebi güncelle" widthClassName="w-[min(100vw-2rem,24rem)]">
+                        <AdminActionMenuSection title="Durum ve yanıt">
+                          <form action={updateTicket} className="grid gap-3">
+                            <input type="hidden" name="returnTo" value="/admin/support" />
+                            <AdminSelectField label="Durum" name="status" defaultValue={status} options={ticketStatusOptions} />
+                            <AdminTextField label="Yanıt" name="adminReply" placeholder="Müşteriye not veya çözüm..." />
+                            <AdminSubmitButton>Güncelle</AdminSubmitButton>
+                          </form>
+                        </AdminActionMenuSection>
+                      </AdminActionMenu>
                     </div>
                   </div>
                   <p className="mt-4 text-sm leading-relaxed text-slate-600">{meta.message ?? "-"}</p>
@@ -123,23 +142,12 @@ export default async function AdminSupportPage({
                     {categoryLabels[meta.category ?? "GENERAL"] ?? meta.category} · {ticket.user?.email ?? meta.actor?.email ?? "—"}
                   </p>
                   {meta.adminReply ? (
-                    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.12em] text-emerald-700">Admin yanıtı</p>
-                      <p className="mt-2 text-sm text-emerald-900">{meta.adminReply}</p>
+                    <div className="mt-4">
+                      <AdminActionNotice tone="info" title="Admin yanıtı">
+                        {meta.adminReply}
+                      </AdminActionNotice>
                     </div>
                   ) : null}
-                  <form action={updateTicket} className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
-                    <input type="hidden" name="returnTo" value="/admin/support" />
-                    <AdminSelectField label="Durum" name="status" defaultValue={status}>
-                      {ticketStatusOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </AdminSelectField>
-                    <AdminTextField label="Yanıt" name="adminReply" placeholder="Müşteriye not veya çözüm..." />
-                    <AdminSubmitButton>Güncelle</AdminSubmitButton>
-                  </form>
                 </div>
               );
             })}

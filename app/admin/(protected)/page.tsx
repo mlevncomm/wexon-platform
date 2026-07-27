@@ -4,6 +4,7 @@ import {
   AdminEmptyState,
   AdminInfoRow,
   AdminPanel,
+  AdminSectionEyebrow,
   AdminSectionTitle,
   AdminSummaryCard,
 } from "@/components/marketing/WexonAdminCards";
@@ -30,9 +31,9 @@ export default async function AdminPage() {
     <div className="space-y-8">
       <section className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_15%_0%,#0f3024_0%,transparent_48%),linear-gradient(180deg,#050b16_0%,#081424_100%)] p-8 text-white shadow-2xl shadow-slate-950/20 sm:p-12">
         <div className="relative max-w-5xl">
-          <span className="mb-6 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+          <AdminSectionEyebrow tone="dark" className="mb-6">
             Wexon Admin
-          </span>
+          </AdminSectionEyebrow>
           <h1 className="text-4xl font-black leading-tight tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl">
             Müşteri yönetimini buradan başlatın
           </h1>

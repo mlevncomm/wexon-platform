@@ -1,5 +1,6 @@
 import {
   AdminEmptyState,
+  AdminResponsiveRows,
   AdminSectionTitle,
   AdminStatusPill,
   AdminSummaryCard,
@@ -7,11 +8,16 @@ import {
 } from "@/components/marketing/WexonAdminCards";
 import {
   AdminActionNotice,
+  AdminActionMenu,
+  AdminActionMenuSection,
+  AdminButton,
   AdminFormPanel,
   AdminSubmitButton,
   AdminTextField,
+  ADMIN_FIELD_CONTROL_COMPACT,
 } from "@/components/marketing/WexonAdminForms";
 import { AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
+import { AdminStatusBadge } from "@/components/marketing/admin-ui/AdminStatusBadge";
 import {
   createPlatformAdminAction,
   setPlatformAdminActiveAction,
@@ -25,6 +31,50 @@ import {
 } from "@/lib/wexon-platform-admin";
 import { formatAdminDate } from "@/lib/wexon-admin";
 import { prisma } from "@/lib/prisma";
+
+function PlatformAdminActionsMenu({
+  adminId,
+  email,
+  displayName,
+  isActive,
+}: {
+  adminId: string;
+  email: string;
+  displayName: string;
+  isActive: boolean;
+}) {
+  const updateDisplayName = updatePlatformAdminDisplayNameAction.bind(null, adminId);
+  const setActive = setPlatformAdminActiveAction.bind(null, adminId);
+
+  return (
+    <AdminActionMenu label="İşlemler" ariaLabel={`${email} işlemleri`}>
+      <AdminActionMenuSection title="Görünen ad">
+        <form action={updateDisplayName} className="grid gap-2">
+          <input type="hidden" name="returnTo" value="/admin/platform-admins" />
+          <input
+            name="displayName"
+            defaultValue={displayName}
+            required
+            maxLength={120}
+            className={ADMIN_FIELD_CONTROL_COMPACT}
+          />
+          <AdminButton type="submit" variant="primary" className="w-full">
+            Adı kaydet
+          </AdminButton>
+        </form>
+      </AdminActionMenuSection>
+      <AdminActionMenuSection title="Hesap">
+        <form action={setActive}>
+          <input type="hidden" name="returnTo" value="/admin/platform-admins" />
+          <input type="hidden" name="isActive" value={isActive ? "false" : "true"} />
+          <AdminButton type="submit" variant="secondary" className="w-full">
+            {isActive ? "Pasife al" : "Aktifleştir"}
+          </AdminButton>
+        </form>
+      </AdminActionMenuSection>
+    </AdminActionMenu>
+  );
+}
 
 export default async function AdminPlatformAdminsPage({
   searchParams,
@@ -83,6 +133,8 @@ export default async function AdminPlatformAdminsPage({
       <AdminFormPanel
         title="Yeni platform yöneticisi"
         description="E-posta trim+lowercase ile tekilleştirilir. Cloudflare subject ilk başarılı girişte bağlanır."
+        collapsible
+        defaultOpen={admins.length === 0}
       >
         <form action={createPlatformAdminAction} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="returnTo" value="/admin/platform-admins" />
@@ -97,81 +149,94 @@ export default async function AdminPlatformAdminsPage({
       {admins.length === 0 ? (
         <AdminEmptyState>Henüz PlatformAdmin kaydı yok. İlk operatörü ekleyin.</AdminEmptyState>
       ) : (
-        <AdminTableShell>
-          <table className="w-full min-w-[640px] text-left text-sm lg:min-w-0">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
+        <AdminTableShell
+          mobile={
+            <AdminResponsiveRows
+              rows={admins.map((admin) => {
+                const cloudflareLabel = formatCloudflareSubjectStatus(admin.cloudflareSubject);
+                return {
+                  key: admin.id,
+                  primary: (
+                    <div className="min-w-0">
+                      <p className="truncate font-black text-slate-950">{admin.displayName}</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-slate-500">{admin.email}</p>
+                    </div>
+                  ),
+                  secondary: (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AdminStatusBadge tone={cloudflareLabel === "Bağlandı" ? "active" : "inactive"}>
+                        {cloudflareLabel}
+                      </AdminStatusBadge>
+                      <span className="truncate text-xs text-slate-500">
+                        Son giriş: {formatAdminDate(admin.lastLoginAt)}
+                      </span>
+                    </div>
+                  ),
+                  meta: (
+                    <AdminStatusPill active={admin.isActive}>
+                      {admin.isActive ? "Aktif" : "Pasif"}
+                    </AdminStatusPill>
+                  ),
+                  actions: (
+                    <PlatformAdminActionsMenu
+                      adminId={admin.id}
+                      email={admin.email}
+                      displayName={admin.displayName}
+                      isActive={admin.isActive}
+                    />
+                  ),
+                };
+              })}
+            />
+          }
+        >
+          <table className="w-full table-fixed text-left">
+            <thead className="bg-slate-50/80">
               <tr>
-                <th className="px-3 py-4 font-bold sm:px-5">Yönetici</th>
-                <th className="hidden px-3 py-4 font-bold sm:px-5 md:table-cell">Cloudflare</th>
-                <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Son giriş</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Görünen ad</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Hesap</th>
+                <th className="w-[36%]">Yönetici</th>
+                <th className="hidden w-[18%] xl:table-cell">Cloudflare</th>
+                <th className="hidden w-[18%] 2xl:table-cell">Son giriş</th>
+                <th className="w-[14%]">Durum</th>
+                <th className="w-[140px]">İşlemler</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {admins.map((admin) => {
-                const updateDisplayName = updatePlatformAdminDisplayNameAction.bind(null, admin.id);
-                const setActive = setPlatformAdminActiveAction.bind(null, admin.id);
                 const cloudflareLabel = formatCloudflareSubjectStatus(admin.cloudflareSubject);
                 return (
-                  <tr key={admin.id} className="align-top">
-                    <td className="min-w-0 px-3 py-4 sm:px-5">
-                      <p className="break-words font-black text-slate-950">{admin.displayName}</p>
-                      <p className="mt-1 break-all text-xs font-semibold text-slate-500">{admin.email}</p>
+                  <tr key={admin.id} className="align-middle">
+                    <td className="min-w-0">
+                      <p className="truncate font-black text-slate-950">{admin.displayName}</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-slate-500">{admin.email}</p>
+                      <div className="mt-2 xl:hidden">
+                        <AdminStatusBadge tone={cloudflareLabel === "Bağlandı" ? "active" : "inactive"}>
+                          {cloudflareLabel}
+                        </AdminStatusBadge>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-500 2xl:hidden">
+                        Son giriş: {formatAdminDate(admin.lastLoginAt)}
+                      </p>
                     </td>
-                    <td className="hidden px-3 py-4 sm:px-5 md:table-cell">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                          cloudflareLabel === "Bağlandı"
-                            ? "bg-emerald-50 text-emerald-800"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
+                    <td className="hidden min-w-0 xl:table-cell">
+                      <AdminStatusBadge tone={cloudflareLabel === "Bağlandı" ? "active" : "inactive"}>
                         {cloudflareLabel}
-                      </span>
+                      </AdminStatusBadge>
                     </td>
-                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">
+                    <td className="hidden min-w-0 truncate text-slate-600 2xl:table-cell">
                       {formatAdminDate(admin.lastLoginAt)}
                     </td>
-                    <td className="px-3 py-4 sm:px-5">
+                    <td className="min-w-0">
                       <AdminStatusPill active={admin.isActive}>
                         {admin.isActive ? "Aktif" : "Pasif"}
                       </AdminStatusPill>
                     </td>
-                    <td className="px-3 py-4 sm:px-5">
-                      <form action={updateDisplayName} className="flex flex-wrap items-center gap-2">
-                        <input type="hidden" name="returnTo" value="/admin/platform-admins" />
-                        <input
-                          name="displayName"
-                          defaultValue={admin.displayName}
-                          required
-                          maxLength={120}
-                          className="w-36 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold"
-                        />
-                        <button
-                          type="submit"
-                          className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
-                        >
-                          Kaydet
-                        </button>
-                      </form>
-                    </td>
-                    <td className="px-3 py-4 sm:px-5">
-                      <form action={setActive}>
-                        <input type="hidden" name="returnTo" value="/admin/platform-admins" />
-                        <input type="hidden" name="isActive" value={admin.isActive ? "false" : "true"} />
-                        <button
-                          type="submit"
-                          className={`rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                            admin.isActive
-                              ? "border border-amber-200 bg-amber-50 text-amber-800"
-                              : "border border-emerald-200 bg-emerald-50 text-emerald-800"
-                          }`}
-                        >
-                          {admin.isActive ? "Pasife al" : "Aktifleştir"}
-                        </button>
-                      </form>
+                    <td className="min-w-0">
+                      <PlatformAdminActionsMenu
+                        adminId={admin.id}
+                        email={admin.email}
+                        displayName={admin.displayName}
+                        isActive={admin.isActive}
+                      />
                     </td>
                   </tr>
                 );

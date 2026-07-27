@@ -1,11 +1,36 @@
-import { AdminEmptyState, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
-import { AdminActionNotice, AdminDateField, AdminFormPanel, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
+import {
+  AdminEmptyState,
+  AdminResponsiveRows,
+  AdminSectionTitle,
+  AdminStatusPill,
+  AdminSummaryCard,
+  AdminTableShell,
+  AdminTableToolbar,
+  adminStatusToneFromValue,
+} from "@/components/marketing/WexonAdminCards";
+import {
+  AdminActionNotice,
+  AdminActionMenu,
+  AdminActionMenuSection,
+  AdminDateField,
+  AdminFormPanel,
+  AdminSelectField,
+  AdminSubmitButton,
+  AdminTextField,
+} from "@/components/marketing/WexonAdminForms";
+import { AdminConfirmCheckbox } from "@/components/marketing/admin-ui/AdminOrganizationCard";
 import { AdminInlineSelectForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import {
   changeAdminLicenseStatusAction,
   createAdminLicenseFromListAction,
 } from "@/lib/wexon-admin-actions";
-import { displayPlanName, formatAdminDate, formatAdminStatus, getAdminLicensesData, getAdminOperationOptions } from "@/lib/wexon-admin";
+import {
+  displayPlanName,
+  formatAdminDate,
+  formatAdminStatus,
+  getAdminLicensesData,
+  getAdminOperationOptions,
+} from "@/lib/wexon-admin";
 import { generateAdminMutationKey } from "@/lib/wexon-admin-mutation-idempotency";
 
 const licenseStatusOptions = [
@@ -17,10 +42,39 @@ const licenseStatusOptions = [
   { value: "EXPIRED", label: "Süresi dolmuş" },
 ];
 
+function LicenseStatusMenu({
+  organizationId,
+  licenseId,
+  organizationName,
+  status,
+}: {
+  organizationId: string;
+  licenseId: string;
+  organizationName: string;
+  status: string;
+}) {
+  return (
+    <AdminActionMenu label="Durum" ariaLabel={`${organizationName} lisans işlemi`}>
+      <AdminActionMenuSection title="Durumu güncelle">
+        <AdminInlineSelectForm
+          action={changeAdminLicenseStatusAction.bind(null, organizationId, licenseId)}
+          returnTo="/admin/licenses"
+          fieldName="status"
+          value={status}
+          options={licenseStatusOptions}
+          requireHighRiskConfirm
+        />
+      </AdminActionMenuSection>
+    </AdminActionMenu>
+  );
+}
+
 export default async function AdminLicensesPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
   const { adminError } = await searchParams;
   const [licenses, options] = await Promise.all([getAdminLicensesData(), getAdminOperationOptions()]);
-  const attention = licenses.filter((license) => license.status === "PAST_DUE" || license.status === "SUSPENDED" || license.status === "EXPIRED");
+  const attention = licenses.filter(
+    (license) => license.status === "PAST_DUE" || license.status === "SUSPENDED" || license.status === "EXPIRED",
+  );
   const licenseMutationId = generateAdminMutationKey();
 
   return (
@@ -54,45 +108,47 @@ export default async function AdminLicensesPage({ searchParams }: { searchParams
           <input type="hidden" name="returnTo" value="/admin/licenses" />
           <input type="hidden" name="productKey" value="wexpay" />
           <input type="hidden" name="mutationId" value={licenseMutationId} />
-          <AdminSelectField label="Müşteri" name="organizationId" defaultValue="">
-            <option value="" disabled>
-              Müşteri seçin
-            </option>
-            {options.organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </AdminSelectField>
-          <AdminSelectField label="Paket" name="planId" defaultValue="">
-            <option value="" disabled>
-              Paket seçin
-            </option>
-            {options.plans.map((plan) => (
-              <option key={plan.id} value={plan.id}>
-                {plan.product.name} · {displayPlanName(plan.name)}
-              </option>
-            ))}
-          </AdminSelectField>
-          <AdminSelectField label="Lisans tipi" name="licenseType" defaultValue="MONTHLY">
-            <option value="MONTHLY">Aylık</option>
-            <option value="YEARLY">Yıllık</option>
-            <option value="ONE_TIME">Tek seferlik</option>
-          </AdminSelectField>
-          <AdminSelectField label="Durum" name="status" defaultValue="ACTIVE">
-            {licenseStatusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </AdminSelectField>
+          <AdminSelectField
+            label="Müşteri"
+            name="organizationId"
+            defaultValue=""
+            options={[
+              { value: "", label: "Müşteri seçin", disabled: true },
+              ...options.organizations.map((organization) => ({
+                value: organization.id,
+                label: organization.name,
+              })),
+            ]}
+          />
+          <AdminSelectField
+            label="Paket"
+            name="planId"
+            defaultValue=""
+            options={[
+              { value: "", label: "Paket seçin", disabled: true },
+              ...options.plans.map((plan) => ({
+                value: plan.id,
+                label: `${plan.product.name} · ${displayPlanName(plan.name)}`,
+              })),
+            ]}
+          />
+          <AdminSelectField
+            label="Lisans tipi"
+            name="licenseType"
+            defaultValue="MONTHLY"
+            options={[
+              { value: "MONTHLY", label: "Aylık" },
+              { value: "YEARLY", label: "Yıllık" },
+              { value: "ONE_TIME", label: "Tek seferlik" },
+            ]}
+          />
+          <AdminSelectField label="Durum" name="status" defaultValue="ACTIVE" options={licenseStatusOptions} />
           <AdminDateField label="Başlangıç" name="startsAt" defaultValue={new Date().toISOString().slice(0, 10)} required />
           <AdminDateField label="Bitiş / yenileme" name="endsAt" />
           <AdminTextField label="İşlem gerekçesi" name="reason" required placeholder="Lisans oluşturma gerekçesi" />
-          <label className="md:col-span-2 xl:col-span-3 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <input type="checkbox" name="confirmed" value="1" className="mt-1 h-4 w-4 rounded border-slate-300" required />
-            <span className="text-sm font-semibold text-slate-700">Manuel lisans kaydının oluşturulacağını onaylıyorum.</span>
-          </label>
+          <div className="md:col-span-2 xl:col-span-3">
+            <AdminConfirmCheckbox>Manuel lisans kaydının oluşturulacağını onaylıyorum.</AdminConfirmCheckbox>
+          </div>
           <div className="md:col-span-2 xl:col-span-3">
             <AdminSubmitButton>Lisans oluştur</AdminSubmitButton>
           </div>
@@ -102,40 +158,83 @@ export default async function AdminLicensesPage({ searchParams }: { searchParams
       {licenses.length === 0 ? (
         <AdminEmptyState>Henüz lisans bulunmuyor.</AdminEmptyState>
       ) : (
-        <AdminTableShell>
-          <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
+        <AdminTableShell
+          toolbar={<AdminTableToolbar title="Lisans listesi" description={`${licenses.length} kayıt`} />}
+          mobile={
+            <AdminResponsiveRows
+              rows={licenses.map((license) => ({
+                key: license.id,
+                primary: (
+                  <div className="min-w-0">
+                    <AdminOrgLink id={license.organizationId} name={license.organization.name} />
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {license.product.name} · {displayPlanName(license.plan.name)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatAdminDate(license.startsAt)} → {formatAdminDate(license.endsAt)}
+                    </p>
+                  </div>
+                ),
+                meta: (
+                  <AdminStatusPill tone={adminStatusToneFromValue(license.status)}>
+                    {formatAdminStatus(license.status)}
+                  </AdminStatusPill>
+                ),
+                actions: (
+                  <LicenseStatusMenu
+                    organizationId={license.organizationId}
+                    licenseId={license.id}
+                    organizationName={license.organization.name}
+                    status={license.status}
+                  />
+                ),
+              }))}
+            />
+          }
+        >
+          <table className="w-full table-fixed text-left">
+            <thead className="bg-slate-50/80">
               <tr>
-                <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Ürün / Plan</th>
-                <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Dönem</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
-                <th className="px-3 py-4 font-bold sm:px-5">İşlem</th>
+                <th className="w-[28%]">Müşteri</th>
+                <th className="w-[26%]">Ürün / Plan</th>
+                <th className="hidden w-[22%] xl:table-cell">Dönem</th>
+                <th className="w-[14%]">Durum</th>
+                <th className="w-[140px]">İşlem</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {licenses.map((license) => (
                 <tr key={license.id}>
-                  <td className="px-3 py-4 sm:px-5">
-                    <AdminOrgLink id={license.organizationId} name={license.organization.name} />
+                  <td className="min-w-0">
+                    <div className="truncate">
+                      <AdminOrgLink id={license.organizationId} name={license.organization.name} />
+                    </div>
+                    <p className="mt-1 truncate text-xs text-slate-500 xl:hidden">
+                      {formatAdminDate(license.startsAt)} → {formatAdminDate(license.endsAt)}
+                    </p>
                   </td>
-                  <td className="px-3 py-4 text-slate-600 sm:px-5">
-                    {license.product.name} · {displayPlanName(license.plan.name)}
+                  <td className="min-w-0 text-slate-600">
+                    <span className="block truncate font-bold text-slate-950">{license.product.name}</span>
+                    <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
+                      {displayPlanName(license.plan.name)}
+                    </span>
                   </td>
-                  <td className="hidden px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">
-                    {formatAdminDate(license.startsAt)} → {formatAdminDate(license.endsAt)}
+                  <td className="hidden min-w-0 text-slate-600 xl:table-cell">
+                    <span className="block truncate">
+                      {formatAdminDate(license.startsAt)} → {formatAdminDate(license.endsAt)}
+                    </span>
                   </td>
-                  <td className="px-3 py-4 sm:px-5">
-                    <AdminStatusPill active={license.status === "ACTIVE"}>{formatAdminStatus(license.status)}</AdminStatusPill>
+                  <td className="min-w-0">
+                    <AdminStatusPill tone={adminStatusToneFromValue(license.status)}>
+                      {formatAdminStatus(license.status)}
+                    </AdminStatusPill>
                   </td>
-                  <td className="px-3 py-4 sm:px-5">
-                    <AdminInlineSelectForm
-                      action={changeAdminLicenseStatusAction.bind(null, license.organizationId, license.id)}
-                      returnTo="/admin/licenses"
-                      fieldName="status"
-                      value={license.status}
-                      options={licenseStatusOptions}
-                      requireHighRiskConfirm
+                  <td className="min-w-0">
+                    <LicenseStatusMenu
+                      organizationId={license.organizationId}
+                      licenseId={license.id}
+                      organizationName={license.organization.name}
+                      status={license.status}
                     />
                   </td>
                 </tr>

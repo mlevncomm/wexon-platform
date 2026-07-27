@@ -8,7 +8,12 @@ import {
   AdminSummaryCard,
   AdminTableShell,
 } from "@/components/marketing/WexonAdminCards";
-import { AdminSubmitButton } from "@/components/marketing/WexonAdminForms";
+import {
+  AdminSelect,
+  AdminSelectField,
+  AdminSubmitButton,
+  ADMIN_FIELD_SURFACE,
+} from "@/components/marketing/WexonAdminForms";
 import { formatAdminDate } from "@/lib/wexon-admin";
 import { updateAdminDemoRequestFollowUpAction, updateAdminDemoRequestStatusAction } from "@/lib/wexon-admin-actions";
 import {
@@ -187,8 +192,7 @@ function FollowUpSummary({ followUp, compact = false }: { followUp: DemoLeadFoll
   );
 }
 
-const mobileFieldClassName =
-  "mt-1.5 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base font-semibold text-slate-950 outline-none transition focus:border-emerald-300 sm:py-2 sm:text-xs";
+const mobileFieldClassName = `mt-1.5 w-full min-w-0 rounded-[10px] px-3 py-2.5 text-base font-semibold text-slate-950 sm:py-2 sm:text-xs ${ADMIN_FIELD_SURFACE}`;
 
 function LeadFollowUpUpdateForm({
   requestId,
@@ -297,18 +301,17 @@ function LeadStatusUpdateForm({
   return (
     <form action={updateStatus} className={compact ? "flex min-w-0 flex-col gap-2" : "mt-4 space-y-2"}>
       <input type="hidden" name="returnTo" value={returnTo} />
-      <select
+      <AdminSelect
         name="leadStatus"
         defaultValue={leadStatus}
         aria-label="Lead durumu"
-        className={`w-full min-w-0 ${mobileFieldClassName}`}
-      >
-        {demoLeadStatuses.map((status) => (
-          <option key={status} value={status}>
-            {demoLeadStatusLabels[status]}
-          </option>
-        ))}
-      </select>
+        compact={compact}
+        className="w-full min-w-0"
+        options={demoLeadStatuses.map((status) => ({
+          value: status,
+          label: demoLeadStatusLabels[status],
+        }))}
+      />
       <AdminSubmitButton>Güncelle</AdminSubmitButton>
     </form>
   );
@@ -419,65 +422,63 @@ function DemoRequestTableRow({
   const hasEligibilityDetail = buildWexPayEligibilityAdminView(request.metadataJson).hasEligibilitySignal;
 
   return (
-    <tr className="align-top transition-colors hover:bg-slate-50/80">
-      <td className="px-3 py-5">
-        <div className="min-w-[132px] space-y-3">
+    <tr className="align-top">
+      <td className="min-w-0">
+        <div className="space-y-3">
           <LeadStatusBadge status={request.leadStatus} />
           <LeadStatusUpdateForm requestId={request.id} leadStatus={request.leadStatus} returnTo={returnTo} compact />
         </div>
       </td>
-      <td className="min-w-[130px] px-3 py-5">
-        <p className="break-words text-base font-black leading-snug text-slate-950">{meta.fullName ?? "—"}</p>
-        <p className="mt-1 break-words text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
-        <p className="mt-2 whitespace-nowrap text-xs font-bold text-slate-500 min-[1880px]:hidden">{formatAdminDate(request.createdAt)}</p>
+      <td className="min-w-0">
+        <p className="truncate font-black text-slate-950">{meta.fullName ?? "—"}</p>
+        <p className="mt-1 truncate text-sm font-semibold text-slate-600">{meta.company ?? "—"}</p>
+        <p className="mt-2 truncate text-xs font-bold text-slate-500 2xl:hidden">{formatAdminDate(request.createdAt)}</p>
       </td>
-      <td className="hidden whitespace-nowrap px-3 py-5 text-xs font-semibold text-slate-500 min-[1880px]:table-cell">
-        <span className="block font-bold text-slate-700">{formatAdminDate(request.createdAt)}</span>
+      <td className="hidden min-w-0 truncate text-xs font-semibold text-slate-500 2xl:table-cell">
+        {formatAdminDate(request.createdAt)}
       </td>
-      <td className="min-w-[150px] px-3 py-5">
-        <div className="space-y-2">
-          <p className="break-all text-sm font-semibold text-slate-700">{email ?? "—"}</p>
-          <p className="break-words text-sm font-semibold text-slate-500 min-[1700px]:hidden">{phone ?? "—"}</p>
-        </div>
+      <td className="min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-700">{email ?? "—"}</p>
+        <p className="mt-1 truncate text-sm font-semibold text-slate-500 xl:hidden">{phone ?? "—"}</p>
       </td>
-      <td className="hidden min-w-[110px] px-3 py-5 min-[1700px]:table-cell">
-        <p className="break-words text-sm font-semibold text-slate-600">{phone ?? "—"}</p>
+      <td className="hidden min-w-0 truncate text-sm font-semibold text-slate-600 xl:table-cell">
+        {phone ?? "—"}
       </td>
-      <td className="px-3 py-5">
-        <div className="flex min-w-[90px] flex-col gap-2">
+      <td className="min-w-0">
+        <div className="flex flex-col gap-2">
           <DemoBadge className={productBadgeClass(meta.product)}>{meta.product ?? "—"}</DemoBadge>
           <DemoBadge className={sourceBadgeClass(source.key)}>{source.label}</DemoBadge>
-          <div className="min-[1780px]:hidden">
+          <div className="2xl:hidden">
             <EligibilityListBadges metadataJson={request.metadataJson} />
           </div>
         </div>
       </td>
-      <td className="hidden min-w-[110px] px-3 py-5 min-[1780px]:table-cell">
+      <td className="hidden min-w-0 2xl:table-cell">
         <EligibilityListBadges metadataJson={request.metadataJson} />
       </td>
-      <td className="min-w-[140px] px-3 py-5">
-        <div className="space-y-3">
-          <p className="line-clamp-4 break-words text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
+      <td className="hidden min-w-0 xl:table-cell">
+        <div className="space-y-2">
+          <p className="line-clamp-3 text-sm leading-relaxed text-slate-600">{meta.message ?? "—"}</p>
           {hasEligibilityDetail ? (
             <details>
               <summary className="cursor-pointer text-xs font-bold text-emerald-700 hover:underline">
                 Uygunluk detayı
               </summary>
-              <div className="mt-3 max-w-xl">
+              <div className="mt-3 max-w-full">
                 <WexPayEligibilityAdminCard metadataJson={request.metadataJson} />
               </div>
             </details>
           ) : null}
         </div>
       </td>
-      <td className="min-w-[200px] px-3 py-5">
+      <td className="min-w-0">
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
           <FollowUpSummary followUp={request.followUp} compact />
           <LeadFollowUpUpdateForm requestId={request.id} followUp={request.followUp} returnTo={returnTo} compact />
         </div>
       </td>
-      <td className="px-3 py-5">
-        <div className="flex min-w-[88px] flex-col gap-2">
+      <td className="min-w-0">
+        <div className="flex flex-col gap-2">
           <QuickActionLink href={email ? `mailto:${email}` : "#"} label="E-posta" disabled={!email} />
           <QuickActionLink href={phone ? `tel:${phone.replace(/\s/g, "")}` : "#"} label="Telefon" disabled={!phone} />
         </div>
@@ -494,23 +495,31 @@ function DemoRequestTable({
   returnTo: string;
 }) {
   return (
-    <AdminTableShell>
-      <table className="w-full min-w-[860px] border-collapse text-left text-sm min-[1440px]:min-w-0">
-        <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 text-[11px] uppercase tracking-[0.14em] text-slate-500 backdrop-blur-sm">
+    <AdminTableShell
+      mobile={
+        <div className="space-y-4 p-4 sm:p-6">
+          {requests.map((request) => (
+            <DemoRequestCard key={request.id} request={request} returnTo={returnTo} />
+          ))}
+        </div>
+      }
+    >
+      <table className="w-full table-fixed text-left">
+        <thead className="bg-slate-50/80">
           <tr>
-            <th className="px-3 py-4 font-black">Durum</th>
-            <th className="px-3 py-4 font-black">Ad soyad</th>
-            <th className="hidden px-3 py-4 font-black min-[1880px]:table-cell">Tarih</th>
-            <th className="px-3 py-4 font-black">E-posta</th>
-            <th className="hidden px-3 py-4 font-black min-[1700px]:table-cell">Telefon</th>
-            <th className="px-3 py-4 font-black">Ürün</th>
-            <th className="hidden px-3 py-4 font-black min-[1780px]:table-cell">Uygunluk</th>
-            <th className="px-3 py-4 font-black">Talep notu</th>
-            <th className="px-3 py-4 font-black">Takip</th>
-            <th className="px-3 py-4 font-black">Aksiyon</th>
+            <th className="w-[12%]">Durum</th>
+            <th className="w-[14%]">Ad soyad</th>
+            <th className="hidden w-[8%] 2xl:table-cell">Tarih</th>
+            <th className="w-[14%]">E-posta</th>
+            <th className="hidden w-[10%] xl:table-cell">Telefon</th>
+            <th className="w-[12%]">Ürün</th>
+            <th className="hidden w-[8%] 2xl:table-cell">Uygunluk</th>
+            <th className="hidden w-[12%] xl:table-cell">Talep notu</th>
+            <th className="w-[14%]">Takip</th>
+            <th className="w-[140px]">Aksiyon</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
+        <tbody>
           {requests.map((request) => (
             <DemoRequestTableRow key={request.id} request={request} returnTo={returnTo} />
           ))}
@@ -564,37 +573,25 @@ export default function AdminDemoRequestsPanel({
       ) : null}
 
       <form method="get" className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-end">
-        <label className="grid min-w-0 gap-1.5 text-sm">
-          <span className="text-xs font-semibold text-slate-500">Ürün</span>
-          <select
-            name="demoProduct"
-            defaultValue={filters.product ?? "all"}
-            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-base font-semibold text-slate-800 outline-none focus:border-emerald-300 sm:h-10 sm:text-sm"
-          >
-            <option value="all">Tümü</option>
-            {demoProducts.map((product) => (
-              <option key={product} value={product}>
-                {product}
-              </option>
-            ))}
-          </select>
-        </label>
+        <AdminSelectField
+          label="Ürün"
+          name="demoProduct"
+          defaultValue={filters.product ?? "all"}
+          options={[
+            { value: "all", label: "Tümü" },
+            ...demoProducts.map((product) => ({ value: product, label: product })),
+          ]}
+        />
 
-        <label className="grid min-w-0 gap-1.5 text-sm">
-          <span className="text-xs font-semibold text-slate-500">Kaynak</span>
-          <select
-            name="demoSource"
-            defaultValue={filters.source ?? "all"}
-            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-base font-semibold text-slate-800 outline-none focus:border-emerald-300 sm:h-10 sm:text-sm"
-          >
-            <option value="all">Tümü</option>
-            {demoSourceOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <AdminSelectField
+          label="Kaynak"
+          name="demoSource"
+          defaultValue={filters.source ?? "all"}
+          options={[
+            { value: "all", label: "Tümü" },
+            ...demoSourceOptions.map((option) => ({ value: option.value, label: option.label })),
+          ]}
+        />
 
         <button
           type="submit"
@@ -624,24 +621,13 @@ export default function AdminDemoRequestsPanel({
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
             <AdminStatusPill active>{`${filteredRequests.length} kayıt gösteriliyor`}</AdminStatusPill>
             {hasActiveFilter ? <span>Filtrelenmiş görünüm</span> : null}
-            <span className="hidden lg:inline">Geniş tablo için yatay kaydırma kullanılabilir.</span>
           </div>
         </>
       )}
       </div>
 
       {filteredRequests.length > 0 ? (
-        <>
-          <div className="hidden lg:block">
-            <DemoRequestTable requests={filteredRequests} returnTo={returnTo} />
-          </div>
-
-          <div className="space-y-4 p-4 lg:hidden sm:p-6">
-            {filteredRequests.map((request) => (
-              <DemoRequestCard key={request.id} request={request} returnTo={returnTo} />
-            ))}
-          </div>
-        </>
+        <DemoRequestTable requests={filteredRequests} returnTo={returnTo} />
       ) : null}
     </AdminPanel>
   );

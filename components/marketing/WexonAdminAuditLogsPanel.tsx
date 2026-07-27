@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { AdminEmptyState, AdminPanel, AdminSectionTitle, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
+import {
+  AdminEmptyState,
+  AdminPanel,
+  AdminResponsiveRows,
+  AdminSectionTitle,
+  AdminStatusBadge,
+  AdminSummaryCard,
+  AdminTableShell,
+  AdminTableToolbar,
+} from "@/components/marketing/WexonAdminCards";
 import {
   formatAdminDateTime,
   getAdminAuditLogsData,
@@ -11,11 +20,12 @@ import {
   getAuditStatusLabel,
   readAuditMetadataSource,
 } from "@/lib/wexon-audit-labels";
+import { AdminSelectField, ADMIN_FIELD_CONTROL_COMPACT } from "@/components/marketing/WexonAdminForms";
 
 function levelTone(level: string, status: string) {
-  if (level === "ERROR" || status === "FAILURE") return "bg-rose-50 text-rose-700 ring-rose-100";
-  if (level === "WARN") return "bg-amber-50 text-amber-800 ring-amber-100";
-  return "bg-slate-100 text-slate-600 ring-slate-200/80";
+  if (level === "ERROR" || status === "FAILURE") return "failed" as const;
+  if (level === "WARN") return "pending" as const;
+  return "inactive" as const;
 }
 
 function buildPageHref(filters: AdminAuditLogFilters, page: number) {
@@ -61,48 +71,41 @@ export default async function WexonAdminAuditLogsPanel({
 
       <AdminPanel className="mb-6">
         <form method="get" className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_auto] lg:items-end">
-          <label className="grid gap-1.5 text-sm">
-            <span className="text-xs font-semibold text-slate-500">Müşteri</span>
-            <select
-              name="organizationId"
-              defaultValue={filters.organizationId ?? ""}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-emerald-300"
-            >
-              <option value="">Tüm müşteriler</option>
-              {data.organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <AdminSelectField
+            label="Müşteri"
+            name="organizationId"
+            defaultValue={filters.organizationId ?? ""}
+            options={[
+              { value: "", label: "Tüm müşteriler" },
+              ...data.organizations.map((organization) => ({
+                value: organization.id,
+                label: organization.name,
+              })),
+            ]}
+          />
 
-          <label className="grid gap-1.5 text-sm">
-            <span className="text-xs font-semibold text-slate-500">Seviye</span>
-            <select
-              name="level"
-              defaultValue={filters.level ?? ""}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-emerald-300"
-            >
-              <option value="">Tümü</option>
-              <option value="ERROR">Hata</option>
-              <option value="WARN">Uyarı</option>
-              <option value="INFO">Bilgi</option>
-            </select>
-          </label>
+          <AdminSelectField
+            label="Seviye"
+            name="level"
+            defaultValue={filters.level ?? ""}
+            options={[
+              { value: "", label: "Tümü" },
+              { value: "ERROR", label: "Hata" },
+              { value: "WARN", label: "Uyarı" },
+              { value: "INFO", label: "Bilgi" },
+            ]}
+          />
 
-          <label className="grid gap-1.5 text-sm">
-            <span className="text-xs font-semibold text-slate-500">Durum</span>
-            <select
-              name="status"
-              defaultValue={filters.status ?? ""}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-emerald-300"
-            >
-              <option value="">Tümü</option>
-              <option value="FAILURE">Başarısız</option>
-              <option value="SUCCESS">Başarılı</option>
-            </select>
-          </label>
+          <AdminSelectField
+            label="Durum"
+            name="status"
+            defaultValue={filters.status ?? ""}
+            options={[
+              { value: "", label: "Tümü" },
+              { value: "FAILURE", label: "Başarısız" },
+              { value: "SUCCESS", label: "Başarılı" },
+            ]}
+          />
 
           <label className="grid gap-1.5 text-sm">
             <span className="text-xs font-semibold text-slate-500">Ara</span>
@@ -110,7 +113,7 @@ export default async function WexonAdminAuditLogsPanel({
               name="q"
               defaultValue={filters.q ?? ""}
               placeholder="Olay, e-posta, mesaj…"
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-emerald-300"
+              className={ADMIN_FIELD_CONTROL_COMPACT}
             />
           </label>
 
@@ -127,43 +130,117 @@ export default async function WexonAdminAuditLogsPanel({
         <AdminEmptyState>Filtrelere uygun log kaydı bulunamadı.</AdminEmptyState>
       ) : (
         <>
-          <AdminTableShell>
-            <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
+          <AdminTableShell
+            toolbar={<AdminTableToolbar title="Audit kayıtları" description={`${data.logs.length} kayıt bu sayfada`} />}
+            mobile={
+              <AdminResponsiveRows
+                rows={data.logs.map((log) => {
+                  const metadata = formatMetadata(log.metadataJson);
+                  return {
+                    key: log.id,
+                    primary: (
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-950">{getAuditActionLabel(log.action)}</p>
+                        {log.message ? (
+                          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{log.message}</p>
+                        ) : null}
+                        <p className="mt-1 truncate text-xs text-slate-400">
+                          {log.organization?.name ?? "Sistem"}
+                          {log.user?.email ? ` · ${log.user.email}` : ""}
+                          {" · "}
+                          {formatAdminDateTime(log.createdAt)}
+                        </p>
+                      </div>
+                    ),
+                    meta: (
+                      <div className="flex flex-col items-end gap-1.5">
+                        <AdminStatusBadge tone={levelTone(log.level, log.status)}>
+                          {getAuditLevelLabel(log.level)}
+                        </AdminStatusBadge>
+                        <span className="text-[11px] font-medium text-slate-400">{getAuditStatusLabel(log.status)}</span>
+                      </div>
+                    ),
+                    actions: (
+                      <details className="group w-full">
+                        <summary className="cursor-pointer list-none text-xs font-semibold text-emerald-700 hover:text-emerald-800">
+                          Görüntüle
+                        </summary>
+                        <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                          {log.entityType ? (
+                            <p>
+                              <span className="font-semibold text-slate-500">Varlık:</span> {log.entityType}
+                              {log.entityId ? ` · ${log.entityId}` : ""}
+                            </p>
+                          ) : null}
+                          {log.ipAddress ? (
+                            <p>
+                              <span className="font-semibold text-slate-500">IP:</span> {log.ipAddress}
+                            </p>
+                          ) : null}
+                          {metadata ? (
+                            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-white p-2 font-mono text-[10px] text-slate-600 ring-1 ring-slate-200">
+                              {metadata}
+                            </pre>
+                          ) : (
+                            <p className="text-slate-400">Ek metadata yok</p>
+                          )}
+                        </div>
+                      </details>
+                    ),
+                  };
+                })}
+              />
+            }
+          >
+            <table className="w-full table-fixed text-left">
+              <thead className="bg-slate-50/80">
                 <tr>
-                  <th className="px-3 py-4 font-bold sm:px-5">Seviye</th>
-                  <th className="px-3 py-4 font-bold sm:px-5">Olay</th>
-                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Müşteri</th>
-                  <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Kullanıcı</th>
-                  <th className="hidden px-3 py-4 font-bold sm:px-5 2xl:table-cell">Kaynak</th>
-                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Zaman</th>
-                  <th className="px-3 py-4 font-bold sm:px-5">Detay</th>
+                  <th className="w-[12%]">Seviye</th>
+                  <th className="w-[28%]">Olay</th>
+                  <th className="hidden w-[14%] xl:table-cell">Müşteri</th>
+                  <th className="hidden w-[16%] 2xl:table-cell">Kullanıcı</th>
+                  <th className="hidden w-[10%] 2xl:table-cell">Kaynak</th>
+                  <th className="hidden w-[14%] xl:table-cell">Zaman</th>
+                  <th className="w-[140px]">Detay</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {data.logs.map((log) => {
                   const metadata = formatMetadata(log.metadataJson);
                   const source = readAuditMetadataSource(log.metadataJson);
                   return (
                     <tr key={log.id} className="align-top">
-                      <td className="px-3 py-4 sm:px-5">
+                      <td className="min-w-0">
                         <div className="flex flex-col gap-1.5">
-                          <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${levelTone(log.level, log.status)}`}>
+                          <AdminStatusBadge tone={levelTone(log.level, log.status)}>
                             {getAuditLevelLabel(log.level)}
-                          </span>
+                          </AdminStatusBadge>
                           <span className="text-[11px] font-medium text-slate-400">{getAuditStatusLabel(log.status)}</span>
                         </div>
                       </td>
-                      <td className="min-w-0 px-3 py-4 sm:px-5">
-                        <p className="break-words font-semibold text-slate-950">{getAuditActionLabel(log.action)}</p>
-                        {log.message ? <p className="mt-1 text-xs leading-relaxed text-slate-500">{log.message}</p> : null}
-                        <p className="mt-1 break-all font-mono text-[10px] text-slate-400">{log.action}</p>
+                      <td className="min-w-0">
+                        <p className="truncate font-semibold text-slate-950">{getAuditActionLabel(log.action)}</p>
+                        {log.message ? (
+                          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{log.message}</p>
+                        ) : null}
+                        <p className="mt-1 truncate font-mono text-[10px] text-slate-400">{log.action}</p>
+                        <p className="mt-1 truncate text-xs text-slate-400 xl:hidden">
+                          {log.organization?.name ?? "Sistem"}
+                          {" · "}
+                          {formatAdminDateTime(log.createdAt)}
+                        </p>
                       </td>
-                      <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{log.organization?.name ?? "Sistem"}</td>
-                      <td className="hidden break-all px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">{log.user?.email ?? "-"}</td>
-                      <td className="hidden px-3 py-4 text-slate-500 sm:px-5 2xl:table-cell">{source ?? "-"}</td>
-                      <td className="hidden whitespace-nowrap px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{formatAdminDateTime(log.createdAt)}</td>
-                      <td className="px-3 py-4 sm:px-5">
+                      <td className="hidden min-w-0 truncate text-slate-600 xl:table-cell">
+                        {log.organization?.name ?? "Sistem"}
+                      </td>
+                      <td className="hidden min-w-0 truncate text-slate-600 2xl:table-cell">
+                        {log.user?.email ?? "-"}
+                      </td>
+                      <td className="hidden min-w-0 truncate text-slate-500 2xl:table-cell">{source ?? "-"}</td>
+                      <td className="hidden min-w-0 truncate text-slate-600 xl:table-cell">
+                        {formatAdminDateTime(log.createdAt)}
+                      </td>
+                      <td className="min-w-0">
                         <details className="group">
                           <summary className="cursor-pointer list-none text-xs font-semibold text-emerald-700 hover:text-emerald-800">
                             Görüntüle

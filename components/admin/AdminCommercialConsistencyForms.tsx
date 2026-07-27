@@ -5,6 +5,7 @@ import {
   classifyPlanChangeBySortOrder,
   planChangeTypeLabelTr,
 } from "@/lib/wexon-admin-commercial-policy";
+import { ADMIN_FIELD_CONTROL } from "@/components/marketing/admin-ui/adminFieldStyles";
 
 type PlanOption = {
   id: string;
@@ -23,8 +24,7 @@ function FieldShell({ label, children }: { label: string; children: ReactNode })
   );
 }
 
-const inputClass =
-  "mt-2 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100";
+const inputClass = ADMIN_FIELD_CONTROL;
 
 export function AdminLicensePlanChangeForm(props: {
   organizationId: string;

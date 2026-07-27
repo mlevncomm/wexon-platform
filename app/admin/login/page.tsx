@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ADMIN_FIELD_SURFACE } from "@/components/marketing/admin-ui/adminFieldStyles";
 import {
   continueAdminCloudflareLoginAction,
   continueLocalAdminCloudflareTestLoginAction,
@@ -61,7 +62,7 @@ export default async function AdminLoginPage({
                   required
                   defaultValue={localEmailDefault}
                   autoComplete="username"
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none ring-emerald-600/30 focus:ring-2"
+                  className={`rounded-2xl px-4 py-3 text-sm font-medium text-slate-950 ${ADMIN_FIELD_SURFACE}`}
                 />
               </label>
               <button type="submit" className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
