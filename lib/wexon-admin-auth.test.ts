@@ -85,17 +85,25 @@ describe("securePasswordEqual (rollback helper only)", () => {
 
 describe("adminSessionCookieOptions", () => {
   it("is host-only (no Domain) in production", () => {
-    withEnv({ NODE_ENV: "production", NEXT_PUBLIC_APP_URL: "https://app.wexon.dev" }, () => {
-      const expires = new Date("2030-01-01T00:00:00.000Z");
-      const options = adminSessionCookieOptions(expires);
-      assert.equal("domain" in options, false);
-      assert.equal(options.domain, undefined);
-      assert.equal(options.httpOnly, true);
-      assert.equal(options.sameSite, "lax");
-      assert.equal(options.secure, true);
-      assert.equal(options.path, "/");
-      assert.equal(options.expires.toISOString(), expires.toISOString());
-    });
+    // Real production never sets CF Access test mode; clear local .env leakage.
+    withEnv(
+      {
+        NODE_ENV: "production",
+        NEXT_PUBLIC_APP_URL: "https://app.wexon.dev",
+        WEXON_CF_ACCESS_TEST_MODE: undefined,
+      },
+      () => {
+        const expires = new Date("2030-01-01T00:00:00.000Z");
+        const options = adminSessionCookieOptions(expires);
+        assert.equal("domain" in options, false);
+        assert.equal(options.domain, undefined);
+        assert.equal(options.httpOnly, true);
+        assert.equal(options.sameSite, "lax");
+        assert.equal(options.secure, true);
+        assert.equal(options.path, "/");
+        assert.equal(options.expires.toISOString(), expires.toISOString());
+      },
+    );
   });
 
   it("is host-only in development", () => {
@@ -107,15 +115,22 @@ describe("adminSessionCookieOptions", () => {
   });
 
   it("clear options are host-only; legacy clear retains Domain for migration", () => {
-    withEnv({ NODE_ENV: "production", NEXT_PUBLIC_APP_URL: "https://app.wexon.dev" }, () => {
-      const clear = adminSessionCookieClearOptions();
-      assert.equal("domain" in clear, false);
-      assert.equal(clear.expires.getTime(), 0);
+    withEnv(
+      {
+        NODE_ENV: "production",
+        NEXT_PUBLIC_APP_URL: "https://app.wexon.dev",
+        WEXON_CF_ACCESS_TEST_MODE: undefined,
+      },
+      () => {
+        const clear = adminSessionCookieClearOptions();
+        assert.equal("domain" in clear, false);
+        assert.equal(clear.expires.getTime(), 0);
 
-      const legacy = adminSessionCookieLegacyDomainClearOptions();
-      assert.equal(legacy.domain, ".wexon.dev");
-      assert.equal(legacy.expires.getTime(), 0);
-    });
+        const legacy = adminSessionCookieLegacyDomainClearOptions();
+        assert.equal(legacy.domain, ".wexon.dev");
+        assert.equal(legacy.expires.getTime(), 0);
+      },
+    );
   });
 });
 
@@ -188,7 +203,7 @@ describe("session v3 encode/parse", () => {
   });
 
   it("cookie option flags remain host-only Secure/HttpOnly/SameSite=Lax Path=/", () => {
-    withEnv({ NODE_ENV: "production" }, () => {
+    withEnv({ NODE_ENV: "production", WEXON_CF_ACCESS_TEST_MODE: undefined }, () => {
       const options = adminSessionCookieOptions(new Date(Date.now() + ADMIN_SESSION_TTL_MS));
       assert.equal(options.httpOnly, true);
       assert.equal(options.sameSite, "lax");

@@ -30,6 +30,7 @@ import {
   defaultLocalAdminTestEmail,
   establishAdminSessionFromCloudflareAccessTestLogin,
 } from "@/lib/wexon-cloudflare-access-test-login";
+import { isLocalCloudflareAccessTestRuntime } from "@/lib/wexon-cloudflare-access-test-runtime";
 import { PlatformAdminCloudflareAccessError } from "@/lib/wexon-platform-admin-cloudflare-bind";
 import { maskPlatformAdminEmail } from "@/lib/wexon-platform-admin";
 
@@ -147,7 +148,8 @@ export async function continueAdminCloudflareLoginAction(formData: FormData) {
 
 /**
  * Local/CI only — mint CF Access test JWT cookie + PlatformAdmin session.
- * Hard-denied unless WEXON_CF_ACCESS_TEST_MODE (never on Vercel production/preview).
+ * Hard-denied unless local CF test runtime (test mode + loopback host).
+ * Never on Vercel production/preview or non-loopback hosts.
  */
 export async function continueLocalAdminCloudflareTestLoginAction(formData: FormData) {
   adminDebug("login:local_cf_test_start");
@@ -162,7 +164,11 @@ export async function continueLocalAdminCloudflareTestLoginAction(formData: Form
 
   const nextPath = safeAdminNextPath(readString(formData, "next"), productionWexon);
 
-  if (!isCloudflareAccessTestMode()) {
+  if (!isLocalCloudflareAccessTestRuntime(host)) {
+    adminDebug("login:local_cf_test_denied", {
+      host: normalizeHost(host),
+      testMode: isCloudflareAccessTestMode(),
+    });
     redirectLoginError(nextPath, { reason: "access_denied" });
   }
 

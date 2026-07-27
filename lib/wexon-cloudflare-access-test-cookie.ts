@@ -3,6 +3,8 @@
  * proxy.ts copies this cookie onto Cf-Access-Jwt-Assertion for assertAdminAccess.
  */
 
+import { adminCookieSecureFlag } from "@/lib/wexon-cloudflare-access-test-runtime";
+
 export const CF_ACCESS_TEST_JWT_COOKIE = "wexon_cf_access_test_jwt";
 
 const COOKIE_PATH = "/";
@@ -19,7 +21,7 @@ export function cfAccessTestJwtCookieOptions(expires: Date): CfAccessTestJwtCook
   return {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: adminCookieSecureFlag(),
     path: COOKIE_PATH,
     expires,
   };

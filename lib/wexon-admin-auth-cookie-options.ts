@@ -4,6 +4,7 @@
  */
 
 import { PRODUCTION_ROOT_HOST } from "@/lib/wexon-canonical-host";
+import { adminCookieSecureFlag } from "@/lib/wexon-cloudflare-access-test-runtime";
 
 export const ADMIN_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const SESSION_COOKIE_PATH = "/";
@@ -22,7 +23,7 @@ export function adminSessionCookieOptions(expires: Date): AdminSessionCookieOpti
   return {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: adminCookieSecureFlag(),
     path: SESSION_COOKIE_PATH,
     expires,
   };
