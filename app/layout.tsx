@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import CookieConsentGate from "@/components/marketing/CookieConsentGate";
-import WexonRouteTransition from "@/components/wexon/WexonRouteTransition";
 import {
   WEXON_DEFAULT_DESCRIPTION,
   WEXON_DEFAULT_TITLE,
@@ -120,7 +119,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col antialiased">
-        <WexonRouteTransition>{children}</WexonRouteTransition>
+        {children}
         <CookieConsentGate />
       </body>
     </html>

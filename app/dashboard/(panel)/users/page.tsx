@@ -45,7 +45,7 @@ function usersHref(context: DashboardOrganizationContext, extra?: Record<string,
 export default async function DashboardUsersPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
   const [{ organization, organizationContext }, currentUser] = await Promise.all([
-    getCustomerDashboardData(params),
+    getCustomerDashboardData(params, "users"),
     getCurrentCustomerUser(),
   ]);
 

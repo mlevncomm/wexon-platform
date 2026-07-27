@@ -489,7 +489,7 @@ export default function WexPayBusinessShell({
 
         <main className={`wexpay-content min-w-0 w-full ${WORKSPACE_PAGE_PADDING} py-4 sm:py-6 lg:py-7`}>
           <div
-            className="wx-panel-enter mx-auto min-w-0 w-full"
+            className="mx-auto min-w-0 w-full"
             style={{ maxWidth: `${WORKSPACE_CONTENT_MAX_PX}px` }}
           >
             {children}

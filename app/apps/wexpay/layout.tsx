@@ -21,6 +21,37 @@ function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayA
   );
 }
 
+async function WexPayActivationBanner({ organizationId }: { organizationId: string }) {
+  const activationView = await getActivationJourneyViewForOrg(organizationId);
+  if (!activationView.setupMode) return null;
+
+  const activationStep = activationView.journey?.currentStep;
+  const canContinueActivation = isActivationStepActionable(activationStep);
+
+  return (
+    <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950">
+      <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-800/80">Akıllı Aktivasyon</p>
+      <p className="mt-1 text-sm font-black">Kurulum Modu</p>
+      <p className="mt-1 text-sm font-semibold text-amber-900/80">
+        Çalışma alanı kurulum için açık. Canlı QR bağlantıları Yayına alma sonrası açılır.
+      </p>
+      {canContinueActivation ? (
+        <a
+          href={`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(organizationId)}`}
+          className="mt-2 inline-flex text-sm font-bold text-amber-900 underline"
+        >
+          Kuruluma devam et
+        </a>
+      ) : activationStep ? (
+        <p className="mt-2 text-sm font-bold text-amber-900">
+          {ACTIVATION_STEP_LABELS[activationStep]} henüz kullanıma açılmadı. Kurulumunuz kaydedildi; şu
+          anda işlem yapmanız gerekmiyor.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * WexPay access gate + sticky sidebar workspace shell.
  * License+Install ACTIVE → panel open (Kurulum Modu if journey ≠ ACTIVE).
@@ -52,18 +83,9 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
   }
 
   const branches = buildBranchOptions(access);
-  const activationView = await getActivationJourneyViewForOrg(access.organization.id);
-  const activationStep = activationView.journey?.currentStep;
-  const canContinueActivation = isActivationStepActionable(activationStep);
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#f6f8f7] text-sm font-semibold text-slate-500">
-          WexPay paneli yükleniyor...
-        </div>
-      }
-    >
+    <Suspense fallback={null}>
       <WexPayBusinessShell
         organizationName={access.organization.name}
         organizationId={access.organization.id}
@@ -82,28 +104,9 @@ export default async function WexPayLayout({ children }: { children: ReactNode }
           settings: access.canConfigureSettings,
         }}
       >
-        {activationView.setupMode ? (
-          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-800/80">Akıllı Aktivasyon</p>
-            <p className="mt-1 text-sm font-black">Kurulum Modu</p>
-            <p className="mt-1 text-sm font-semibold text-amber-900/80">
-              Çalışma alanı kurulum için açık. Canlı QR bağlantıları Yayına alma sonrası açılır.
-            </p>
-            {canContinueActivation ? (
-              <a
-                href={`/dashboard/wexpay/activation?organizationId=${encodeURIComponent(access.organization.id)}`}
-                className="mt-2 inline-flex text-sm font-bold text-amber-900 underline"
-              >
-                Kuruluma devam et
-              </a>
-            ) : activationStep ? (
-              <p className="mt-2 text-sm font-bold text-amber-900">
-                {ACTIVATION_STEP_LABELS[activationStep]} henüz kullanıma açılmadı. Kurulumunuz
-                kaydedildi; şu anda işlem yapmanız gerekmiyor.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
+        <Suspense fallback={null}>
+          <WexPayActivationBanner organizationId={access.organization.id} />
+        </Suspense>
         <Suspense fallback={null}>
           <WexPayKeyboardShortcuts />
         </Suspense>

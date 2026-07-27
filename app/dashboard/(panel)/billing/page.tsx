@@ -27,7 +27,7 @@ function noticeClasses(tone: "info" | "warning" | "critical") {
 
 export default async function DashboardBillingPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
-  const { organization, wexPayLicense, wexPaySubscription } = await getCustomerDashboardData(params);
+  const { organization, wexPayLicense, wexPaySubscription } = await getCustomerDashboardData(params, "billing");
   const paytrOn = isPaytrSubscriptionEnabled();
 
   if (!organization) {

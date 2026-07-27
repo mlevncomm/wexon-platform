@@ -1,19 +1,53 @@
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import WexonAdminHeaderToolbar from "@/components/marketing/WexonAdminHeaderToolbar";
 import WexonAdminNav from "@/components/marketing/WexonAdminNav";
-import { getAdminHeaderSnapshot } from "@/lib/wexon-admin";
+import { getAdminHeaderSnapshot, type AdminHeaderSnapshot } from "@/lib/wexon-admin";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
 import { WORKSPACE_SIDEBAR_WIDTH_PX } from "@/lib/wexon-workspace-layout";
 
+const EMPTY_HEADER_SNAPSHOT: AdminHeaderSnapshot = {
+  stats: {
+    organizations: 0,
+    pendingInvoices: 0,
+    attentionLicenses: 0,
+    openSupportTickets: 0,
+    pendingWork: 0,
+  },
+  organizations: [],
+  recentActivity: [],
+};
+
+async function AdminHeaderWithSnapshot({
+  userInitial,
+  userEmail,
+}: {
+  userInitial: string;
+  userEmail?: string | null;
+}) {
+  const snapshot = await getAdminHeaderSnapshot();
+  return <WexonAdminHeaderToolbar snapshot={snapshot} userInitial={userInitial} userEmail={userEmail} />;
+}
+
 export default async function WexonAdminShell({ children }: { children: ReactNode }) {
-  const [session, snapshot] = await Promise.all([getAdminSession(), getAdminHeaderSnapshot()]);
+  const session = await getAdminSession();
   const userInitial = session?.email?.[0]?.toUpperCase() ?? "A";
 
   return (
     <div className="admin-shell min-h-screen w-full overflow-x-clip bg-[#f6f8f7] text-slate-950">
       <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/95 backdrop-blur-xl">
         <div className="mx-auto w-full max-w-none">
-          <WexonAdminHeaderToolbar snapshot={snapshot} userInitial={userInitial} userEmail={session?.email} />
+          <Suspense
+            fallback={
+              <WexonAdminHeaderToolbar
+                snapshot={EMPTY_HEADER_SNAPSHOT}
+                userInitial={userInitial}
+                userEmail={session?.email}
+              />
+            }
+          >
+            <AdminHeaderWithSnapshot userInitial={userInitial} userEmail={session?.email} />
+          </Suspense>
         </div>
       </header>
 
@@ -43,7 +77,7 @@ export default async function WexonAdminShell({ children }: { children: ReactNod
               <WexonAdminNav />
             </div>
           </aside>
-          <div className="admin-content wx-panel-enter min-w-0 w-full max-w-none justify-self-stretch">
+          <div className="admin-content min-w-0 w-full max-w-none justify-self-stretch">
             {children}
           </div>
         </div>
