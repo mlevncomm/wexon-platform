@@ -90,17 +90,17 @@ export function normalizeDemoLeadStatus(value: unknown): DemoLeadStatus {
 export function demoLeadStatusBadgeClass(status: DemoLeadStatus) {
   switch (status) {
     case "new":
-      return "bg-blue-50 text-blue-700 ring-blue-100";
+      return "bg-sky-50 text-sky-800 ring-sky-100";
     case "contacted":
-      return "bg-cyan-50 text-cyan-700 ring-cyan-100";
+      return "bg-sky-50 text-sky-800 ring-sky-100";
     case "demo_scheduled":
-      return "bg-amber-50 text-amber-800 ring-amber-100";
+      return "bg-amber-50 text-amber-900 ring-amber-100";
     case "won":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+      return "bg-emerald-50 text-emerald-800 ring-emerald-100";
     case "lost":
-      return "bg-rose-50 text-rose-700 ring-rose-100";
+      return "bg-rose-50 text-rose-800 ring-rose-100";
     default:
-      return "bg-slate-100 text-slate-600 ring-slate-200/80";
+      return "bg-slate-100 text-slate-600 ring-slate-200";
   }
 }
 

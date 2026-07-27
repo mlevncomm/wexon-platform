@@ -1,6 +1,24 @@
 import { cookies } from "next/headers";
-import { AdminEmptyState, AdminInfoRow, AdminPanel, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
-import { AdminActionNotice, AdminFormPanel, AdminSelectField, AdminSubmitButton, AdminTextField } from "@/components/marketing/WexonAdminForms";
+import {
+  AdminEmptyState,
+  AdminInfoRow,
+  AdminPanel,
+  AdminResponsiveRows,
+  AdminSectionTitle,
+  AdminStatusPill,
+  AdminSummaryCard,
+  AdminTableShell,
+} from "@/components/marketing/WexonAdminCards";
+import {
+  AdminActionNotice,
+  AdminActionMenu,
+  AdminActionMenuSection,
+  AdminButton,
+  AdminFormPanel,
+  AdminSelectField,
+  AdminSubmitButton,
+  AdminTextField,
+} from "@/components/marketing/WexonAdminForms";
 import { AdminInlineToggleForm, AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { createAdminApiKeyAction, createAdminWebhookAction, revokeAdminApiKeyAction, toggleAdminWebhookAction } from "@/lib/wexon-admin-actions";
 import { getAdminIntegrationsData, getAdminOperationOptions } from "@/lib/wexon-admin";
@@ -15,6 +33,21 @@ async function readApiKeyFlash() {
   } catch {
     return null;
   }
+}
+
+function ApiKeyActionsMenu({ apiKeyId }: { apiKeyId: string }) {
+  return (
+    <AdminActionMenu label="İşlem" ariaLabel="API anahtarı işlemleri">
+      <AdminActionMenuSection title="Güvenlik">
+        <form action={revokeAdminApiKeyAction.bind(null, apiKeyId)}>
+          <input type="hidden" name="returnTo" value="/admin/integrations" />
+          <AdminButton type="submit" variant="danger" className="w-full">
+            Anahtarı iptal et
+          </AdminButton>
+        </form>
+      </AdminActionMenuSection>
+    </AdminActionMenu>
+  );
 }
 
 export default async function AdminIntegrationsPage({ searchParams }: { searchParams: Promise<{ adminError?: string }> }) {
@@ -61,22 +94,23 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
           <form action={createAdminApiKeyAction} className="grid gap-4">
             <input type="hidden" name="returnTo" value="/admin/integrations" />
             <input type="hidden" name="mutationId" value={apiKeyMutationId} />
-            <AdminSelectField label="Müşteri" name="organizationId">
-              <option value="">Seçin</option>
-              {options.organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </AdminSelectField>
-            <AdminSelectField label="Ürün (opsiyonel)" name="productId" defaultValue="">
-              <option value="">Genel</option>
-              {options.products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name}
-                </option>
-              ))}
-            </AdminSelectField>
+            <AdminSelectField
+              label="Müşteri"
+              name="organizationId"
+              options={[
+                { value: "", label: "Seçin" },
+                ...options.organizations.map((org) => ({ value: org.id, label: org.name })),
+              ]}
+            />
+            <AdminSelectField
+              label="Ürün (opsiyonel)"
+              name="productId"
+              defaultValue=""
+              options={[
+                { value: "", label: "Genel" },
+                ...options.products.map((product) => ({ value: product.id, label: product.name })),
+              ]}
+            />
             <AdminTextField label="Anahtar adı" name="name" placeholder="Prod API" required />
             <AdminSubmitButton>API anahtarı oluştur</AdminSubmitButton>
           </form>
@@ -86,22 +120,23 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
           <form action={createAdminWebhookAction} className="grid gap-4">
             <input type="hidden" name="returnTo" value="/admin/integrations" />
             <input type="hidden" name="mutationId" value={webhookMutationId} />
-            <AdminSelectField label="Müşteri" name="organizationId">
-              <option value="">Seçin</option>
-              {options.organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </AdminSelectField>
-            <AdminSelectField label="Ürün (opsiyonel)" name="productId" defaultValue="">
-              <option value="">Genel</option>
-              {options.products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name}
-                </option>
-              ))}
-            </AdminSelectField>
+            <AdminSelectField
+              label="Müşteri"
+              name="organizationId"
+              options={[
+                { value: "", label: "Seçin" },
+                ...options.organizations.map((org) => ({ value: org.id, label: org.name })),
+              ]}
+            />
+            <AdminSelectField
+              label="Ürün (opsiyonel)"
+              name="productId"
+              defaultValue=""
+              options={[
+                { value: "", label: "Genel" },
+                ...options.products.map((product) => ({ value: product.id, label: product.name })),
+              ]}
+            />
             <AdminTextField label="Webhook URL" name="url" placeholder="https://..." required />
             <input type="hidden" name="events" value="payment.updated" />
             <AdminSubmitButton>Webhook oluştur</AdminSubmitButton>
@@ -119,40 +154,74 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
         {apiKeys.length === 0 ? (
           <AdminEmptyState>Henüz API anahtarı bulunmuyor.</AdminEmptyState>
         ) : (
-          <AdminTableShell>
-            <table className="w-full min-w-[560px] text-left text-sm lg:min-w-0">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
+          <AdminTableShell
+            mobile={
+              <AdminResponsiveRows
+                rows={apiKeys.map((apiKey) => ({
+                  key: apiKey.id,
+                  primary: (
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-950">{apiKey.name}</p>
+                      <div className="mt-1 truncate text-xs font-semibold text-slate-500">
+                        <AdminOrgLink id={apiKey.organizationId} name={apiKey.organization.name} />
+                      </div>
+                    </div>
+                  ),
+                  secondary: (
+                    <span className="truncate">
+                      {apiKey.product?.name ?? "Genel"}
+                      {apiKey.prefix ? ` · ${apiKey.prefix}` : ""}
+                    </span>
+                  ),
+                  meta: (
+                    <AdminStatusPill tone={apiKey.revokedAt ? "failed" : "active"}>
+                      {apiKey.revokedAt ? "İptal" : "Aktif"}
+                    </AdminStatusPill>
+                  ),
+                  actions: apiKey.revokedAt ? undefined : <ApiKeyActionsMenu apiKeyId={apiKey.id} />,
+                }))}
+              />
+            }
+          >
+            <table className="w-full table-fixed text-left">
+              <thead className="bg-slate-50/80">
                 <tr>
-                  <th className="px-3 py-4 font-bold sm:px-5">Ad</th>
-                  <th className="px-3 py-4 font-bold sm:px-5">Müşteri</th>
-                  <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Ürün</th>
-                  <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Prefix</th>
-                  <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
-                  <th className="px-3 py-4 font-bold sm:px-5">İşlem</th>
+                  <th className="w-[24%]">Ad</th>
+                  <th className="w-[24%]">Müşteri</th>
+                  <th className="hidden w-[16%] xl:table-cell">Ürün</th>
+                  <th className="hidden w-[14%] 2xl:table-cell">Prefix</th>
+                  <th className="w-[14%]">Durum</th>
+                  <th className="w-[140px]">İşlem</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {apiKeys.map((apiKey) => (
                   <tr key={apiKey.id}>
-                    <td className="break-words px-3 py-4 font-semibold text-slate-950 sm:px-5">{apiKey.name}</td>
-                    <td className="px-3 py-4 sm:px-5">
-                      <AdminOrgLink id={apiKey.organizationId} name={apiKey.organization.name} />
+                    <td className="min-w-0 truncate font-semibold text-slate-950">{apiKey.name}</td>
+                    <td className="min-w-0">
+                      <div className="truncate">
+                        <AdminOrgLink id={apiKey.organizationId} name={apiKey.organization.name} />
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-500 xl:hidden">
+                        {apiKey.product?.name ?? "Genel"}
+                      </p>
                     </td>
-                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 lg:table-cell">{apiKey.product?.name ?? "-"}</td>
-                    <td className="hidden px-3 py-4 font-mono text-xs text-slate-600 sm:px-5 xl:table-cell">{apiKey.prefix}</td>
-                    <td className="px-3 py-4 sm:px-5">
-                      <AdminStatusPill active={!apiKey.revokedAt}>{apiKey.revokedAt ? "İptal" : "Aktif"}</AdminStatusPill>
+                    <td className="hidden min-w-0 truncate text-slate-600 xl:table-cell">
+                      {apiKey.product?.name ?? "-"}
                     </td>
-                    <td className="px-3 py-4 sm:px-5">
+                    <td className="hidden min-w-0 truncate font-mono text-xs text-slate-600 2xl:table-cell">
+                      {apiKey.prefix}
+                    </td>
+                    <td className="min-w-0">
+                      <AdminStatusPill tone={apiKey.revokedAt ? "failed" : "active"}>
+                        {apiKey.revokedAt ? "İptal" : "Aktif"}
+                      </AdminStatusPill>
+                    </td>
+                    <td className="min-w-0">
                       {apiKey.revokedAt ? (
                         <span className="text-xs text-slate-400">—</span>
                       ) : (
-                        <form action={revokeAdminApiKeyAction.bind(null, apiKey.id)}>
-                          <input type="hidden" name="returnTo" value="/admin/integrations" />
-                          <button type="submit" className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100">
-                            İptal et
-                          </button>
-                        </form>
+                        <ApiKeyActionsMenu apiKeyId={apiKey.id} />
                       )}
                     </td>
                   </tr>
@@ -170,21 +239,25 @@ export default async function AdminIntegrationsPage({ searchParams }: { searchPa
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {webhookEndpoints.map((endpoint) => (
-              <div key={endpoint.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div key={endpoint.id} className="rounded-[12px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <p className="min-w-0 flex-1 break-all text-sm font-bold text-slate-950">{endpoint.url}</p>
-                  <AdminStatusPill active={endpoint.isActive}>{endpoint.isActive ? "Aktif" : "Pasif"}</AdminStatusPill>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AdminStatusPill active={endpoint.isActive}>{endpoint.isActive ? "Aktif" : "Pasif"}</AdminStatusPill>
+                    <AdminActionMenu label="İşlem" ariaLabel="Webhook işlemleri">
+                      <AdminActionMenuSection title="Endpoint durumu">
+                        <AdminInlineToggleForm
+                          action={toggleAdminWebhookAction.bind(null, endpoint.id)}
+                          returnTo="/admin/integrations"
+                          isActive={endpoint.isActive}
+                        />
+                      </AdminActionMenuSection>
+                    </AdminActionMenu>
+                  </div>
                 </div>
                 <p className="mt-3 text-xs font-semibold text-slate-500">
                   <AdminOrgLink id={endpoint.organizationId} name={endpoint.organization.name} /> · {endpoint.product?.name ?? "Genel"}
                 </p>
-                <div className="mt-3">
-                  <AdminInlineToggleForm
-                    action={toggleAdminWebhookAction.bind(null, endpoint.id)}
-                    returnTo="/admin/integrations"
-                    isActive={endpoint.isActive}
-                  />
-                </div>
               </div>
             ))}
           </div>

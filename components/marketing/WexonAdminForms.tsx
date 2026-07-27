@@ -1,4 +1,13 @@
 import type { ReactNode } from "react";
+import { AdminButton, type AdminButtonVariant } from "@/components/marketing/admin-ui/AdminButton";
+import { AdminCallout, type AdminCalloutTone } from "@/components/marketing/admin-ui/AdminCallout";
+import { AdminSelect, type AdminSelectOption } from "@/components/marketing/admin-ui/AdminSelect";
+import {
+  ADMIN_FIELD_CONTROL,
+} from "@/components/marketing/admin-ui/adminFieldStyles";
+
+export type { AdminSelectOption };
+export { ADMIN_FIELD_CONTROL, ADMIN_FIELD_CONTROL_COMPACT, ADMIN_FIELD_TEXTAREA, ADMIN_FIELD_SURFACE } from "@/components/marketing/admin-ui/adminFieldStyles";
 
 export function AdminFormPanel({
   title,
@@ -7,6 +16,7 @@ export function AdminFormPanel({
   className = "",
   collapsible = false,
   defaultOpen = false,
+  badge,
 }: {
   title: string;
   description?: string;
@@ -14,31 +24,42 @@ export function AdminFormPanel({
   className?: string;
   collapsible?: boolean;
   defaultOpen?: boolean;
+  badge?: ReactNode;
 }) {
   if (collapsible) {
     return (
       <details
-        open={defaultOpen}
-        className={`group min-w-0 max-w-full rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 sm:rounded-[32px] sm:p-6 ${className}`}
+        open={defaultOpen || undefined}
+        className={`group flex h-full min-w-0 max-w-full flex-col rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50 sm:p-6 ${className}`}
       >
-        <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-          <span className="min-w-0">
-            <span className="block break-words text-xl font-black tracking-tight text-slate-950">{title}</span>
-            {description && <span className="mt-2 block text-sm leading-relaxed text-slate-600">{description}</span>}
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="block break-words text-lg font-black tracking-tight text-slate-950">{title}</span>
+              {badge}
+            </span>
+            {description ? (
+              <span className="mt-2 block min-h-[2.75rem] text-sm leading-relaxed text-slate-600">{description}</span>
+            ) : null}
           </span>
-          <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-black text-slate-600 transition group-open:rotate-45">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-slate-100 text-sm font-black text-slate-600 transition group-open:rotate-45">
             +
           </span>
         </summary>
-        <div className="mt-5">{children}</div>
+        <div className="mt-5 border-t border-slate-100 pt-5">{children}</div>
       </details>
     );
   }
 
   return (
-    <section className={`min-w-0 max-w-full rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 sm:rounded-[32px] sm:p-6 ${className}`}>
+    <section
+      className={`min-w-0 max-w-full rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50 sm:p-6 ${className}`}
+    >
       <div className="mb-5 min-w-0">
-        <h3 className="break-words text-xl font-black tracking-tight text-slate-950">{title}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="break-words text-lg font-black tracking-tight text-slate-950">{title}</h3>
+          {badge}
+        </div>
         {description && <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p>}
       </div>
       {children}
@@ -53,6 +74,8 @@ export function AdminTextField({
   placeholder,
   type = "text",
   required = false,
+  helper,
+  minLength,
 }: {
   label: string;
   name: string;
@@ -60,18 +83,22 @@ export function AdminTextField({
   placeholder?: string;
   type?: string;
   required?: boolean;
+  helper?: string;
+  minLength?: number;
 }) {
   return (
     <label className="block min-w-0">
-      <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">{label}</span>
+      <span className="text-xs font-bold text-slate-600">{label}</span>
       <input
         name={name}
         type={type}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
         required={required}
-        className="mt-2 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+        minLength={minLength}
+        className={ADMIN_FIELD_CONTROL}
       />
+      {helper ? <span className="mt-1.5 block text-xs font-semibold text-slate-500">{helper}</span> : null}
     </label>
   );
 }
@@ -80,23 +107,34 @@ export function AdminSelectField({
   label,
   name,
   defaultValue,
-  children,
+  options,
+  helper,
+  required = false,
+  placeholder = "Seçin",
+  compact = false,
 }: {
   label: string;
   name: string;
   defaultValue?: string | null;
-  children: ReactNode;
+  options: AdminSelectOption[];
+  helper?: string;
+  required?: boolean;
+  placeholder?: string;
+  compact?: boolean;
 }) {
   return (
     <label className="block min-w-0">
-      <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">{label}</span>
-      <select
+      <span className="text-xs font-bold text-slate-600">{label}</span>
+      <AdminSelect
         name={name}
+        options={options}
         defaultValue={defaultValue ?? ""}
-        className="mt-2 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-      >
-        {children}
-      </select>
+        required={required}
+        placeholder={placeholder}
+        compact={compact}
+        aria-label={label}
+      />
+      {helper ? <span className="mt-1.5 block text-xs font-semibold text-slate-500">{helper}</span> : null}
     </label>
   );
 }
@@ -115,27 +153,40 @@ export function AdminDateField({
   return <AdminTextField label={label} name={name} type="date" defaultValue={defaultValue} required={required} />;
 }
 
-export function AdminSubmitButton({ children }: { children: ReactNode }) {
+export function AdminSubmitButton({
+  children,
+  variant = "primary",
+}: {
+  children: ReactNode;
+  variant?: AdminButtonVariant;
+}) {
+  return <AdminButton variant={variant}>{children}</AdminButton>;
+}
+
+export function AdminActionNotice({
+  children,
+  tone = "info",
+  title,
+}: {
+  children: ReactNode;
+  tone?: "info" | "warning" | "error";
+  title?: string;
+}) {
+  const calloutTone: AdminCalloutTone =
+    tone === "warning" ? "warning" : tone === "error" ? "error" : "info";
   return (
-    <button
-      type="submit"
-      className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700 sm:w-auto"
-    >
+    <AdminCallout tone={calloutTone} title={title}>
       {children}
-    </button>
+    </AdminCallout>
   );
 }
 
-export function AdminActionNotice({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "warning" | "error" }) {
-  const styles = {
-    info: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    warning: "border-amber-200 bg-amber-50 text-amber-900",
-    error: "border-rose-200 bg-rose-50 text-rose-800",
-  };
-
-  return (
-    <div className={`rounded-2xl border px-4 py-3 text-sm font-semibold leading-relaxed ${styles[tone]}`}>
-      {children}
-    </div>
-  );
-}
+export { AdminButton } from "@/components/marketing/admin-ui/AdminButton";
+export { AdminCallout } from "@/components/marketing/admin-ui/AdminCallout";
+export { AdminDangerZone } from "@/components/marketing/admin-ui/AdminDangerZone";
+export {
+  AdminActionMenu,
+  AdminActionMenuHint,
+  AdminActionMenuSection,
+} from "@/components/marketing/admin-ui/AdminActionMenu";
+export { AdminSelect } from "@/components/marketing/admin-ui/AdminSelect";

@@ -27,8 +27,8 @@ function loadLocalEnvFile(fileName, { override = false } = {}) {
   if (!existsSync(fullPath)) return;
   const parsed = dotenv.parse(readFileSync(fullPath));
   for (const [key, value] of Object.entries(parsed)) {
-    // Never override caller/CI-injected env (especially DATABASE_URL / DIRECT_URL).
-    if (override || !process.env[key]) process.env[key] = value;
+    // Never override caller/CI-injected env (including explicit empty strings from tests).
+    if (override || process.env[key] === undefined) process.env[key] = value;
   }
 }
 

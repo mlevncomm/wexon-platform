@@ -22,7 +22,11 @@ import {
 } from "@/lib/wexon-canonical-host";
 import { isPublicMarketingPath, publicUrl } from "@/lib/wexon/urls";
 import { ADMIN_SESSION_COOKIE } from "@/lib/wexon-admin-session-cookie";
-import { CF_ACCESS_JWT_HEADER } from "@/lib/wexon-cloudflare-access-config";
+import {
+  CF_ACCESS_JWT_HEADER,
+  isCloudflareAccessTestMode,
+} from "@/lib/wexon-cloudflare-access-config";
+import { CF_ACCESS_TEST_JWT_COOKIE } from "@/lib/wexon-cloudflare-access-test-cookie";
 
 const CUSTOMER_SESSION_COOKIE = "wexon_customer_session";
 const MAINTENANCE_MODE_ENABLED = process.env.MAINTENANCE_MODE === "true";
@@ -40,6 +44,27 @@ function hasCloudflareAccessJwtAssertion(request: NextRequest) {
     request.headers.get("Cf-Access-Jwt-Assertion") ??
     request.headers.get("CF-Access-JWT-Assertion");
   return Boolean(token && token.trim());
+}
+
+/** Local/CI: copy test JWT cookie onto the CF Access assertion header for page gates. */
+function applyLocalCfAccessTestJwt(request: NextRequest, requestHeaders: Headers) {
+  if (!isCloudflareAccessTestMode()) return;
+  if (hasCloudflareAccessJwtAssertion(request)) return;
+  const token = request.cookies.get(CF_ACCESS_TEST_JWT_COOKIE)?.value?.trim();
+  if (token) {
+    requestHeaders.set("Cf-Access-Jwt-Assertion", token);
+  }
+}
+
+function withAugmentedRequest(
+  request: NextRequest,
+  responseFactory: (init?: { request?: { headers: Headers } }) => NextResponse,
+  mutate?: (headers: Headers) => void,
+) {
+  const requestHeaders = new Headers(request.headers);
+  applyLocalCfAccessTestJwt(request, requestHeaders);
+  mutate?.(requestHeaders);
+  return responseFactory({ request: { headers: requestHeaders } });
 }
 
 function hasUsableAdminSessionCookie(request: NextRequest) {
@@ -71,12 +96,11 @@ function withOrganizationContext(
   const organizationIdFromAdminPath = routedPathname.match(/^\/admin\/organizations\/([^/]+)$/)?.[1];
   const organizationId = organizationIdFromQuery ?? organizationIdFromAdminPath;
 
-  const requestHeaders = new Headers(request.headers);
-  if (organizationId) {
-    requestHeaders.set(ACTIVE_ORGANIZATION_HEADER, organizationId);
-  }
-
-  const response = responseFactory({ request: { headers: requestHeaders } });
+  const response = withAugmentedRequest(request, responseFactory, (requestHeaders) => {
+    if (organizationId) {
+      requestHeaders.set(ACTIVE_ORGANIZATION_HEADER, organizationId);
+    }
+  });
 
   if (organizationId && routedPathname.startsWith("/admin/organizations/")) {
     response.cookies.set(ACTIVE_ORGANIZATION_COOKIE, organizationId, {
@@ -129,12 +153,12 @@ function handleAdminHost(request: NextRequest) {
     url.pathname = originalPathname.replace(/^\/login/, "/admin/login");
     url.search = search;
     adminProxyDebug("admin-host:rewrite_login", { to: url.pathname });
-    return NextResponse.rewrite(url);
+    return withAugmentedRequest(request, (init) => NextResponse.rewrite(url, init));
   }
 
   if (originalPathname === "/admin/login" || originalPathname.startsWith("/admin/login/")) {
     adminProxyDebug("admin-host:next_login");
-    return NextResponse.next();
+    return withAugmentedRequest(request, (init) => NextResponse.next(init));
   }
 
   const routedUrl = request.nextUrl.clone();
@@ -150,7 +174,7 @@ function handleAdminHost(request: NextRequest) {
       ? withOrganizationContext(request, routedUrl, routedPathname, (init) =>
           NextResponse.rewrite(routedUrl, init),
         )
-      : NextResponse.next();
+      : withAugmentedRequest(request, (init) => NextResponse.next(init));
   }
 
   if (!authed && routedPathname.startsWith("/admin")) {
@@ -281,7 +305,9 @@ export function proxy(request: NextRequest) {
 
   if (pathname === "/dashboard/login") {
     adminProxyDebug("proxy:next_dashboard_login");
-    return shouldRewrite ? NextResponse.rewrite(routedUrl) : NextResponse.next();
+    return shouldRewrite
+      ? withAugmentedRequest(request, (init) => NextResponse.rewrite(routedUrl, init))
+      : withAugmentedRequest(request, (init) => NextResponse.next(init));
   }
 
   if (pathname === "/dashboard/change-password" && request.method === "GET" && !customerSessionCookie) {
@@ -292,12 +318,16 @@ export function proxy(request: NextRequest) {
 
   if (pathname === "/admin/login") {
     adminProxyDebug("proxy:next_login");
-    return shouldRewrite ? NextResponse.rewrite(routedUrl) : NextResponse.next();
+    return shouldRewrite
+      ? withAugmentedRequest(request, (init) => NextResponse.rewrite(routedUrl, init))
+      : withAugmentedRequest(request, (init) => NextResponse.next(init));
   }
 
   if (request.method !== "GET") {
     adminProxyDebug("proxy:next_non_get", { path: pathname, method: request.method });
-    return shouldRewrite ? NextResponse.rewrite(routedUrl) : NextResponse.next();
+    return shouldRewrite
+      ? withAugmentedRequest(request, (init) => NextResponse.rewrite(routedUrl, init))
+      : withAugmentedRequest(request, (init) => NextResponse.next(init));
   }
 
   if (pathname.startsWith("/admin") && !adminAuthed) {

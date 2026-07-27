@@ -1,5 +1,6 @@
 import Link from "next/link";
 import WexPayOperationsBoard from "@/components/wexpay/WexPayOperationsBoard";
+import { AdminSectionEyebrow } from "@/components/marketing/WexonAdminCards";
 import { getWexPayAdminPreviewAccess } from "@/lib/wexpay-auth";
 import { wexpayAdminPreviewBasePath } from "@/lib/wexon-admin-preview-path";
 import { getWexPayOperationsOverview } from "@/lib/wexpay-read";
@@ -55,9 +56,7 @@ function OperationsEmptyState({
 }) {
   return (
     <div className="mx-auto max-w-md rounded-[18px] border border-slate-200/80 bg-white p-6 text-center shadow-[0_10px_28px_rgba(15,23,42,0.05)] sm:p-7">
-      <span className="mb-4 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-700">
-        WexPay · Operasyon Merkezi
-      </span>
+      <AdminSectionEyebrow className="mb-4">WexPay · Operasyon Merkezi</AdminSectionEyebrow>
       <h1 className="text-lg font-black text-slate-950">Operasyon ekranı için kurulum gerekli</h1>
       <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">
         {hasRestaurant

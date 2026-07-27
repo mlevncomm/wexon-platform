@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { AdminSelect } from "@/components/marketing/admin-ui/AdminSelect";
+import { ADMIN_FIELD_CONTROL_COMPACT } from "@/components/marketing/admin-ui/adminFieldStyles";
 
 export function AdminQuickLinks({
   links,
@@ -12,7 +14,7 @@ export function AdminQuickLinks({
         <Link
           key={link.href + link.label}
           href={link.href}
-          className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+          className="inline-flex rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
         >
           {link.label}
         </Link>
@@ -50,20 +52,17 @@ export function AdminInlineSelectForm({
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="returnTo" value={returnTo} />
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <AdminSelect
           name={fieldName}
           defaultValue={value}
-          className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-300"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={options}
+          compact
+          className="min-w-0 flex-1"
+          aria-label={submitLabel}
+        />
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
+          className="inline-flex min-h-10 items-center rounded-[10px] bg-slate-900 px-3 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
         >
           {submitLabel}
         </button>
@@ -75,7 +74,7 @@ export function AdminInlineSelectForm({
             required
             minLength={8}
             placeholder="Gerekçe (min 8 karakter)"
-            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-300"
+            className={ADMIN_FIELD_CONTROL_COMPACT}
           />
           <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
             <input type="checkbox" name="confirmed" value="1" required className="h-3.5 w-3.5 rounded border-slate-300" />
@@ -111,10 +110,10 @@ export function AdminInlineToggleForm({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
-          className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
+          className={`inline-flex min-h-9 items-center rounded-[10px] px-3 text-xs font-bold transition-colors ${
             isActive
-              ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-              : "border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              ? "border border-slate-200 border-l-4 border-l-amber-500 bg-white text-slate-800 hover:bg-slate-50"
+              : "border border-slate-200 border-l-4 border-l-emerald-500 bg-white text-slate-800 hover:bg-slate-50"
           }`}
         >
           {isActive ? inactiveLabel : activeLabel}
@@ -127,7 +126,7 @@ export function AdminInlineToggleForm({
             required
             minLength={8}
             placeholder="Gerekçe (min 8 karakter)"
-            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-300"
+            className={ADMIN_FIELD_CONTROL_COMPACT}
           />
           <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
             <input type="checkbox" name="confirmed" value="1" required className="h-3.5 w-3.5 rounded border-slate-300" />

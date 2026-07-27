@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import {
   adminEmailFromEnv,
   adminPassword,
-  attachE2eCloudflareAccessJwt,
   cookieByName,
   expectAdminSessionCookieHostOnly,
   loadFixtures,
@@ -39,9 +38,10 @@ test.describe.serial("admin cloudflare identity (PR2B)", () => {
     expect(password, "shared password env present for negative test").toBeTruthy();
 
     await page.goto("/admin/login");
-    await expect(page.getByRole("button", { name: /Yönetim paneline devam et/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Yönetim paneline devam et|Yerel yönetim paneline giriş/i }),
+    ).toBeVisible();
     await expect(page.locator('input[name="password"]')).toHaveCount(0);
-    await expect(page.locator('input[name="email"]')).toHaveCount(0);
 
     // Evidence: a raw form POST with shared password must not mint admin session cookies.
     // Deterministic Server Action hard-deny is covered by unit tests (loginAdminAction).
@@ -64,9 +64,16 @@ test.describe.serial("admin cloudflare identity (PR2B)", () => {
 
   test("PR2B: missing JWT denies admin continue", async ({ page }) => {
     requireAdminEmail();
-    // No Cf-Access-Jwt-Assertion header.
+    // No Cf-Access-Jwt-Assertion header. In local CF test mode the form mints a JWT —
+    // use a non-PlatformAdmin email so bind still fail-closes.
     await page.goto("/admin/login");
-    await page.getByRole("button", { name: /Yönetim paneline devam et/i }).click();
+    const localBtn = page.getByRole("button", { name: /Yerel yönetim paneline giriş/i });
+    if (await localBtn.count()) {
+      await page.getByLabel(/Admin e-posta/i).fill("missing-jwt-denied@example.invalid");
+      await localBtn.click();
+    } else {
+      await page.getByRole("button", { name: /Yönetim paneline devam et/i }).click();
+    }
     await expect(page).toHaveURL(/\/admin\/login/);
     await expect(page.getByText(/Yönetim paneline erişim reddedildi/i).first()).toBeVisible({
       timeout: 20_000,
@@ -105,9 +112,7 @@ test.describe.serial("admin cloudflare identity (PR2B)", () => {
 
   test("PR2B: admin root redirect keeps PR48 default", async ({ page }) => {
     const email = requireAdminEmail();
-    await attachE2eCloudflareAccessJwt(page, email);
-    await page.goto("/admin/login");
-    await page.getByRole("button", { name: /Yönetim paneline devam et/i }).click();
+    await loginAdmin(page, email, password);
     // Local/non-production default post-login is /admin (PR48 root `/` only in production Wexon).
     await expect(page).toHaveURL(/\/admin\/?$/);
   });

@@ -1,6 +1,23 @@
 import Link from "next/link";
-import { AdminEmptyState, AdminSectionTitle, AdminStatusPill, AdminSummaryCard, AdminTableShell } from "@/components/marketing/WexonAdminCards";
-import { AdminActionNotice, AdminFormPanel } from "@/components/marketing/WexonAdminForms";
+import {
+  AdminEmptyState,
+  AdminResponsiveRows,
+  AdminSectionTitle,
+  AdminStatusBadge,
+  AdminStatusPill,
+  AdminSummaryCard,
+  AdminTableShell,
+  AdminTableToolbar,
+} from "@/components/marketing/WexonAdminCards";
+import {
+  AdminActionMenu,
+  AdminActionMenuSection,
+  AdminActionNotice,
+  AdminButton,
+  AdminFormPanel,
+  ADMIN_FIELD_CONTROL,
+  ADMIN_FIELD_CONTROL_COMPACT,
+} from "@/components/marketing/WexonAdminForms";
 import { AdminOrgLink, AdminQuickLinks } from "@/components/marketing/WexonAdminOperations";
 import { resetAdminUserPasswordAction, toggleAdminUserActiveAction } from "@/lib/wexon-admin-actions";
 import { formatAdminDate, formatAdminStatus, getAdminUsersData } from "@/lib/wexon-admin";
@@ -14,6 +31,51 @@ const membershipRoleOptions = [
   { value: "VIEWER", label: "Görüntüleyici" },
 ];
 
+function UserActionsMenu({
+  userId,
+  email,
+  isActive,
+  returnTo,
+}: {
+  userId: string;
+  email: string;
+  isActive: boolean;
+  returnTo: string;
+}) {
+  const resetPassword = resetAdminUserPasswordAction.bind(null, userId);
+  const toggleActive = toggleAdminUserActiveAction.bind(null, userId);
+
+  return (
+    <AdminActionMenu label="İşlemler" ariaLabel={`${email} işlemleri`} align="right">
+      <AdminActionMenuSection title="Şifre sıfırla">
+        <form action={resetPassword} className="grid gap-2">
+          <input type="hidden" name="returnTo" value={returnTo} />
+          <input
+            name="temporaryPassword"
+            type="password"
+            placeholder="Yeni şifre (min 8)"
+            className={ADMIN_FIELD_CONTROL_COMPACT}
+            required
+            minLength={8}
+          />
+          <input type="hidden" name="mustChangePassword" value="true" />
+          <AdminButton type="submit" variant="primary" className="w-full">
+            Şifreyi sıfırla
+          </AdminButton>
+        </form>
+      </AdminActionMenuSection>
+      <AdminActionMenuSection title="Hesap durumu">
+        <form action={toggleActive}>
+          <input type="hidden" name="returnTo" value={returnTo} />
+          <AdminButton type="submit" variant="secondary" className="w-full">
+            {isActive ? "Pasife al" : "Aktifleştir"}
+          </AdminButton>
+        </form>
+      </AdminActionMenuSection>
+    </AdminActionMenu>
+  );
+}
+
 export default async function AdminUsersPage({
   searchParams,
 }: {
@@ -23,6 +85,7 @@ export default async function AdminUsersPage({
   const users = await getAdminUsersData(q);
   const activeUsers = users.filter((user) => user.isActive);
   const mustChange = users.filter((user) => user.mustChangePassword);
+  const returnTo = `/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`;
 
   return (
     <div className="space-y-8">
@@ -49,104 +112,123 @@ export default async function AdminUsersPage({
         <AdminSummaryCard label="Şifre değişimi bekleyen" value={mustChange.length} />
       </section>
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
-        <label className="min-w-[240px] flex-1">
-          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Ara</span>
+      <form method="get" className="flex flex-wrap items-end gap-3 rounded-[12px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40">
+        <label className="min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-[240px]">
+          <span className="text-xs font-bold text-slate-600">Ara</span>
           <input
             name="q"
             defaultValue={q ?? ""}
             placeholder="E-posta veya ad..."
-            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-300"
+            className={ADMIN_FIELD_CONTROL}
           />
         </label>
-        <button type="submit" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700">
+        <AdminButton type="submit" variant="primary">
           Filtrele
-        </button>
+        </AdminButton>
       </form>
 
       {users.length === 0 ? (
         <AdminEmptyState>Kullanıcı bulunamadı.</AdminEmptyState>
       ) : (
-        <AdminTableShell>
-          <table className="w-full min-w-[640px] text-left text-sm lg:min-w-0">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-400">
+        <AdminTableShell
+          toolbar={<AdminTableToolbar title="Kullanıcı listesi" description={`${users.length} kayıt`} />}
+          mobile={
+            <AdminResponsiveRows
+              rows={users.map((user) => ({
+                key: user.id,
+                primary: (
+                  <div className="min-w-0">
+                    <p className="truncate font-black text-slate-950">{user.name ?? "—"}</p>
+                    <p className="mt-1 truncate text-xs font-semibold text-slate-500">{user.email}</p>
+                    {user.mustChangePassword ? (
+                      <AdminStatusBadge tone="pending" className="mt-2">
+                        Şifre değişimi gerekli
+                      </AdminStatusBadge>
+                    ) : null}
+                  </div>
+                ),
+                secondary:
+                  user.memberships.length === 0 ? (
+                    <span className="text-slate-400">Üyelik yok</span>
+                  ) : (
+                    <div className="space-y-1">
+                      {user.memberships.map((membership) => (
+                        <div key={membership.id} className="truncate text-xs">
+                          <AdminOrgLink id={membership.organizationId} name={membership.organization.name} />
+                          <span className="ml-2 text-slate-500">
+                            {formatAdminStatus(membership.role)} · {formatAdminStatus(membership.status)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ),
+                meta: <AdminStatusPill active={user.isActive}>{user.isActive ? "Aktif" : "Pasif"}</AdminStatusPill>,
+                actions: (
+                  <UserActionsMenu userId={user.id} email={user.email} isActive={user.isActive} returnTo={returnTo} />
+                ),
+              }))}
+            />
+          }
+        >
+          <table className="w-full table-fixed text-left">
+            <thead className="bg-slate-50/80">
               <tr>
-                <th className="px-3 py-4 font-bold sm:px-5">Kullanıcı</th>
-                <th className="hidden px-3 py-4 font-bold sm:px-5 lg:table-cell">Üyelikler</th>
-                <th className="hidden px-3 py-4 font-bold sm:px-5 xl:table-cell">Son giriş</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Durum</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Şifre sıfırla</th>
-                <th className="px-3 py-4 font-bold sm:px-5">Hesap</th>
+                <th className="w-[32%]">Kullanıcı</th>
+                <th className="hidden w-[28%] xl:table-cell">Üyelikler</th>
+                <th className="hidden w-[16%] 2xl:table-cell">Son giriş</th>
+                <th className="w-[16%]">Durum</th>
+                <th className="w-[140px]">İşlemler</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {users.map((user) => {
-                const resetPassword = resetAdminUserPasswordAction.bind(null, user.id);
-                const toggleActive = toggleAdminUserActiveAction.bind(null, user.id);
-                return (
-                  <tr key={user.id} className="align-top">
-                    <td className="min-w-0 px-3 py-4 sm:px-5">
-                      <p className="break-words font-black text-slate-950">{user.name ?? "—"}</p>
-                      <p className="mt-1 break-all text-xs font-semibold text-slate-500">{user.email}</p>
-                      {user.mustChangePassword ? (
-                        <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Şifre değişimi gerekli</span>
-                      ) : null}
-                    </td>
-                    <td className="hidden px-3 py-4 sm:px-5 lg:table-cell">
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id} className="align-middle">
+                  <td className="min-w-0">
+                    <p className="truncate font-black text-slate-950">{user.name ?? "—"}</p>
+                    <p className="mt-1 truncate text-xs font-semibold text-slate-500">{user.email}</p>
+                    {user.mustChangePassword ? (
+                      <AdminStatusBadge tone="pending" className="mt-2">
+                        Şifre değişimi gerekli
+                      </AdminStatusBadge>
+                    ) : null}
+                    <div className="mt-2 space-y-1 xl:hidden">
                       {user.memberships.length === 0 ? (
-                        <span className="text-slate-400">Üyelik yok</span>
+                        <span className="text-xs text-slate-400">Üyelik yok</span>
                       ) : (
-                        <div className="space-y-2">
-                          {user.memberships.map((membership) => (
-                            <div key={membership.id} className="text-xs">
-                              <AdminOrgLink id={membership.organizationId} name={membership.organization.name} />
-                              <span className="ml-2 text-slate-500">
-                                {formatAdminStatus(membership.role)} · {formatAdminStatus(membership.status)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                        user.memberships.slice(0, 2).map((membership) => (
+                          <div key={membership.id} className="truncate text-xs text-slate-500">
+                            <AdminOrgLink id={membership.organizationId} name={membership.organization.name} />
+                            <span className="ml-1">· {formatAdminStatus(membership.role)}</span>
+                          </div>
+                        ))
                       )}
-                    </td>
-                    <td className="hidden px-3 py-4 text-slate-600 sm:px-5 xl:table-cell">{formatAdminDate(user.lastLoginAt)}</td>
-                    <td className="px-3 py-4 sm:px-5">
-                      <AdminStatusPill active={user.isActive}>{user.isActive ? "Aktif" : "Pasif"}</AdminStatusPill>
-                    </td>
-                    <td className="px-3 py-4 sm:px-5">
-                      <form action={resetPassword} className="flex flex-wrap items-center gap-2">
-                        <input type="hidden" name="returnTo" value={`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`} />
-                        <input
-                          name="temporaryPassword"
-                          type="password"
-                          placeholder="Yeni şifre"
-                          className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                          required
-                          minLength={8}
-                        />
-                        <input type="hidden" name="mustChangePassword" value="true" />
-                        <button type="submit" className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">
-                          Sıfırla
-                        </button>
-                      </form>
-                    </td>
-                    <td className="px-3 py-4 sm:px-5">
-                      <form action={toggleActive}>
-                        <input type="hidden" name="returnTo" value={`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`} />
-                        <button
-                          type="submit"
-                          className={`rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                            user.isActive
-                              ? "border border-amber-200 bg-amber-50 text-amber-800"
-                              : "border border-emerald-200 bg-emerald-50 text-emerald-800"
-                          }`}
-                        >
-                          {user.isActive ? "Pasife al" : "Aktifleştir"}
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                );
-              })}
+                    </div>
+                  </td>
+                  <td className="hidden min-w-0 xl:table-cell">
+                    {user.memberships.length === 0 ? (
+                      <span className="text-slate-400">Üyelik yok</span>
+                    ) : (
+                      <div className="space-y-2">
+                        {user.memberships.map((membership) => (
+                          <div key={membership.id} className="truncate text-xs">
+                            <AdminOrgLink id={membership.organizationId} name={membership.organization.name} />
+                            <span className="ml-2 text-slate-500">
+                              {formatAdminStatus(membership.role)} · {formatAdminStatus(membership.status)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="hidden truncate text-slate-600 2xl:table-cell">{formatAdminDate(user.lastLoginAt)}</td>
+                  <td className="min-w-0">
+                    <AdminStatusPill active={user.isActive}>{user.isActive ? "Aktif" : "Pasif"}</AdminStatusPill>
+                  </td>
+                  <td className="min-w-0">
+                    <UserActionsMenu userId={user.id} email={user.email} isActive={user.isActive} returnTo={returnTo} />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </AdminTableShell>
