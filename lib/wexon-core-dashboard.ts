@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
@@ -268,7 +269,11 @@ export async function getDemoOrganizationDashboardData() {
   return getOrganizationDashboardData();
 }
 
-export async function getCustomerDashboardData(selector?: DashboardOrganizationSelector) {
+function dashboardSelectorCacheKey(selector?: DashboardOrganizationSelector) {
+  return `${selector?.organizationId?.trim() ?? ""}|${selector?.organizationSlug?.trim() ?? ""}` || "__default__";
+}
+
+async function getCustomerDashboardDataUncached(selector?: DashboardOrganizationSelector) {
   const customerSession = await getCustomerSession();
 
   if (customerSession) {
@@ -304,6 +309,23 @@ export async function getCustomerDashboardData(selector?: DashboardOrganizationS
   if (organizationSlug) params.set("organizationSlug", organizationSlug);
   const next = params.toString() ? `/dashboard?${params.toString()}` : "/dashboard";
   redirect(customerLoginUrl({ next }));
+}
+
+const getCustomerDashboardDataByKey = cache(async (cacheKey: string) => {
+  const [organizationId, organizationSlug] = cacheKey === "__default__" ? ["", ""] : cacheKey.split("|");
+  const explicit =
+    organizationId || organizationSlug
+      ? {
+          organizationId: organizationId || undefined,
+          organizationSlug: organizationSlug || undefined,
+        }
+      : undefined;
+  return getCustomerDashboardDataUncached(explicit);
+});
+
+/** Request-scoped: repeated panel pages share one dashboard payload for the same org. */
+export async function getCustomerDashboardData(selector?: DashboardOrganizationSelector) {
+  return getCustomerDashboardDataByKey(dashboardSelectorCacheKey(selector));
 }
 
 export function dashboardHref(path: string, context: DashboardOrganizationContext) {

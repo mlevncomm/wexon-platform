@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { headers } from "next/headers";
 import { getAdminSession } from "@/lib/wexon-admin-auth";
 import {
@@ -162,7 +163,12 @@ async function buildAllowedWexPayAccess(input: {
   };
 }
 
-export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSelector) {
+function organizationSelectorCacheKey(selector?: DashboardOrganizationSelector | null) {
+  if (!selector) return "__default__";
+  return `${selector.organizationId?.trim() ?? ""}|${selector.organizationSlug?.trim() ?? ""}` || "__default__";
+}
+
+async function getWexPayAccessUncached(explicitSelector?: DashboardOrganizationSelector) {
   const selector = await resolvePlatformOrganizationSelector(explicitSelector);
   const customerSession = await getCustomerSession();
 
@@ -237,6 +243,24 @@ export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSe
   if (selector?.organizationSlug) nextParams.set("organizationSlug", selector.organizationSlug);
   const nextPath = nextParams.toString() ? `/apps/wexpay?${nextParams.toString()}` : "/apps/wexpay";
   redirect(customerLoginUrl({ next: nextPath }));
+}
+
+const getWexPayAccessByKey = cache(async (cacheKey: string) => {
+  const [organizationId, organizationSlug] = cacheKey === "__default__" ? ["", ""] : cacheKey.split("|");
+  const explicit =
+    organizationId || organizationSlug
+      ? {
+          organizationId: organizationId || undefined,
+          organizationSlug: organizationSlug || undefined,
+        }
+      : undefined;
+  return getWexPayAccessUncached(explicit);
+});
+
+/** Request-scoped: layout + page share one access chain for the same org selector. */
+export async function getWexPayAccess(explicitSelector?: DashboardOrganizationSelector) {
+  const selector = await resolvePlatformOrganizationSelector(explicitSelector);
+  return getWexPayAccessByKey(organizationSelectorCacheKey(selector));
 }
 
 /**

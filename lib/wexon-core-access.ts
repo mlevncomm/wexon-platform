@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 export type CoreEntitlementValue = boolean | number | string | null;
@@ -141,7 +142,11 @@ export function evaluateSubscriptionLifecycle(
   return { ok: true };
 }
 
-export async function evaluateProductAccess({ organizationId, productKey, at }: ProductAccessInput) {
+export const evaluateProductAccess = cache(async function evaluateProductAccess({
+  organizationId,
+  productKey,
+  at,
+}: ProductAccessInput) {
   const now = at ?? new Date();
   const [organization, product] = await Promise.all([
     prisma.organization.findUnique({ where: { id: organizationId } }),
@@ -341,7 +346,7 @@ export async function evaluateProductAccess({ organizationId, productKey, at }: 
     billingState,
     entitlementMap,
   };
-}
+});
 
 export function coreEntitlementNumber(entitlements: CoreEntitlementMap, key: string) {
   return Number(entitlements[key] ?? 0);

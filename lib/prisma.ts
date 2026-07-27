@@ -14,9 +14,12 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL veya DIRECT_URL tanımlı olmalıdır.");
   }
 
+  // Default 5 so layout Promise.all shells actually run in parallel on Fluid/Node.
+  // Override with PRISMA_PG_POOL_MAX when Supabase pooler budget is tighter.
+  const poolMax = Number(process.env.PRISMA_PG_POOL_MAX ?? 5);
   const pool = new pg.Pool({
     connectionString: databaseUrl,
-    max: Number(process.env.PRISMA_PG_POOL_MAX ?? 1),
+    max: Number.isFinite(poolMax) && poolMax > 0 ? Math.min(poolMax, 10) : 5,
     idleTimeoutMillis: 20_000,
     connectionTimeoutMillis: 10_000,
     ssl: databaseUrl.includes("supabase.com") ? { rejectUnauthorized: false } : undefined,

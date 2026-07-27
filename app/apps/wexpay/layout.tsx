@@ -6,7 +6,6 @@ import WexPayKeyboardShortcuts from "@/components/wexpay/WexPayKeyboardShortcuts
 import { writeAuditFailure } from "@/lib/wexon-audit";
 import { getWexPayAccess } from "@/lib/wexpay-auth";
 import { formatCoreStatus } from "@/lib/wexon-core-dashboard";
-import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
 import {
   ACTIVATION_STEP_LABELS,
   getActivationJourneyViewForOrg,
@@ -27,22 +26,27 @@ function buildBranchOptions(access: Extract<Awaited<ReturnType<typeof getWexPayA
  * License+Install ACTIVE → panel open (Kurulum Modu if journey ≠ ACTIVE).
  */
 export default async function WexPayLayout({ children }: { children: ReactNode }) {
-  const selector = await resolvePlatformOrganizationSelector();
-  const access = await getWexPayAccess(selector);
+  const access = await getWexPayAccess();
 
   if (!access.allowed) {
+    const deniedOrganizationId =
+      ("access" in access && access.access && "organizationId" in access.access
+        ? access.access.organizationId
+        : null) ??
+      access.organization?.id ??
+      null;
     await writeAuditFailure({
       action: "wexpay.access.denied",
       message: "WexPay layout erişimi reddedildi.",
       level: "WARN",
-      organizationId: selector?.organizationId ?? access.organization?.id ?? null,
+      organizationId: deniedOrganizationId,
       source: "wexpay_app",
       metadata: { reason: access.reason, mode: access.mode },
     });
 
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-4 py-10">
-        <WexPayEmptyAccess organizationId={selector?.organizationId ?? null} reason={access.reason} />
+        <WexPayEmptyAccess organizationId={deniedOrganizationId} reason={access.reason} />
       </main>
     );
   }
