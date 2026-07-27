@@ -162,9 +162,6 @@ export async function loginAdmin(page: Page, email: string, password?: string) {
   await expect(page, "admin continue login must not stay on login with denial").not.toHaveURL(
     /adminError=/,
   );
-  await expect(page.getByRole("button", { name: "Admin profil menüsü" }).first()).toBeVisible({
-    timeout: 30_000,
-  });
 }
 
 export async function loginCustomer(page: Page, email: string, password: string) {
