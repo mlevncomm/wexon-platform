@@ -123,9 +123,12 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
     });
     await loginAdmin(page, email, password);
     await page.goto("/admin/billing");
+    await page.getByRole("button", { name: `${invoice.invoiceNo} güncelle` }).click();
     const statusForm = page.getByTestId(`invoice-status-form-${invoice.id}`);
     await expect(statusForm).toBeVisible();
-    await statusForm.locator('select[name="status"]').selectOption("DRAFT");
+    // Prefer the native select (always in the form for required validation) so the
+    // portaled combobox listbox cannot dismiss the parent AdminActionMenu.
+    await statusForm.locator('select[name="status"]').selectOption("DRAFT", { force: true });
     await statusForm.locator('input[name="reason"]').fill("Geçersiz transition denemesi");
     await statusForm.locator('input[name="confirmed"]').check();
     await Promise.all([
@@ -153,7 +156,8 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
     const { email } = requireFixtures();
     await loginAdmin(page, email, password);
     await page.goto("/admin/subscriptions");
-    const statusForm = page.locator("form").filter({ has: page.locator('input[name="auditNote"]') }).first();
+    await page.getByRole("button", { name: /abonelik güncelle|Güncelle/i }).first().click();
+    const statusForm = page.locator('[role="dialog"] form').filter({ has: page.locator('input[name="auditNote"]') }).first();
     await expect(statusForm.locator('input[name="confirmed"]')).toBeVisible();
   });
 
@@ -167,8 +171,15 @@ test.describe.serial("admin mutation finance hardening (PR5)", () => {
     await expect(createForm.locator('input[name="reason"]')).toBeVisible();
     await expect(createForm.locator('input[name="confirmed"]')).toBeVisible();
     const statusForm = page.locator("form").filter({ has: page.locator('input[name="reason"]') }).filter({ has: page.locator('select[name="status"]') }).first();
-    if ((await statusForm.count()) > 0) {
-      await expect(statusForm.locator('input[name="confirmed"]')).toBeVisible();
+    if ((await statusForm.count()) === 0) {
+      await page.getByRole("button", { name: /lisans işlemi|Durum/i }).first().click();
+    }
+    const openStatusForm = page
+      .locator('[role="dialog"] form')
+      .filter({ has: page.locator('select[name="status"]') })
+      .first();
+    if ((await openStatusForm.count()) > 0) {
+      await expect(openStatusForm.locator('input[name="confirmed"]')).toBeVisible();
     }
   });
 

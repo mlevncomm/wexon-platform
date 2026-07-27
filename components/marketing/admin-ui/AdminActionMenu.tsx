@@ -104,6 +104,8 @@ export function AdminActionMenu({
     function onPointerDown(event: MouseEvent) {
       const target = event.target as Node;
       if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      // AdminSelect listboxes portal to document.body — treat them as inside the dialog.
+      if (target instanceof Element && target.closest('[role="listbox"]')) return;
       setOpen(false);
     }
 

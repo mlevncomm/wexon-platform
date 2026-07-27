@@ -15,6 +15,9 @@ const SUMMARY_TONE: Record<AdminDangerZoneTone, string> = {
 /**
  * Compact premium danger/advanced accordion.
  * Callers own forms, field names, confirmation, mutationId — this is markup only.
+ *
+ * Uncontrolled `<details>` only — do not pass a controlled `open` prop. A controlled
+ * `open` value fights native toggle / Playwright interactions and keeps forms hidden.
  */
 export function AdminDangerZone({
   title,
@@ -33,10 +36,12 @@ export function AdminDangerZone({
 }) {
   return (
     <details
-      open={defaultOpen || undefined}
+      // Uncontrolled: only seed the native `open` attribute when starting expanded.
+      // Do not pass `open={false}` / `open={undefined}` every render — that fights toggles.
+      {...(defaultOpen ? { open: true } : {})}
       className={`group min-w-0 rounded-[10px] border border-l-4 bg-white p-4 shadow-sm shadow-slate-200/40 ${TONE_CLASS[tone]} ${className}`}
     >
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0">
           <span className="flex items-center gap-2">
             <span

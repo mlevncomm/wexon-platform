@@ -51,7 +51,11 @@ test.describe.serial("admin journey", () => {
 
     await loginAdmin(page, email!, password);
     await page.goto("/admin/support");
-    await expect(page.getByText(leadCompany).or(page.getByText(leadEmail)).first()).toBeVisible({
+    // Desktop table + mobile cards both render the company; prefer a visible match
+    // so lg:hidden mobile cards do not steal .first().
+    await expect(
+      page.locator(`:text("${leadCompany}"), :text("${leadEmail}")`).locator("visible=true").first(),
+    ).toBeVisible({
       timeout: 20_000,
     });
   });
@@ -64,12 +68,24 @@ test.describe.serial("admin journey", () => {
     await loginAdmin(page, email!, password);
     await page.goto("/admin/support");
 
-    const leadRow = page.locator("tr, article, section").filter({ hasText: leadCompany }).first();
+    // Prefer the desktop table row (mobile cards are lg:hidden duplicates).
+    const leadRow = page.locator("table tbody tr").filter({ hasText: leadCompany }).first();
     test.skip((await leadRow.count()) === 0, "lead from previous step not visible");
 
+    const statusCombobox = leadRow.getByRole("combobox", { name: /Lead durumu/i }).first();
+    if (await statusCombobox.count()) {
+      await statusCombobox.click();
+      await page.getByRole("option", { name: /İletişime Geçildi|Contacted|contacted/i }).first().click();
+      await leadRow.getByRole("button", { name: /Güncelle/i }).first().click();
+      await page.reload();
+      await expect(page.locator("body")).toContainText(/İletişime Geçildi|contacted|İletişim/i);
+      return;
+    }
+
+    // Fallback: native select stays in DOM for required validation (aria-hidden).
     const statusSelect = leadRow.locator('select[name="leadStatus"]').first();
     if (await statusSelect.count()) {
-      await statusSelect.selectOption("contacted");
+      await statusSelect.selectOption("contacted", { force: true });
       await leadRow.getByRole("button", { name: /Güncelle/i }).first().click();
       await page.reload();
       await expect(page.locator("body")).toContainText(/İletişime Geçildi|contacted|İletişim/i);
