@@ -64,8 +64,14 @@ test.describe.serial("auth journey", () => {
     test.skip(!email, "admin email required");
 
     await page.goto("/admin/login");
-    // Shared password form is gone — continue without JWT must fail generically.
-    await page.getByRole("button", { name: /Yönetim paneline devam et/i }).click();
+    // Shared password form is gone — continue without a valid PlatformAdmin identity must fail generically.
+    const localBtn = page.getByRole("button", { name: /Yerel yönetim paneline giriş/i });
+    if (await localBtn.count()) {
+      await page.getByLabel(/Admin e-posta/i).fill("missing-jwt-denied@example.invalid");
+      await localBtn.click();
+    } else {
+      await page.getByRole("button", { name: /Yönetim paneline devam et/i }).click();
+    }
     await expect(page).toHaveURL(/\/admin\/login/);
     await expect(page.getByText(/Yönetim paneline erişim reddedildi/i).first()).toBeVisible({
       timeout: 20_000,

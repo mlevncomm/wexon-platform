@@ -24,6 +24,12 @@ import { unifiedLoginUrl } from "@/lib/wexon/urls";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/wexon-rate-limit";
 import { cloudflareAccessAuditSafeMeta } from "@/lib/wexon-cloudflare-access-jwt";
 import { CloudflareAccessJwtError } from "@/lib/wexon-cloudflare-access-jwt";
+import { isCloudflareAccessTestMode } from "@/lib/wexon-cloudflare-access-config";
+import {
+  clearCloudflareAccessTestJwtCookie,
+  defaultLocalAdminTestEmail,
+  establishAdminSessionFromCloudflareAccessTestLogin,
+} from "@/lib/wexon-cloudflare-access-test-login";
 import { PlatformAdminCloudflareAccessError } from "@/lib/wexon-platform-admin-cloudflare-bind";
 import { maskPlatformAdminEmail } from "@/lib/wexon-platform-admin";
 
@@ -140,6 +146,79 @@ export async function continueAdminCloudflareLoginAction(formData: FormData) {
 }
 
 /**
+ * Local/CI only — mint CF Access test JWT cookie + PlatformAdmin session.
+ * Hard-denied unless WEXON_CF_ACCESS_TEST_MODE (never on Vercel production/preview).
+ */
+export async function continueLocalAdminCloudflareTestLoginAction(formData: FormData) {
+  adminDebug("login:local_cf_test_start");
+  const productionWexon = isWexonProductionDeployment();
+  const headerStore = await headers();
+  const host = headerStore.get("host") ?? headerStore.get("x-forwarded-host");
+
+  if (!isAdminAccessHostAllowed(host, productionWexon)) {
+    adminDebug("login:wrong_host", { host: normalizeHost(host) });
+    redirect(ADMIN_PRODUCTION_LOGIN_URL);
+  }
+
+  const nextPath = safeAdminNextPath(readString(formData, "next"), productionWexon);
+
+  if (!isCloudflareAccessTestMode()) {
+    redirectLoginError(nextPath, { reason: "access_denied" });
+  }
+
+  const ipAddress = await getServerActionIpAddress();
+  const ipLimit = enforceRateLimit("admin.login.ip", ipAddress, RATE_LIMITS.adminLoginIp);
+  if (!ipLimit.ok) {
+    redirectLoginError(nextPath, { reason: "rate_limited" });
+  }
+
+  if (!process.env.ADMIN_SESSION_SECRET?.trim()) {
+    redirectLoginError(nextPath, { reason: "config_missing" });
+  }
+
+  const email = readString(formData, "email") || defaultLocalAdminTestEmail();
+  if (!email) {
+    redirectLoginError(nextPath, { reason: "access_denied" });
+  }
+
+  try {
+    const established = await establishAdminSessionFromCloudflareAccessTestLogin(email);
+    adminDebug("login:local_cf_test_redirect", {
+      next: nextPath,
+      emailMasked: maskPlatformAdminEmail(established.sessionEmail),
+    });
+    redirect(resolvePostLoginDestination(nextPath, { isAdmin: true, productionWexon }));
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "digest" in error &&
+      typeof error.digest === "string" &&
+      error.digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw error;
+    }
+
+    const reason =
+      error instanceof CloudflareAccessJwtError && error.code === "missing_config"
+        ? "config_missing"
+        : "access_denied";
+
+    adminDebug("login:local_cf_test_unauthorized", {
+      ...cloudflareAccessAuditSafeMeta({
+        reason:
+          error instanceof CloudflareAccessJwtError
+            ? error.code
+            : error instanceof PlatformAdminCloudflareAccessError
+              ? error.code
+              : "access_denied",
+      }),
+    });
+    redirectLoginError(nextPath, { reason });
+  }
+}
+
+/**
  * @deprecated PR2B — shared password login removed. Kept as a hard deny so stale
  * forms/clients cannot authenticate via ADMIN_LOGIN_PASSWORD / ADMIN_EMAILS.
  */
@@ -161,6 +240,7 @@ export async function loginAdminAction(formData: FormData) {
 export async function logoutAdminAction() {
   adminDebug("logout:start");
   await clearAdminPreviewWriteCapabilityCookie();
+  await clearCloudflareAccessTestJwtCookie();
   await clearAdminSessionCookie();
   await clearCustomerSessionCookie();
   await clearActiveOrganizationCookie();

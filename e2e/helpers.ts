@@ -142,14 +142,29 @@ export async function loginAdmin(page: Page, email: string, password?: string) {
   void password;
   await attachE2eCloudflareAccessJwt(page, email);
   await page.goto("/admin/login");
-  await expect(page.getByRole("button", { name: /Yönetim paneline devam et/i })).toBeVisible();
-  await Promise.all([
-    page.waitForURL(/\/admin(\/applications)?\/?$/, { timeout: 30_000 }),
-    page.getByRole("button", { name: /Yönetim paneline devam et/i }).click(),
-  ]);
+  const localBtn = page.getByRole("button", { name: /Yerel yönetim paneline giriş/i });
+  const continueBtn = page.getByRole("button", { name: /Yönetim paneline devam et/i });
+  if (await localBtn.count()) {
+    const emailField = page.getByLabel(/Admin e-posta/i);
+    if (await emailField.count()) {
+      await emailField.fill(email);
+    }
+    await localBtn.click();
+  } else {
+    await expect(continueBtn).toBeVisible();
+    await continueBtn.click();
+  }
+  await page.waitForURL((url) => {
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return pathname === "/admin" || pathname.startsWith("/admin/applications");
+  }, { timeout: 30_000 });
+  await expect(page, "admin continue login must not remain on login").not.toHaveURL(/\/admin\/login/);
   await expect(page, "admin continue login must not stay on login with denial").not.toHaveURL(
     /adminError=/,
   );
+  await expect(page.getByRole("button", { name: "Admin profil menüsü" }).first()).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 export async function loginCustomer(page: Page, email: string, password: string) {
