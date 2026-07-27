@@ -39,7 +39,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Da
     tableCount,
     menuProductCount,
     entitlementMap,
-  } = await getCustomerDashboardData(params);
+  } = await getCustomerDashboardData(params, "shell");
 
   if (!organization) {
     return (

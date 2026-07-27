@@ -31,7 +31,7 @@ function readOrganizationTab(value: string | undefined): OrganizationTabId {
 export default async function DashboardOrganizationPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
   const [{ organization, organizationContext }, currentUser] = await Promise.all([
-    getCustomerDashboardData(params),
+    getCustomerDashboardData(params, "organization"),
     getCurrentCustomerUser(),
   ]);
 

@@ -25,7 +25,7 @@ function dashboardCtaClass(variant: "primary" | "secondary" = "secondary") {
 export default async function DashboardProductsPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
   const { organization, organizationContext, products, wexPayAccess, wexPayLicense, wexPayInstallation } =
-    await getCustomerDashboardData(params);
+    await getCustomerDashboardData(params, "products");
 
   if (!organization) {
     return (

@@ -134,17 +134,6 @@ input[type="password"]::-webkit-password-toggle-button {
 
 /* ─── Motion & Transitions ──────────────────────────────────────────────── */
 
-/* Opacity-only: any transform on .wx-page-shell creates a containing block
-   and breaks position:fixed descendants (navbar scrolls away after client nav). */
-@keyframes wx-page-enter-keyframes {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes wx-fade-in-keyframes {
   from {
     opacity: 0;
@@ -704,21 +693,9 @@ input[type="password"]::-webkit-password-toggle-button {
     filter var(--wx-motion-normal) var(--wx-ease-soft);
 }
 
-.wx-page-shell {
-  min-height: 100%;
-}
-
 .wx-defer-section {
   content-visibility: auto;
   contain-intrinsic-size: auto 760px;
-}
-
-.wx-page-enter {
-  animation: wx-page-enter-keyframes var(--wx-motion-normal) var(--wx-ease-soft) both;
-}
-
-.wx-panel-enter {
-  animation: wx-fade-in-keyframes var(--wx-motion-normal) var(--wx-ease-out) both;
 }
 
 .wx-fade-in {
@@ -863,7 +840,6 @@ input[type="password"]::-webkit-password-toggle-button {
     scroll-behavior: auto;
   }
 
-  .wx-page-enter,
   .wx-hero-headline-enter,
   .wx-hero-float,
   .wx-hero-float-slow,
@@ -871,7 +847,6 @@ input[type="password"]::-webkit-password-toggle-button {
   .wx-hero-proof-pulse,
   .wx-hero-proof-icon,
   .wx-hero-proof-shimmer,
-  .wx-panel-enter,
   .wx-card-enter,
   .wx-fade-in {
     animation: wx-fade-in-keyframes 1ms ease both !important;

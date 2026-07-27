@@ -59,13 +59,7 @@ export default async function AdminWexPayPreviewLayout({
           redirectTo={basePath}
         />
       </Suspense>
-      <Suspense
-        fallback={
-          <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-slate-500">
-            WexPay önizleme yükleniyor...
-          </div>
-        }
-      >
+      <Suspense fallback={null}>
         <WexPayBusinessShell
           organizationName={access.organization.name}
           organizationId={access.organization.id}

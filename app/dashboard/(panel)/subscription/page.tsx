@@ -32,7 +32,7 @@ export default async function DashboardSubscriptionPage({ searchParams }: { sear
     tableCount,
     menuProductCount,
     entitlementMap,
-  } = await getCustomerDashboardData(params);
+  } = await getCustomerDashboardData(params, "subscription");
   const paytrOn = isPaytrSubscriptionEnabled();
 
   if (!organization || !wexPayLicense) {

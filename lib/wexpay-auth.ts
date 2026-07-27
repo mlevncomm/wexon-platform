@@ -9,7 +9,7 @@ import {
 import { wexpayAdminPreviewHref } from "@/lib/wexon-admin-preview-path";
 import { assertCustomerDashboardAccess, getCustomerSession } from "@/lib/wexon-customer-auth";
 import type { DashboardOrganizationSelector } from "@/lib/wexon-core-dashboard";
-import { findSelectedOrganization } from "@/lib/wexon-core-dashboard";
+import { findSelectedOrganizationIdentity } from "@/lib/wexon-core-dashboard";
 import { requireProductAccess } from "@/lib/wexon-core-access";
 import { resolvePlatformOrganizationSelector } from "@/lib/wexon-organization-context";
 import { isWexonProductionDeployment } from "@/lib/wexon-canonical-host";
@@ -178,9 +178,7 @@ async function getWexPayAccessUncached(explicitSelector?: DashboardOrganizationS
       redirect(customerLoginUrl());
     }
 
-    const membership = await prisma.membership.findFirst({
-      where: { userId: access.user.id, organizationId: access.organizationId, status: "ACTIVE" },
-    });
+    const membership = access.membership;
 
     if (!membership || !canAccessWexPay(membership.role)) {
       return {
@@ -196,8 +194,8 @@ async function getWexPayAccessUncached(explicitSelector?: DashboardOrganizationS
     return buildAllowedWexPayAccess({
       organizationId: access.organizationId,
       mode: "customer",
-      user: access.user,
-      membership,
+      user: { id: access.user.id, email: access.user.email },
+      membership: { role: membership.role },
     });
   }
 
@@ -211,7 +209,7 @@ async function getWexPayAccessUncached(explicitSelector?: DashboardOrganizationS
       );
     }
 
-    const selected = await findSelectedOrganization(selector);
+    const selected = await findSelectedOrganizationIdentity(selector);
     if (!selected.organization) {
       redirect("/unauthorized");
     }

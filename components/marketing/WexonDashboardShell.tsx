@@ -139,7 +139,7 @@ export default async function WexonDashboardShell({ children }: { children: Reac
 
         <div className={`core-content min-w-0 w-full ${WORKSPACE_PAGE_PADDING} py-4 sm:py-6 lg:py-7`}>
           <div
-            className="wx-panel-enter mx-auto min-w-0 w-full max-w-none"
+            className="mx-auto min-w-0 w-full max-w-none"
             style={{ maxWidth: `${WORKSPACE_CONTENT_MAX_PX}px` }}
           >
             {children}

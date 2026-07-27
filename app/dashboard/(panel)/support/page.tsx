@@ -58,7 +58,7 @@ function supportHref(context: DashboardOrganizationContext, extra?: Record<strin
 
 export default async function DashboardSupportPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
-  const { organization, organizationContext } = await getCustomerDashboardData(params);
+  const { organization, organizationContext } = await getCustomerDashboardData(params, "support");
 
   if (!organization) {
     return <DashboardEmptyState title="Organizasyon bulunamadı." description="Destek talepleri için organizasyon kaydı gereklidir." />;

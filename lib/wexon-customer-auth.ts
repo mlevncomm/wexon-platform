@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { cache } from "react";
+import type { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { sessionCookieClearOptions, sessionCookieOptions } from "@/lib/wexon-canonical-host";
@@ -18,9 +19,19 @@ function customerLoginRedirect(message: string): never {
   redirect(customerLoginUrl({ customerError: message }));
 }
 
+type CustomerUserWithMemberships = Prisma.UserGetPayload<{
+  include: {
+    memberships: {
+      where: { status: "ACTIVE" };
+      include: { organization: true };
+      orderBy: { createdAt: "asc" };
+    };
+  };
+}>;
+
 type CustomerResolveResult =
-  | { user: Awaited<ReturnType<typeof prisma.user.findUnique>>; organizationId: null; reason: "inactive_user" | "missing_membership" | "forbidden" }
-  | { user: NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>; organizationId: string; reason: "selected" | "default" };
+  | { user: CustomerUserWithMemberships | null; organizationId: null; reason: "inactive_user" | "missing_membership" | "forbidden" }
+  | { user: CustomerUserWithMemberships; organizationId: string; reason: "selected" | "default" };
 
 function getSessionSecret() {
   const secret = process.env.CUSTOMER_SESSION_SECRET;
@@ -187,7 +198,14 @@ export async function assertCustomerDashboardAccess(selector?: { organizationId?
     redirect("/unauthorized");
   }
 
-  return { session, user: resolved.user, organizationId: resolved.organizationId };
+  if (!resolved.user || !resolved.organizationId) {
+    customerLoginRedirect("Aktif üyelik bulunamadı.");
+  }
+
+  const membership =
+    resolved.user.memberships.find((item) => item.organizationId === resolved.organizationId) ?? null;
+
+  return { session, user: resolved.user, organizationId: resolved.organizationId, membership };
 }
 
 export function canUpdateOrganization(role: string) {

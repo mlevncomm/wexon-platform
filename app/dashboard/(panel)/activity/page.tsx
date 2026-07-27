@@ -53,7 +53,7 @@ function summarizeMetadata(metadataJson: unknown): string | null {
 
 export default async function DashboardActivityPage({ searchParams }: { searchParams: DashboardSearchParams }) {
   const params = await searchParams;
-  const { organization } = await getCustomerDashboardData(params);
+  const { organization } = await getCustomerDashboardData(params, "activity");
 
   if (!organization) {
     return (

@@ -51,7 +51,7 @@ export default async function DashboardIntegrationsPage({ searchParams }: { sear
   const cookieStore = await cookies();
   const newApiKey = parseApiKeyFlash(cookieStore.get("wexon_api_key_flash")?.value);
   const [{ organization }, currentUser] = await Promise.all([
-    getCustomerDashboardData(params),
+    getCustomerDashboardData(params, "integrations"),
     getCurrentCustomerUser(),
   ]);
 

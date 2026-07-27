@@ -16,7 +16,7 @@ type SearchParams = Promise<{ organizationId?: string; organizationSlug?: string
 
 export default async function ActivationWizardPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const { organization, organizationContext, wexPayAccess } = await getCustomerDashboardData(params);
+  const { organization, organizationContext, wexPayAccess } = await getCustomerDashboardData(params, "access");
 
   if (!organization) {
     return (
