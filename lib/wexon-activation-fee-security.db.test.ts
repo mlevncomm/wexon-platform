@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
-import { EXPECTED_PUBLIC_TABLE_COUNT } from "@/lib/wexon-db-backup-guards";
+import { EXPECTED_PUBLIC_TABLE_COUNT, PUBLIC_TABLES_ADDED_BY_TABLE_ASSIST } from "@/lib/wexon-db-backup-guards";
 
 assertLocalDbTestGuard(process.env);
 
 describe("ActivationFeeLedger RLS security (db)", () => {
-  it("public schema has 43 tables and ActivationFeeLedger RLS is enabled", async () => {
+  it("public schema has 44 tables and ActivationFeeLedger RLS is enabled", async () => {
     const tables = await prisma.$queryRaw<
       Array<{ table_name: string; rls: boolean }>
     >`
@@ -19,7 +19,7 @@ describe("ActivationFeeLedger RLS security (db)", () => {
     `;
 
     assert.equal(tables.length, EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 43);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 44);
 
     for (const name of [
       "ActivationFeeLedger",
@@ -30,6 +30,7 @@ describe("ActivationFeeLedger RLS security (db)", () => {
       "MenuImportJob",
       "MenuImportRowError",
       "PlatformAdmin",
+      ...PUBLIC_TABLES_ADDED_BY_TABLE_ASSIST,
     ]) {
       const row = tables.find((t) => t.table_name === name);
       assert.ok(row, `${name} must exist`);

@@ -706,7 +706,7 @@ describe("staff invite security (db)", () => {
     );
   });
 
-  it("expects 43 public tables including PlatformAdmin", async () => {
+  it("expects 44 public tables including PlatformAdmin and TableAssistRequest", async () => {
     const tables = await prisma.$queryRaw<Array<{ c: bigint }>>`
       SELECT count(*)::bigint AS c
       FROM pg_class c
@@ -714,6 +714,15 @@ describe("staff invite security (db)", () => {
       WHERE n.nspname = 'public' AND c.relkind = 'r'
     `;
     assert.equal(Number(tables[0]!.c), EXPECTED_PUBLIC_TABLE_COUNT);
-    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 43);
+    assert.equal(EXPECTED_PUBLIC_TABLE_COUNT, 44);
+
+    const names = await prisma.$queryRaw<Array<{ table_name: string }>>`
+      SELECT c.relname AS table_name
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r'
+        AND c.relname IN ('PlatformAdmin', 'TableAssistRequest')
+    `;
+    assert.equal(names.length, 2);
   });
 });
