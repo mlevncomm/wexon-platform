@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import QrModalShell from "@/components/qr-order/QrModalShell";
-import { qrCard, qrFrameNarrow, qrGhostCta, qrGlassSoft, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
+import { qrCard, qrFrameNarrow, qrGhostCta, qrGlassSoft, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
 import { resolvePaytrReturnBanner } from "@/lib/qr-order/paytr-return";
 import {
@@ -34,6 +34,7 @@ export default function QrBillScreen({
   onCallWaiter: () => void;
   onTrackOrders?: () => void;
 }) {
+  void onBack;
   const [bill, setBill] = useState<QrBillSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -224,25 +225,18 @@ export default function QrBillScreen({
   const canPayOnline = onlineCheckout && Boolean(bill && !bill.empty && bill.remainingAmount > 0);
 
   return (
-    <div className={`${qrFrameNarrow} min-h-[100dvh] pb-10 pt-4`}>
-      <header className="flex items-center gap-3">
-        <button type="button" onClick={onBack} className={qrIconBtn} aria-label="Geri">
-          ←
-        </button>
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-800">
-            Masa hesabı
-          </p>
-          <h1 className="truncate text-lg font-black tracking-tight text-slate-950">
-            {context.restaurantName} · {context.tableLabel}
-          </h1>
-        </div>
+    <div className={`${qrFrameNarrow} min-h-[100dvh] pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[max(10px,env(safe-area-inset-top))]`}>
+      <header className="min-w-0">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Hesabım</p>
+        <h1 className="truncate text-lg font-black tracking-tight text-slate-950">
+          {context.restaurantName} · {context.tableLabel}
+        </h1>
       </header>
 
       {loading ? (
         <div className="mt-6 space-y-3" data-testid="qr-bill-loading">
-          <div className="h-28 animate-pulse rounded-[28px] bg-white/70 motion-reduce:animate-none" />
-          <div className="h-44 animate-pulse rounded-[28px] bg-white/70 motion-reduce:animate-none" />
+          <div className="h-28 animate-pulse rounded-[20px] bg-white/80 motion-reduce:animate-none" />
+          <div className="h-44 animate-pulse rounded-[20px] bg-white/80 motion-reduce:animate-none" />
         </div>
       ) : null}
 
@@ -256,7 +250,7 @@ export default function QrBillScreen({
         <p
           role="status"
           data-testid="qr-paytr-return-banner"
-          className="mt-5 rounded-[24px] bg-emerald-50 px-4 py-4 text-sm font-bold text-emerald-950 ring-1 ring-emerald-200"
+          className="mt-5 rounded-[20px] bg-sky-50 px-4 py-4 text-sm font-bold text-slate-900 ring-1 ring-sky-200"
         >
           {paytrBanner}
         </p>
@@ -326,7 +320,7 @@ export default function QrBillScreen({
                 })()}
               </div>
 
-              <div className={`${qrGlassSoft} rounded-[28px] p-5`}>
+              <div className={`${qrGlassSoft} rounded-[24px] p-5`}>
                 <div className="flex justify-between text-sm font-bold text-slate-600">
                   <span>Toplam</span>
                   <span className="tabular-nums">{formatTry(bill.totalAmount)}</span>
@@ -335,9 +329,9 @@ export default function QrBillScreen({
                   <span>Ödenen</span>
                   <span className="tabular-nums">{formatTry(bill.paidAmount)}</span>
                 </div>
-                <div className="mt-3 flex justify-between border-t border-emerald-100/80 pt-3 text-lg font-black text-slate-950">
+                <div className="mt-3 flex justify-between border-t border-slate-200/80 pt-3 text-lg font-black text-slate-950">
                   <span>Kalan</span>
-                  <span data-testid="qr-bill-remaining" className="tabular-nums text-emerald-800">
+                  <span data-testid="qr-bill-remaining" className="tabular-nums text-[#F97316]">
                     {formatTry(bill.remainingAmount)}
                   </span>
                 </div>
@@ -347,7 +341,7 @@ export default function QrBillScreen({
 
           {onlineCheckout ? (
             <div
-              className="rounded-[28px] border border-emerald-200/80 bg-emerald-50/70 p-5"
+              className="rounded-[24px] border border-sky-200/80 bg-sky-50/70 p-5"
               data-testid="qr-pay-online"
             >
               <p className="text-sm font-black text-slate-950">Online ödeme</p>
@@ -387,13 +381,13 @@ export default function QrBillScreen({
 
           {requestSuccess ? (
             <div
-              className={`${qrCard} border-emerald-200 bg-emerald-50/80 p-5`}
+              className={`${qrCard} border-sky-200 bg-sky-50/80 p-5`}
               data-testid="qr-payment-request-success"
             >
-              <p className="text-sm font-black text-emerald-950">
+              <p className="text-sm font-black text-slate-950">
                 Ödeme talebiniz restorana iletildi.
               </p>
-              <p className="mt-1 text-xs font-semibold text-emerald-800">
+              <p className="mt-1 text-xs font-semibold text-slate-600">
                 Bu bir tahsilat değildir. Personel masanıza yönlendirilebilir.
               </p>
             </div>

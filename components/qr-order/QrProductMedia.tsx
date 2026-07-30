@@ -23,7 +23,7 @@ export default function QrProductMedia({
         <img src={imageUrl} alt={name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <span className={`font-black text-emerald-800/35 ${large ? "text-5xl" : "text-3xl"}`}>
+          <span className={`font-black text-[#152238]/35 ${large ? "text-5xl" : "text-3xl"}`}>
             {visual.glyph}
           </span>
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.55),transparent_55%)]" />

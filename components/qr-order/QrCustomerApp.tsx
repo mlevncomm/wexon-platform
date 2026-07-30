@@ -8,6 +8,8 @@ import QrLanding from "@/components/qr-order/QrLanding";
 import QrMenuScreen from "@/components/qr-order/QrMenuScreen";
 import QrOrderStatusScreen from "@/components/qr-order/QrOrderStatusScreen";
 import QrWaiterCall from "@/components/qr-order/QrWaiterCall";
+import QrBottomNav, { type QrNavTab } from "@/components/qr-order/ui/QrBottomNav";
+import QrMoreSheet from "@/components/qr-order/ui/QrMoreSheet";
 import {
   clearCartStorage,
   readCartFromStorage,
@@ -15,7 +17,7 @@ import {
   upsertCartLine,
   writeCartToStorage,
 } from "@/lib/qr-order/cart";
-import { buildOrderNote } from "@/lib/qr-order/pricing";
+import { buildOrderNote, cartItemCount } from "@/lib/qr-order/pricing";
 import type {
   QrCartLine,
   QrCategory,
@@ -32,6 +34,12 @@ function newIdempotencyKey() {
   return `qr-order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function viewToTab(view: QrView): QrNavTab {
+  if (view === "status") return "orders";
+  if (view === "bill") return "bill";
+  return "menu";
+}
+
 export default function QrCustomerApp({
   context,
   categories,
@@ -41,7 +49,7 @@ export default function QrCustomerApp({
   categories: QrCategory[];
   initialPaytrReturn?: QrPaytrReturn | null;
 }) {
-  const [view, setView] = useState<QrView>(initialPaytrReturn ? "bill" : "landing");
+  const [view, setView] = useState<QrView>(initialPaytrReturn ? "bill" : "menu");
   const [lines, setLines] = useState<QrCartLine[]>([]);
   const [cartReady, setCartReady] = useState(false);
   const [generalNote, setGeneralNote] = useState("");
@@ -49,6 +57,7 @@ export default function QrCustomerApp({
   const [orderPending, setOrderPending] = useState(false);
   const [success, setSuccess] = useState<QrOrderSuccess | null>(null);
   const [waiterOpen, setWaiterOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [paytrReturn] = useState<QrPaytrReturn | null>(initialPaytrReturn);
   const submitLock = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -77,6 +86,8 @@ export default function QrCustomerApp({
   }, [paytrReturn]);
 
   const menuEmpty = categories.every((category) => category.products.length === 0);
+  const itemCount = cartItemCount(lines);
+  const showNav = view === "menu" || view === "status" || view === "bill" || view === "landing";
 
   function addLine(line: QrCartLine) {
     setLines((current) => {
@@ -89,6 +100,16 @@ export default function QrCustomerApp({
       }
       return upsertCartLine(current, line);
     });
+  }
+
+  function onNavSelect(tab: QrNavTab) {
+    if (tab === "more") {
+      setMoreOpen(true);
+      return;
+    }
+    if (tab === "menu") setView("menu");
+    else if (tab === "orders") setView("status");
+    else if (tab === "bill") setView("bill");
   }
 
   async function submitOrder() {
@@ -166,18 +187,11 @@ export default function QrCustomerApp({
   }
 
   return (
-    <main className="relative isolate w-full min-h-[100dvh] flex-1 text-slate-950">
+    <main className="relative isolate flex min-h-[100dvh] w-full max-w-[100vw] flex-1 flex-col items-center overflow-x-hidden text-slate-950">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-[#F5F7FB]" />
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(165deg,#F6F8F5_0%,#ECFDF5_38%,#FAFAF7_100%)]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed -left-24 top-0 -z-10 h-[28rem] w-[28rem] rounded-full bg-emerald-200/45 blur-3xl motion-reduce:hidden sm:h-[36rem] sm:w-[36rem]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed -right-20 top-32 -z-10 h-[24rem] w-[24rem] rounded-full bg-lime-200/40 blur-3xl motion-reduce:hidden sm:top-16 sm:h-[32rem] sm:w-[32rem]"
+        className="pointer-events-none fixed left-1/2 top-0 -z-10 h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-sky-200/30 blur-3xl motion-reduce:hidden sm:h-[28rem] sm:w-[28rem]"
       />
 
       <div aria-live="polite" className="sr-only">
@@ -185,80 +199,92 @@ export default function QrCustomerApp({
         {success && view === "success" ? `Sipariş alındı ${success.orderNo}` : null}
       </div>
 
-      {view === "landing" ? (
-        <QrLanding
-          context={context}
-          menuEmpty={menuEmpty}
-          onBrowseMenu={() => setView("menu")}
-          onPay={() => setView("bill")}
-          onCallWaiter={() => setWaiterOpen(true)}
-        />
+      <div className="flex w-full flex-1 flex-col items-center">
+        {view === "landing" ? (
+          <QrLanding
+            context={context}
+            menuEmpty={menuEmpty}
+            onBrowseMenu={() => setView("menu")}
+            onPay={() => setView("bill")}
+            onCallWaiter={() => setWaiterOpen(true)}
+          />
+        ) : null}
+
+        {view === "menu" ? (
+          <QrMenuScreen
+            context={context}
+            categories={categories}
+            lines={lines}
+            menuEmpty={menuEmpty}
+            onAddLine={addLine}
+            onOpenCart={() => setView("cart")}
+          />
+        ) : null}
+
+        {view === "cart" ? (
+          <QrCartSheet
+            context={context}
+            lines={lines}
+            generalNote={generalNote}
+            error={orderError}
+            pending={orderPending}
+            onGeneralNoteChange={setGeneralNote}
+            onQuantityChange={(key, quantity) =>
+              setLines((current) => setCartLineQuantity(current, key, quantity))
+            }
+            onRemove={(key) => setLines((current) => setCartLineQuantity(current, key, 0))}
+            onBack={() => setView("menu")}
+            onSubmit={() => void submitOrder()}
+          />
+        ) : null}
+
+        {view === "success" && success ? (
+          <QrCheckoutSuccess
+            context={context}
+            order={success}
+            onTrack={() => setView("status")}
+            onNewOrder={() => {
+              setSuccess(null);
+              setView("menu");
+            }}
+            onCallWaiter={() => setWaiterOpen(true)}
+          />
+        ) : null}
+
+        {view === "status" ? (
+          <QrOrderStatusScreen
+            context={context}
+            highlightOrderNo={success?.orderNo ?? null}
+            onBack={() => setView(success ? "success" : "menu")}
+            onNewOrder={() => {
+              setSuccess(null);
+              setView("menu");
+            }}
+            onViewBill={() => setView("bill")}
+          />
+        ) : null}
+
+        {view === "bill" ? (
+          <QrBillScreen
+            context={context}
+            paytrReturn={paytrReturn}
+            onBack={() => setView("menu")}
+            onCallWaiter={() => setWaiterOpen(true)}
+            onTrackOrders={() => setView("status")}
+          />
+        ) : null}
+      </div>
+
+      {showNav ? (
+        <QrBottomNav active={viewToTab(view)} onSelect={onNavSelect} cartCount={itemCount} />
       ) : null}
 
-      {view === "menu" ? (
-        <QrMenuScreen
-          context={context}
-          categories={categories}
-          lines={lines}
-          onAddLine={addLine}
-          onOpenCart={() => setView("cart")}
-          onBack={() => setView("landing")}
-          onCallWaiter={() => setWaiterOpen(true)}
-        />
-      ) : null}
-
-      {view === "cart" ? (
-        <QrCartSheet
-          context={context}
-          lines={lines}
-          generalNote={generalNote}
-          error={orderError}
-          pending={orderPending}
-          onGeneralNoteChange={setGeneralNote}
-          onQuantityChange={(key, quantity) =>
-            setLines((current) => setCartLineQuantity(current, key, quantity))
-          }
-          onRemove={(key) => setLines((current) => setCartLineQuantity(current, key, 0))}
-          onBack={() => setView("menu")}
-          onSubmit={() => void submitOrder()}
-        />
-      ) : null}
-
-      {view === "success" && success ? (
-        <QrCheckoutSuccess
-          context={context}
-          order={success}
-          onTrack={() => setView("status")}
-          onNewOrder={() => {
-            setSuccess(null);
-            setView("menu");
-          }}
-          onCallWaiter={() => setWaiterOpen(true)}
-        />
-      ) : null}
-
-      {view === "status" ? (
-        <QrOrderStatusScreen
-          context={context}
-          highlightOrderNo={success?.orderNo ?? null}
-          onBack={() => setView(success ? "success" : "landing")}
-          onNewOrder={() => {
-            setSuccess(null);
-            setView("menu");
-          }}
-          onViewBill={() => setView("bill")}
-        />
-      ) : null}
-
-      {view === "bill" ? (
-        <QrBillScreen
-          context={context}
-          paytrReturn={paytrReturn}
-          onBack={() => setView("landing")}
-          onCallWaiter={() => setWaiterOpen(true)}
-          onTrackOrders={() => setView("status")}
-        />
-      ) : null}
+      <QrMoreSheet
+        open={moreOpen}
+        context={context}
+        onClose={() => setMoreOpen(false)}
+        onCallWaiter={() => setWaiterOpen(true)}
+      />
 
       <QrWaiterCall
         qrCode={context.qrCode}
