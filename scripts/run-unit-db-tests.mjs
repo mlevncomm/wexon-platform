@@ -36,6 +36,7 @@ const files = [
   "lib/wexon-entitlement-lifecycle.db.test.ts",
   "lib/wexpay-paytr-webhook.db.test.ts",
   "lib/wexpay-concurrency.db.test.ts",
+  "lib/wexpay-table-assist.db.test.ts",
   "lib/wexon-activation-fee.db.test.ts",
   "lib/wexon-activation-fee-security.db.test.ts",
   "lib/wexpay-smart-activation.db.test.ts",

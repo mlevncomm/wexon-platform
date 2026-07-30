@@ -4,8 +4,11 @@
  */
 
 export const MIN_PG_DUMP_MAJOR = 17;
-/** Current public schema expectation after AdminMutation rate-limit/idempotency (PR5). */
-export const EXPECTED_PUBLIC_TABLE_COUNT = 43;
+/**
+ * Public tables added by the TableAssistRequest migration (PR-A).
+ * EXPECTED_PUBLIC_TABLE_COUNT is derived from this list — do not hard-code the count alone.
+ */
+export const PUBLIC_TABLES_ADDED_BY_TABLE_ASSIST = ["TableAssistRequest"];
 /** Pre-ActivationFeeLedger recovery archives remain valid via their own manifests. */
 export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ACTIVATION_LEDGER = 33;
 /** Pre-Smart-Activation (ActivationFeeLedger era) archives remain valid via their own manifests. */
@@ -18,6 +21,11 @@ export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_MENU_IMPORT = 38;
 export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_PLATFORM_ADMIN = 40;
 /** Pre-AdminMutation hardening (PlatformAdmin era) archives remain valid via their own manifests. */
 export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_ADMIN_MUTATION = 41;
+/** Pre-TableAssistRequest (AdminMutation era) archives remain valid via their own manifests. */
+export const HISTORICAL_PUBLIC_TABLE_COUNT_PRE_TABLE_ASSIST = 43;
+/** Current public schema expectation after TableAssistRequest (PR-A). */
+export const EXPECTED_PUBLIC_TABLE_COUNT =
+  HISTORICAL_PUBLIC_TABLE_COUNT_PRE_TABLE_ASSIST + PUBLIC_TABLES_ADDED_BY_TABLE_ASSIST.length;
 export const RECOVERY_STATUS = {
   NOT_VERIFIED: "RECOVERY BACKUP OLARAK DOĞRULANMADI",
   RESTORE_VERIFIED: "RESTORE VERIFIED",
