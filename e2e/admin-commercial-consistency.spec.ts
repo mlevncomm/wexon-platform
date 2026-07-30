@@ -16,6 +16,35 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
   const fixtures = loadFixtures();
   const password = adminPassword();
 
+  test.afterAll(async () => {
+    const orgId = fixtures.licensedOrgId;
+    if (!orgId) return;
+    const license = await prisma.license.findFirst({
+      where: { organizationId: orgId, product: { key: "wexpay" } },
+      include: { subscription: true, product: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!license) return;
+    const growth = await prisma.plan.findFirst({
+      where: {
+        productId: license.productId,
+        isActive: true,
+        OR: [{ tierKey: "growth" }, { key: { contains: "growth" } }],
+      },
+    });
+    if (!growth) return;
+    // Keep shared licensed fixture on Growth for later isolated specs (CSV, etc.).
+    if (license.planId !== growth.id) {
+      await prisma.license.update({ where: { id: license.id }, data: { planId: growth.id } });
+    }
+    if (license.subscription && license.subscription.planId !== growth.id) {
+      await prisma.subscription.update({
+        where: { id: license.subscription.id },
+        data: { planId: growth.id },
+      });
+    }
+  });
+
   function requireFixtures() {
     expect(fixtures.dbAvailable, fixtures.setupError ?? "database fixtures unavailable").toBe(true);
     expect(fixtures.fixturesReady, fixtures.setupError ?? "fixtures incomplete").toBe(true);
@@ -98,6 +127,11 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await submit.click();
   }
 
+  async function reloadCommercialPanels(page: import("@playwright/test").Page) {
+    await page.reload();
+    await openCommercialPanels(page);
+  }
+
   test("PR4C: session v3 opens commercial org detail", async ({ page }) => {
     const { email, orgId } = requireFixtures();
     await loginAdmin(page, email, password);
@@ -151,17 +185,19 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await form.locator('input[name="confirmed"]').check();
     await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
     await submitCommercialForm(page, form.getByTestId("plan-change-submit"));
-    await expect(page.getByTestId("license-sync-summary")).toContainText(/Growth/i, { timeout: 30_000 });
     await expect(page.locator("body")).not.toContainText(/adminError=/);
     await expect(page.locator("body")).not.toContainText(/Paket düşürme reddedildi|Paket değiştirilemedi/);
-
-    const updated = await prisma.license.findUniqueOrThrow({
-      where: { id: license.id },
-      include: { subscription: true },
-    });
-    expect(updated.planId).toBe(growth!.id);
-    expect(updated.subscription?.planId).toBe(growth!.id);
-    await openCommercialPanels(page);
+    await expect
+      .poll(async () => {
+        const row = await prisma.license.findUniqueOrThrow({
+          where: { id: license.id },
+          include: { subscription: true },
+        });
+        return `${row.planId}:${row.subscription?.planId ?? ""}`;
+      })
+      .toBe(`${growth!.id}:${growth!.id}`);
+    await reloadCommercialPanels(page);
+    await expect(page.getByTestId("license-sync-summary")).toContainText(/Growth/i, { timeout: 30_000 });
     await expect(page.getByTestId("license-sync-summary")).toContainText(/Senkron/);
   });
 
@@ -271,17 +307,24 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await form.locator('input[name="confirmed"]').check();
     await expect(form.getByTestId("plan-change-submit")).toBeEnabled();
     await submitCommercialForm(page, form.getByTestId("plan-change-submit"));
-    await expect(page.getByTestId("license-sync-summary")).toContainText(/Essential/i, { timeout: 30_000 });
     await expect(page.locator("body")).not.toContainText(/Paket düşürme reddedildi|Paket değiştirilemedi/);
+    await expect
+      .poll(async () => {
+        const row = await prisma.license.findUniqueOrThrow({
+          where: { id: license.id },
+          include: { subscription: true },
+        });
+        return `${row.planId}:${row.subscription?.planId ?? ""}`;
+      })
+      .toBe(`${essential!.id}:${essential!.id}`);
+    await reloadCommercialPanels(page);
+    await expect(page.getByTestId("license-sync-summary")).toContainText(/Essential/i, { timeout: 30_000 });
 
+    // Restore Growth so later isolated suite specs (CSV export, multi-location) keep Growth entitlements.
     const after = await prisma.license.findUniqueOrThrow({
       where: { id: license.id },
       include: { subscription: true },
     });
-    expect(after.planId).toBe(essential!.id);
-    expect(after.subscription?.planId).toBe(essential!.id);
-
-    // Restore Growth so later isolated suite specs (CSV export, multi-location) keep Growth entitlements.
     await prisma.license.update({ where: { id: license.id }, data: { planId: growth!.id } });
     if (after.subscription) {
       await prisma.subscription.update({ where: { id: after.subscription.id }, data: { planId: growth!.id } });
@@ -326,8 +369,7 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
     await waive.locator('input[name="confirmed"]').check();
     await expect(waive.getByTestId("activation-fee-waive-submit")).toBeEnabled();
     await submitCommercialForm(page, waive.getByTestId("activation-fee-waive-submit"));
-    // Status row text is concatenated as "DurumMuaf" — avoid word-boundary regex.
-    await expect(page.getByTestId("activation-fee-status")).toContainText("Muaf", { timeout: 30_000 });
+    await expect(page.locator("body")).not.toContainText(/Aktivasyon ücreti muafiyeti tamamlanamadı|adminError=/i);
     await expect
       .poll(async () => {
         const row = await prisma.activationFeeLedger.findUniqueOrThrow({
@@ -336,6 +378,9 @@ test.describe.serial("admin commercial consistency (PR4)", () => {
         return row.status;
       })
       .toBe("WAIVED");
+    await reloadCommercialPanels(page);
+    // Status row text is concatenated as "DurumMuaf" — avoid word-boundary regex.
+    await expect(page.getByTestId("activation-fee-status")).toContainText("Muaf", { timeout: 30_000 });
   });
 
   test("PR4C: settled ledger waive is rejected", async ({ page }) => {

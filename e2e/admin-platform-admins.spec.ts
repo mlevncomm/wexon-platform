@@ -33,7 +33,11 @@ test.describe.serial("admin platform admins (PR2A)", () => {
     await expect(page.locator("body")).toContainText(/Cloudflare Access JWT/i);
     await expect(page.locator("body")).not.toContainText(/ADMIN_LOGIN_PASSWORD|ADMIN_SESSION_SECRET|eyJhbGciOi/i);
 
-    const addForm = page.locator("form").filter({ has: page.locator('input[name="displayName"]') }).first();
+    const addPanel = page.locator("details").filter({ hasText: /Yeni platform yöneticisi/i }).first();
+    if (!(await addPanel.getAttribute("open"))) {
+      await addPanel.locator("summary").click();
+    }
+    const addForm = addPanel.locator("form").filter({ has: page.locator('input[name="displayName"]') });
     await addForm.locator('input[name="email"]').fill(emailA);
     await addForm.locator('input[name="displayName"]').fill("E2E Platform A");
     await addForm.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -41,6 +45,9 @@ test.describe.serial("admin platform admins (PR2A)", () => {
     await expect(page.locator("body")).toContainText(emailA);
     await expect(page.locator("body")).toContainText("Bağlanmadı");
 
+    if (!(await addPanel.getAttribute("open"))) {
+      await addPanel.locator("summary").click();
+    }
     await addForm.locator('input[name="email"]').fill(emailB);
     await addForm.locator('input[name="displayName"]').fill("E2E Platform B");
     await addForm.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -55,11 +62,13 @@ test.describe.serial("admin platform admins (PR2A)", () => {
 
     const rowA = page.locator("tr").filter({ hasText: emailA }).first();
     await expect(rowA).toBeVisible();
-    await rowA.getByRole("button", { name: "Pasife al" }).click();
+    await rowA.getByRole("button", { name: `${emailA} işlemleri` }).click();
+    await page.getByRole("button", { name: "Pasife al" }).click();
     await expect(page).toHaveURL(/\/admin\/platform-admins/);
     await expect(rowA).toContainText(/Pasif/i);
 
-    await rowA.getByRole("button", { name: "Aktifleştir" }).click();
+    await rowA.getByRole("button", { name: `${emailA} işlemleri` }).click();
+    await page.getByRole("button", { name: "Aktifleştir" }).click();
     await expect(rowA).toContainText(/Aktif/i);
   });
 
@@ -73,9 +82,16 @@ test.describe.serial("admin platform admins (PR2A)", () => {
     // remaining active row — otherwise assertAdminAccess fails mid-test.
     for (const target of [emailB, emailA]) {
       const row = page.locator("tr").filter({ hasText: target }).first();
-      if (await row.getByRole("button", { name: "Pasife al" }).count()) {
-        await row.getByRole("button", { name: "Pasife al" }).click();
-        await page.goto("/admin/platform-admins");
+      const menu = row.getByRole("button", { name: `${target} işlemleri` });
+      if (await menu.count()) {
+        await menu.click();
+        const deactivate = page.getByRole("button", { name: "Pasife al" });
+        if (await deactivate.count()) {
+          await deactivate.click();
+          await page.goto("/admin/platform-admins");
+        } else {
+          await page.keyboard.press("Escape");
+        }
       }
     }
 
@@ -83,16 +99,20 @@ test.describe.serial("admin platform admins (PR2A)", () => {
       const otherActive = page
         .locator("tr")
         .filter({ hasNotText: email })
-        .filter({ has: page.getByRole("button", { name: "Pasife al" }) })
+        .filter({ has: page.getByRole("button", { name: /işlemleri/i }) })
+        .filter({ hasText: /Aktif/i })
         .first();
       if ((await otherActive.count()) === 0) break;
-      await otherActive.getByRole("button", { name: "Pasife al" }).click();
+      const targetEmail = (await otherActive.locator("p").nth(1).innerText()).trim();
+      await otherActive.getByRole("button", { name: `${targetEmail} işlemleri` }).click();
+      await page.getByRole("button", { name: "Pasife al" }).click();
       await page.goto("/admin/platform-admins");
     }
 
     const sessionRow = page.locator("tr").filter({ hasText: email }).first();
     await expect(sessionRow).toBeVisible();
-    await sessionRow.getByRole("button", { name: "Pasife al" }).click();
+    await sessionRow.getByRole("button", { name: `${email} işlemleri` }).click();
+    await page.getByRole("button", { name: "Pasife al" }).click();
     await expect(page.locator("body")).toContainText(/son aktif platform yöneticisi/i);
     await expect(sessionRow).toContainText(/Aktif/i);
   });

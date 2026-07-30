@@ -97,8 +97,9 @@ export function assertSafeE2ETarget() {
   return { target, confirm, base };
 }
 
+/** Must match `e2eCloudflareSubject` in lib/wexon-cloudflare-access-test-login.ts. */
 function e2eCloudflareSubject(email: string) {
-  return `e2e-cf-subject:${email.trim().toLowerCase()}`;
+  return `local-cf-subject:${email.trim().toLowerCase()}`;
 }
 
 export async function mintE2eCloudflareAccessJwt(email: string) {
@@ -140,17 +141,20 @@ export async function attachE2eCloudflareAccessJwt(page: Page, email: string) {
 
 export async function loginAdmin(page: Page, email: string, password?: string) {
   void password;
-  await attachE2eCloudflareAccessJwt(page, email);
   await page.goto("/admin/login");
   const localBtn = page.getByRole("button", { name: /Yerel yönetim paneline giriş/i });
   const continueBtn = page.getByRole("button", { name: /Yönetim paneline devam et/i });
   if (await localBtn.count()) {
+    // Local CF test login mints session + JWT cookie. Clear any prior assertion header
+    // so it cannot disagree with the cookie-minted subject on the next navigation.
+    await page.context().setExtraHTTPHeaders({});
     const emailField = page.getByLabel(/Admin e-posta/i);
     if (await emailField.count()) {
       await emailField.fill(email);
     }
     await localBtn.click();
   } else {
+    await attachE2eCloudflareAccessJwt(page, email);
     await expect(continueBtn).toBeVisible();
     await continueBtn.click();
   }
@@ -162,6 +166,8 @@ export async function loginAdmin(page: Page, email: string, password?: string) {
   await expect(page, "admin continue login must not stay on login with denial").not.toHaveURL(
     /adminError=/,
   );
+  // Align header JWT with the session subject for subsequent document requests.
+  await attachE2eCloudflareAccessJwt(page, email);
   // Wait for shell (not profile menu) so a transient /admin redirect that bounces
   // back to login cannot be mistaken for a successful session.
   await expect(page.locator(".admin-shell")).toBeVisible({ timeout: 30_000 });
