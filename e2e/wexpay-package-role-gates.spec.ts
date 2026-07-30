@@ -332,7 +332,7 @@ test.describe("wexpay package + role gates (authenticated)", () => {
       await expect
         .poll(async () =>
           prisma.branch.count({
-            where: { restaurantId: growth.restaurantId, isActive: true },
+            where: { restaurantId: growth!.restaurantId, isActive: true },
           }),
         )
         .toBe(2);

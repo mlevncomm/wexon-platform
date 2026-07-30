@@ -831,11 +831,11 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await expect(page.locator("body")).not.toContainText(/Aktivasyon engellenemedi|VERSION_CONFLICT/i);
       await expect
         .poll(async () => {
-          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant!.journeyId } });
           return `${row.status}:${row.blockedReasonCode ?? ""}`;
         })
         .toBe(`${ActivationJourneyStatus.BLOCKED}:ADMIN_BLOCKED`);
-      let journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+      let journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant!.journeyId } });
 
       // Soft navigation can leave RSC on the pre-block zone; reload for expectedVersion + UI.
       await page.reload();
@@ -859,7 +859,7 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await expect(page.locator("body")).not.toContainText(/Aktivasyon engeli kaldırılamadı|VERSION_CONFLICT/i);
       await expect
         .poll(async () => {
-          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant!.journeyId } });
           return row.blockedReasonCode;
         })
         .toBeNull();
@@ -867,7 +867,7 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await expect(page.getByText("Aktivasyonu engelle", { exact: true })).toBeVisible({
         timeout: 30_000,
       });
-      journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+      journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant!.journeyId } });
       expect([ActivationJourneyStatus.IN_PROGRESS, ActivationJourneyStatus.READY]).toContain(journey.status);
       expect(journey.blockedReasonCode).toBeNull();
 
@@ -877,12 +877,12 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await loginCustomer(customerPage, fixtures.licensedCustomerEmail, customerPassword());
       await dismissCookieBanner(customerPage);
       await customerPage.goto(
-        `/dashboard/wexpay/activation?organizationId=${encodeURIComponent(tenant.organizationId)}`,
+        `/dashboard/wexpay/activation?organizationId=${encodeURIComponent(tenant!.organizationId)}`,
       );
       await expect(customerPage.getByTestId("wizard-validation")).toBeVisible();
       await customerPage.getByTestId("validation-run").click();
       await expect(customerPage.getByTestId("wizard-go-live")).toBeVisible({ timeout: 45_000 });
-      journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+      journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant!.journeyId } });
       expect(journey.status).toBe(ActivationJourneyStatus.READY);
       await customerContext.close();
 
@@ -896,7 +896,7 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await expect(assistedForm.locator('input[name="expectedVersion"]')).toHaveValue(
         String(journey.version),
       );
-      await assistedForm.locator('input[name="confirmationText"]').fill(tenant.organizationSlug);
+      await assistedForm.locator('input[name="confirmationText"]').fill(tenant!.organizationSlug);
       await assistedForm.locator('input[name="reason"]').fill("ASSISTED_LOCAL_LAUNCH");
       await assistedForm.locator('textarea[name="note"]').fill("Müşteri onayıyla yerel destekli yayına alma.");
       await assistedForm.getByRole("button", { name: "Admin olarak yayına al" }).click();
@@ -905,7 +905,7 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       );
       await expect
         .poll(async () => {
-          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant!.journeyId } });
           return row.status;
         })
         .toBe(ActivationJourneyStatus.ACTIVE);
@@ -915,7 +915,7 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       });
 
       const active = await prisma.activationJourney.findUniqueOrThrow({
-        where: { id: tenant.journeyId },
+        where: { id: tenant!.journeyId },
         include: { steps: true },
       });
       expect(active.status).toBe(ActivationJourneyStatus.ACTIVE);
