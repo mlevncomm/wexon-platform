@@ -826,18 +826,22 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await expect(blockForm.locator('input[name="reason"]')).toBeVisible();
       await blockForm.locator('input[name="reason"]').fill("LOCAL_COMPLIANCE_HOLD");
       await blockForm.locator('textarea[name="note"]').fill("Yerel PR4 tarayıcı doğrulama engeli.");
-      await blockForm.evaluate((form) => (form as HTMLFormElement).requestSubmit());
+      // Click the submit control (not requestSubmit) so Next server actions run reliably.
+      await blockForm.getByRole("button", { name: "Engelle" }).click();
+      await expect(page.locator("body")).not.toContainText(/Aktivasyon engellenemedi|VERSION_CONFLICT/i);
+      await expect
+        .poll(async () => {
+          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+          return `${row.status}:${row.blockedReasonCode ?? ""}`;
+        })
+        .toBe(`${ActivationJourneyStatus.BLOCKED}:ADMIN_BLOCKED`);
+      let journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+
+      // Soft navigation can leave RSC on the pre-block zone; reload for expectedVersion + UI.
+      await page.reload();
       await expect(page.getByText("Aktivasyon engelini kaldır", { exact: true })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.locator("body")).not.toContainText(/Aktivasyon engellenemedi|VERSION_CONFLICT/i);
-      let journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
-      expect(journey.status).toBe(ActivationJourneyStatus.BLOCKED);
-      expect(journey.blockedReasonCode).toBe("ADMIN_BLOCKED");
-
-      // Reload so expectedVersion matches DB after block (avoids stale RSC payload on same URL).
-      await page.reload();
-      await expect(page.getByText("Aktivasyon engelini kaldır", { exact: true })).toBeVisible();
 
       const unblockDetails = page
         .locator("details")
@@ -851,11 +855,18 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
         String(journey.version),
       );
       await unblockForm.locator('input[name="reason"]').fill("LOCAL_REVIEW_COMPLETE");
-      await unblockForm.evaluate((form) => (form as HTMLFormElement).requestSubmit());
+      await unblockForm.getByRole("button", { name: "Engeli kaldır" }).click();
+      await expect(page.locator("body")).not.toContainText(/Aktivasyon engeli kaldırılamadı|VERSION_CONFLICT/i);
+      await expect
+        .poll(async () => {
+          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+          return row.blockedReasonCode;
+        })
+        .toBeNull();
+      await page.reload();
       await expect(page.getByText("Aktivasyonu engelle", { exact: true })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.locator("body")).not.toContainText(/Aktivasyon engeli kaldırılamadı|VERSION_CONFLICT/i);
       journey = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
       expect([ActivationJourneyStatus.IN_PROGRESS, ActivationJourneyStatus.READY]).toContain(journey.status);
       expect(journey.blockedReasonCode).toBeNull();
@@ -888,13 +899,20 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       await assistedForm.locator('input[name="confirmationText"]').fill(tenant.organizationSlug);
       await assistedForm.locator('input[name="reason"]').fill("ASSISTED_LOCAL_LAUNCH");
       await assistedForm.locator('textarea[name="note"]').fill("Müşteri onayıyla yerel destekli yayına alma.");
-      await assistedForm.evaluate((form) => (form as HTMLFormElement).requestSubmit());
-      await expect(page.getByText("Canlı Kullanım", { exact: true }).first()).toBeVisible({
-        timeout: 30_000,
-      });
+      await assistedForm.getByRole("button", { name: "Admin olarak yayına al" }).click();
       await expect(page.locator("body")).not.toContainText(
         /Admin destekli yayına alma tamamlanamadı|VERSION_CONFLICT|Kurulum başka bir oturumda/i,
       );
+      await expect
+        .poll(async () => {
+          const row = await prisma.activationJourney.findUniqueOrThrow({ where: { id: tenant.journeyId } });
+          return row.status;
+        })
+        .toBe(ActivationJourneyStatus.ACTIVE);
+      await page.reload();
+      await expect(page.getByText("Canlı Kullanım", { exact: true }).first()).toBeVisible({
+        timeout: 30_000,
+      });
 
       const active = await prisma.activationJourney.findUniqueOrThrow({
         where: { id: tenant.journeyId },

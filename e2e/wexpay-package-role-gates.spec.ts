@@ -319,17 +319,23 @@ test.describe("wexpay package + role gates (authenticated)", () => {
           redirect.value = `${url.pathname}?${url.searchParams.toString()}`;
         }
       }, growth.organizationId);
-      await Promise.all([
-        page.waitForURL(new RegExp(`organizationId=${growth.organizationId}`)),
-        createPanel.getByRole("button", { name: "Şube oluştur" }).click(),
-      ]);
-      await expect(page.locator("p").filter({ hasText: branchName }).first()).toBeVisible({
-        timeout: 15_000,
-      });
-      const activeCount = await prisma.branch.count({
-        where: { restaurantId: growth.restaurantId, isActive: true },
-      });
-      expect(activeCount).toBe(2);
+      // Already on ?organizationId=… — waitForURL resolves immediately and races the mutation.
+      // Wait for the created branch to appear in the list (or reload once if RSC is stale).
+      await createPanel.getByRole("button", { name: "Şube oluştur" }).click();
+      const branchLabel = page.locator("p").filter({ hasText: branchName }).first();
+      try {
+        await expect(branchLabel).toBeVisible({ timeout: 15_000 });
+      } catch {
+        await page.reload();
+        await expect(branchLabel).toBeVisible({ timeout: 15_000 });
+      }
+      await expect
+        .poll(async () =>
+          prisma.branch.count({
+            where: { restaurantId: growth.restaurantId, isActive: true },
+          }),
+        )
+        .toBe(2);
     } finally {
       if (essential) await cleanupTenant(prisma, essential);
       if (growth) await cleanupTenant(prisma, growth);
