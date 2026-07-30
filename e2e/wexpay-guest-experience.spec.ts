@@ -45,15 +45,16 @@ test.describe("wexpay guest — read-only", () => {
     await assertNoSecrets(page);
   });
 
-  test("landing CTAs and restaurant identity when fixture exists", async ({ page }) => {
+  test("menu-first shell and bottom nav when fixture exists", async ({ page }) => {
     skipUnlessLicensedFixture();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await expect(page.getByTestId("qr-cta-order")).toBeVisible();
-    await expect(page.getByTestId("qr-cta-order")).toContainText(/Menüyü İncele/i);
-    await expect(page.getByTestId("qr-cta-pay")).toBeVisible();
-    await expect(page.getByTestId("qr-cta-waiter")).toBeVisible();
-    await expect(page.getByText(/Masaya hoş geldiniz/i)).toBeVisible();
+    await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
+    await expect(page.getByTestId("qr-nav-menu")).toBeVisible();
+    await expect(page.getByTestId("qr-nav-orders")).toBeVisible();
+    await expect(page.getByTestId("qr-nav-bill")).toBeVisible();
+    await expect(page.getByTestId("qr-nav-more")).toBeVisible();
     await assertNoSecrets(page);
   });
 
@@ -75,7 +76,6 @@ test.describe("wexpay guest — read-only", () => {
     skipUnlessLicensedFixture();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await page.getByTestId("qr-cta-order").click();
     await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
     await expect(page.getByTestId("qr-menu-search")).toBeVisible();
 
@@ -99,7 +99,7 @@ test.describe("wexpay guest — read-only", () => {
   test("bill screen honest payment-request copy (GET only)", async ({ page }) => {
     skipUnlessLicensedFixture();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await page.getByTestId("qr-cta-pay").click();
+    await page.getByTestId("qr-nav-bill").click();
     await expect(page.getByTestId("qr-bill-screen")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("qr-pay-in-restaurant")).toBeVisible();
     const text = await page.getByTestId("qr-bill-screen").innerText();
@@ -112,7 +112,7 @@ test.describe("wexpay guest — read-only", () => {
   test("cart remains localStorage scoped by qrCode", async ({ page }) => {
     skipUnlessLicensedFixture();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await page.getByTestId("qr-cta-order").click();
+    await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
     const quick = page.locator("[data-testid^='qr-quick-add-']").first();
     if (!(await quick.count())) {
       test.skip(true, "no menu products on fixture");
@@ -132,7 +132,7 @@ test.describe("wexpay guest — isolated mutation only", () => {
   test("order submit + status labels without READY fiction", async ({ page }) => {
     skipUnlessMutationAllowed();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await page.getByTestId("qr-cta-order").click();
+    await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
     const quick = page.locator("[data-testid^='qr-quick-add-']").first();
     await quick.click();
     await page.getByTestId("qr-cart-continue").click();
@@ -148,7 +148,8 @@ test.describe("wexpay guest — isolated mutation only", () => {
   test("waiter call success copy is notification-only", async ({ page }) => {
     skipUnlessMutationAllowed();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await page.getByTestId("qr-cta-waiter").click();
+    await page.getByTestId("qr-nav-more").click();
+    await page.getByTestId("qr-more-waiter").click();
     await page.getByTestId("qr-waiter-submit").click();
     await expect(page.getByTestId("qr-waiter-success")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/Garson çağrınız restorana iletildi/i)).toBeVisible();

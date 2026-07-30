@@ -15,7 +15,7 @@ export default function QrCartBar({
   if (itemCount <= 0) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-30 px-3 sm:px-4">
+    <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 px-3 sm:px-4">
       <div className="mx-auto flex w-full max-w-lg items-center gap-3 rounded-[22px] border border-white/80 bg-[#152238] p-2.5 pl-4 shadow-[0_18px_50px_rgba(21,34,56,0.35)] sm:rounded-[24px] sm:p-3 sm:pl-5">
         <div className="min-w-0 flex-1" aria-live="polite">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Sepetim</p>

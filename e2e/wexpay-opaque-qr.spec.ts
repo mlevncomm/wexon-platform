@@ -56,8 +56,8 @@ test.describe.serial("wexpay opaque QR", () => {
 
       await page.goto(`/q/${encodeURIComponent(plaintext)}`);
       await expect(page.getByTestId("qr-error-state")).toHaveCount(0);
-      await expect(page.getByTestId("qr-cta-order")).toBeVisible();
-      await expect(page.getByTestId("qr-cta-order")).toContainText(/Menüyü İncele/i);
+      await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
+      await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
 
       const rotatedPlain = randomBytes(32).toString("base64url");
       await prisma.tableQrToken.update({
