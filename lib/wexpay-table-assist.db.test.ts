@@ -16,16 +16,26 @@ import {
 import { assertLocalDbTestGuard } from "@/lib/wexon-local-db-test-guard";
 import { prisma } from "@/lib/prisma";
 import {
-  acknowledgeTableAssistRequest,
+  acknowledgeTableAssistRequest as acknowledgeAssistDomain,
   assertPublicPaymentRequestPreconditions,
   createStructuredTableAssistRequest,
   maybeResolveTableAssistRequestOnPayment,
-  releaseTableAssistRequest,
+  releaseTableAssistRequest as releaseAssistDomain,
   type AssistMutationContext,
 } from "@/lib/wexpay-table-assist";
-import { createPayment, type WexPayMutationContext } from "@/lib/wexpay-service";
+import {
+  acknowledgeTableAssistRequest,
+  createPayment,
+  createPublicTableAssistNotification,
+  releaseTableAssistRequest,
+  type WexPayMutationContext,
+} from "@/lib/wexpay-service";
+import { requireWexPayApiContext } from "@/lib/wexpay-api-guard";
+import { hashApiKey } from "@/lib/wexon-api-key-hash";
 import { WexPayAccessError } from "@/lib/wexpay-tenant";
 import { WexPayValidationError } from "@/lib/wexpay-validation";
+import { isPaymentRequestV2Enabled } from "@/lib/wexpay-payment-request-flags";
+import { canAccessWexPay, canOperateCashierWexPay } from "@/lib/wexpay-auth";
 
 assertLocalDbTestGuard(process.env);
 
@@ -82,6 +92,66 @@ function staffAssistContext(organizationId: string, userId: string): AssistMutat
     organizationId,
     canManage: false,
     actorUserId: userId,
+    ipAddress: "127.0.0.1",
+  };
+}
+
+function staffCashierMutationContext(organizationId: string, userId: string): WexPayMutationContext {
+  return {
+    organizationId,
+    canManage: false,
+    entitlementMap: {
+      table_limit: 50,
+      branch_limit: 10,
+      product_limit: 500,
+      feature_multi_location: true,
+    },
+    actor: {
+      type: "customer_session",
+      userId,
+      email: `assist-staff-${suffix}@wexon.test`,
+      role: "STAFF",
+    },
+    ipAddress: "127.0.0.1",
+  };
+}
+
+function viewerMutationContext(organizationId: string, userId: string): WexPayMutationContext {
+  return {
+    organizationId,
+    canManage: false,
+    entitlementMap: {
+      table_limit: 50,
+      branch_limit: 10,
+      product_limit: 500,
+      feature_multi_location: true,
+    },
+    actor: {
+      type: "customer_session",
+      userId,
+      email: `assist-viewer-${suffix}@wexon.test`,
+      role: "VIEWER",
+    },
+    ipAddress: "127.0.0.1",
+  };
+}
+
+function billingMutationContext(organizationId: string, userId: string): WexPayMutationContext {
+  return {
+    organizationId,
+    canManage: false,
+    entitlementMap: {
+      table_limit: 50,
+      branch_limit: 10,
+      product_limit: 500,
+      feature_multi_location: true,
+    },
+    actor: {
+      type: "customer_session",
+      userId,
+      email: `assist-billing-${suffix}@wexon.test`,
+      role: "BILLING",
+    },
     ipAddress: "127.0.0.1",
   };
 }
@@ -330,13 +400,13 @@ describe("table assist request domain", () => {
       ipAddress: "127.0.0.1",
     });
 
-    const first = await acknowledgeTableAssistRequest(
+    const first = await acknowledgeAssistDomain(
       staffAssistContext(fixture.orgId, staffUserId),
       { requestId: created.requestId },
     );
     assert.equal(first.acknowledged, true);
 
-    const second = await acknowledgeTableAssistRequest(
+    const second = await acknowledgeAssistDomain(
       staffAssistContext(fixture.orgId, otherStaffUserId),
       { requestId: created.requestId },
     );
@@ -365,19 +435,19 @@ describe("table assist request domain", () => {
       mode: "full_bill",
       ipAddress: "127.0.0.1",
     });
-    await acknowledgeTableAssistRequest(staffAssistContext(fixture.orgId, staffUserId), {
+    await acknowledgeAssistDomain(staffAssistContext(fixture.orgId, staffUserId), {
       requestId: created.requestId,
     });
 
     await assert.rejects(
       () =>
-        releaseTableAssistRequest(staffAssistContext(fixture.orgId, otherStaffUserId), {
+        releaseAssistDomain(staffAssistContext(fixture.orgId, otherStaffUserId), {
           requestId: created.requestId,
         }),
       (error: unknown) => error instanceof WexPayAccessError,
     );
 
-    const released = await releaseTableAssistRequest(
+    const released = await releaseAssistDomain(
       staffAssistContext(fixture.orgId, staffUserId),
       { requestId: created.requestId },
     );
@@ -491,5 +561,192 @@ describe("table assist request domain", () => {
       (error: unknown) =>
         error instanceof WexPayValidationError && error.message.includes("yakın zamanda sipariş"),
     );
+  });
+
+  it("service: STAFF cashier can acknowledge and release own request", async () => {
+    if (!fixture) return;
+    await resetTable();
+    await openOrder(100);
+    const created = await createStructuredTableAssistRequest({
+      organizationId: fixture.orgId,
+      branchId: fixture.branchId,
+      tableId: fixture.tableId,
+      kind: "payment_request",
+      paymentMethod: "CASH",
+      mode: "full_bill",
+      ipAddress: "127.0.0.1",
+    });
+
+    const staffCtx = staffCashierMutationContext(fixture.orgId, staffUserId);
+    assert.equal(canAccessWexPay("STAFF"), true);
+    assert.equal(canOperateCashierWexPay("STAFF"), true);
+
+    const ack = await acknowledgeTableAssistRequest(staffCtx, { requestId: created.requestId });
+    assert.equal(ack.acknowledged, true);
+
+    const released = await releaseTableAssistRequest(staffCtx, { requestId: created.requestId });
+    assert.equal(released.released, true);
+  });
+
+  it("service: other STAFF cannot release; manager can release", async () => {
+    if (!fixture) return;
+    await resetTable();
+    await openOrder(100);
+    const created = await createStructuredTableAssistRequest({
+      organizationId: fixture.orgId,
+      branchId: fixture.branchId,
+      tableId: fixture.tableId,
+      kind: "payment_request",
+      paymentMethod: "PHYSICAL_POS",
+      mode: "full_bill",
+      ipAddress: "127.0.0.1",
+    });
+
+    await acknowledgeTableAssistRequest(staffCashierMutationContext(fixture.orgId, staffUserId), {
+      requestId: created.requestId,
+    });
+
+    await assert.rejects(
+      () =>
+        releaseTableAssistRequest(staffCashierMutationContext(fixture.orgId, otherStaffUserId), {
+          requestId: created.requestId,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+
+    const managerRelease = await releaseTableAssistRequest(manageContext(fixture.orgId), {
+      requestId: created.requestId,
+    });
+    assert.equal(managerRelease.released, true);
+  });
+
+  it("service: VIEWER and BILLING cannot mutate assist requests", async () => {
+    if (!fixture) return;
+    await resetTable();
+    await openOrder(100);
+    const created = await createStructuredTableAssistRequest({
+      organizationId: fixture.orgId,
+      branchId: fixture.branchId,
+      tableId: fixture.tableId,
+      kind: "payment_request",
+      paymentMethod: "CASH",
+      mode: "full_bill",
+      ipAddress: "127.0.0.1",
+    });
+
+    assert.equal(canAccessWexPay("VIEWER"), true);
+    assert.equal(canOperateCashierWexPay("VIEWER"), false);
+    assert.equal(canAccessWexPay("BILLING"), false);
+    assert.equal(canOperateCashierWexPay("BILLING"), false);
+
+    await assert.rejects(
+      () =>
+        acknowledgeTableAssistRequest(viewerMutationContext(fixture.orgId, otherStaffUserId), {
+          requestId: created.requestId,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+    await assert.rejects(
+      () =>
+        acknowledgeTableAssistRequest(billingMutationContext(fixture.orgId, otherStaffUserId), {
+          requestId: created.requestId,
+        }),
+      (error: unknown) => error instanceof WexPayAccessError,
+    );
+  });
+
+  it("api guard: read-only API key cannot call wexpay:write assist mutations", async () => {
+    if (!fixture) return;
+
+    const product = await prisma.product.findFirst({ where: { key: "wexpay", isActive: true } });
+    assert.ok(product, "wexpay product must exist in local seed");
+    const plan = await prisma.plan.findFirst({
+      where: {
+        productId: product.id,
+        isActive: true,
+        OR: [{ tierKey: "essential" }, { key: "wexpay_essential" }],
+      },
+      orderBy: { sortOrder: "asc" },
+    });
+    assert.ok(plan, "essential plan must exist");
+
+    const license = await prisma.license.create({
+      data: {
+        organizationId: fixture.orgId,
+        productId: product.id,
+        planId: plan.id,
+        status: "ACTIVE",
+        licenseType: "MONTHLY",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+    await prisma.appInstallation.create({
+      data: {
+        organizationId: fixture.orgId,
+        productId: product.id,
+        licenseId: license.id,
+        status: "ACTIVE",
+      },
+    });
+
+    const rawKey = `wx_test_read_${suffix}_${randomUUID().slice(0, 8)}`;
+    await prisma.apiKey.create({
+      data: {
+        organizationId: fixture.orgId,
+        productId: product.id,
+        userId: ownerUserId,
+        name: `assist-read-${suffix}`,
+        prefix: rawKey.slice(0, 12),
+        hashedKey: hashApiKey(rawKey),
+        scopes: ["wexpay:read"],
+      },
+    });
+
+    const request = new Request("http://localhost/api/wexpay/assist-requests/x/acknowledge", {
+      method: "POST",
+      headers: { "x-api-key": rawKey },
+    });
+    const denied = await requireWexPayApiContext(request, { requiredScope: "wexpay:write" });
+    assert.equal(denied.ok, false);
+    if (!denied.ok) {
+      assert.equal(denied.response.status, 403);
+      const body = (await denied.response.json()) as { reason?: string };
+      assert.equal(body.reason, "scope");
+    }
+  });
+
+  it("legacy path: unset v2 flag keeps BusinessNotification-only create", async () => {
+    if (!fixture) return;
+    await resetTable();
+    await openOrder(100);
+
+    assert.equal(
+      isPaymentRequestV2Enabled({
+        organizationPaymentRequestV2Enabled: true,
+        env: {},
+      }),
+      false,
+    );
+
+    const before = await prisma.tableAssistRequest.count({ where: { tableId: fixture.tableId } });
+    const legacy = await createPublicTableAssistNotification({
+      organizationId: fixture.orgId,
+      branchId: fixture.branchId,
+      tableId: fixture.tableId,
+      kind: "payment_request",
+      reason: "full_bill",
+      note: null,
+      ipAddress: "127.0.0.1",
+      // structured omitted / false → legacy
+    });
+    assert.ok(legacy.id);
+    assert.equal(legacy.alreadyOpen, false);
+
+    const after = await prisma.tableAssistRequest.count({ where: { tableId: fixture.tableId } });
+    assert.equal(after, before);
+
+    const notification = await prisma.businessNotification.findUnique({ where: { id: legacy.id } });
+    assert.ok(notification);
   });
 });
