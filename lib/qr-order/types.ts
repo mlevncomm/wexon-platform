@@ -89,6 +89,14 @@ export type QrBillSnapshot = {
     staffPaymentRequest: boolean;
     onlineCheckout: boolean;
   };
+  /** Non-terminal assist only — RESOLVED/CANCELLED never appear here. */
+  activeAssistRequest?: {
+    id: string;
+    kind: "PAYMENT_REQUEST" | "WAITER_CALL";
+    status: "OPEN" | "ACKNOWLEDGED";
+    paymentMethod: "CASH" | "PHYSICAL_POS" | null;
+    createdAt: string;
+  } | null;
 };
 
 export type QrPaytrReturn = {

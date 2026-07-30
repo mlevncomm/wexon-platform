@@ -31,6 +31,31 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum TableAssistKind {
+  PAYMENT_REQUEST
+  WAITER_CALL
+}
+
+enum TableAssistStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+enum PaymentMethodPreference {
+  CASH
+  PHYSICAL_POS
+}
+
+/// Operational settlement method for WexPay payments (staff/manual + future adapters).
+enum PaymentMethod {
+  CASH
+  PHYSICAL_POS
+  INTEGRATED_TERMINAL
+  ONLINE_PSP
+}
+
 enum ReceiptStatus {
   REQUESTED
   PRINTED
@@ -225,10 +250,12 @@ model Organization {
   email     String?
   phone     String?
   country   String   @default("TR")
-  isDemo    Boolean  @default(false)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isDemo                   Boolean  @default(false)
+  isActive                 Boolean  @default(true)
+  /// Controlled rollout allowlist for payment-request v2 (not a plan entitlement).
+  paymentRequestV2Enabled  Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   memberships               Membership[]
   restaurants               Restaurant[]
@@ -247,6 +274,7 @@ model Organization {
   webhookEndpoints          WebhookEndpoint[]
   wexPayProviderCredentials WexPayProviderCredential[]
   wexPayWebhookEvents       WexPayWebhookEvent[]
+  tableAssistRequests       TableAssistRequest[]
 
   @@index([isDemo])
   @@index([isActive])
@@ -266,12 +294,14 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  memberships            Membership[]
-  createdStaffInvites    StaffInvite[] @relation("StaffInviteCreator")
-  createdMenuImportJobs  MenuImportJob[] @relation("MenuImportJobCreator")
-  auditLogs              AuditLog[]
-  apiKeys                ApiKey[]
-  subscriptionPayments   SubscriptionPayment[]
+  memberships                 Membership[]
+  createdStaffInvites         StaffInvite[] @relation("StaffInviteCreator")
+  createdMenuImportJobs       MenuImportJob[] @relation("MenuImportJobCreator")
+  auditLogs                   AuditLog[]
+  apiKeys                     ApiKey[]
+  subscriptionPayments        SubscriptionPayment[]
+  acknowledgedAssistRequests  TableAssistRequest[] @relation("TableAssistAcknowledgedBy")
+  resolvedAssistRequests      TableAssistRequest[] @relation("TableAssistResolvedBy")
 
   @@index([isActive])
 }
@@ -837,15 +867,16 @@ model Branch {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  restaurant     Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  tables         RestaurantTable[]
-  categories     MenuCategory[]
-  products       MenuProduct[]
-  modifierGroups MenuModifierGroup[]
-  orders         CustomerOrder[]
-  payments       Payment[]
-  notifications  BusinessNotification[]
-  menuImportJobs MenuImportJob[]
+  restaurant          Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tables              RestaurantTable[]
+  categories          MenuCategory[]
+  products            MenuProduct[]
+  modifierGroups      MenuModifierGroup[]
+  orders              CustomerOrder[]
+  payments            Payment[]
+  notifications       BusinessNotification[]
+  menuImportJobs      MenuImportJob[]
+  tableAssistRequests TableAssistRequest[]
 
   @@unique([restaurantId, slug])
   @@index([restaurantId])
@@ -863,11 +894,12 @@ model RestaurantTable {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  branch          Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  orders          CustomerOrder[]
-  payments        Payment[]
-  receiptRequests ReceiptRequest[]
-  qrTokens        TableQrToken[]
+  branch              Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  orders              CustomerOrder[]
+  payments            Payment[]
+  receiptRequests     ReceiptRequest[]
+  qrTokens            TableQrToken[]
+  tableAssistRequests TableAssistRequest[]
 
   @@unique([branchId, label])
   @@index([branchId])
@@ -1066,27 +1098,29 @@ model OrderItemModifier {
 }
 
 model Payment {
-  id               String        @id @default(cuid())
+  id               String         @id @default(cuid())
   branchId         String
   tableId          String
   orderId          String?
-  amount           Decimal       @db.Decimal(10, 2)
-  tipAmount        Decimal       @default(0) @db.Decimal(10, 2)
-  currency         String        @default("TRY")
-  status           PaymentStatus @default(PENDING)
+  amount           Decimal        @db.Decimal(10, 2)
+  tipAmount        Decimal        @default(0) @db.Decimal(10, 2)
+  currency         String         @default("TRY")
+  status           PaymentStatus  @default(PENDING)
+  method           PaymentMethod?
   provider         String?
   providerRef      String?
   maskedCard       String?
-  receiptRequested Boolean       @default(false)
+  receiptRequested Boolean        @default(false)
   paidAt           DateTime?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
   table           RestaurantTable        @relation(fields: [tableId], references: [id])
   order           CustomerOrder?         @relation(fields: [orderId], references: [id])
   receiptRequests ReceiptRequest[]
   notifications   BusinessNotification[]
+  assistRequests  TableAssistRequest[]
 
   @@index([branchId])
   @@index([tableId])
@@ -1126,14 +1160,52 @@ model BusinessNotification {
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
 
-  branch  Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  order   CustomerOrder? @relation(fields: [orderId], references: [id])
-  payment Payment?       @relation(fields: [paymentId], references: [id])
+  branch             Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  order              CustomerOrder?       @relation(fields: [orderId], references: [id])
+  payment            Payment?             @relation(fields: [paymentId], references: [id])
+  tableAssistRequest TableAssistRequest?
 
   @@index([branchId])
   @@index([orderId])
   @@index([paymentId])
   @@index([isRead])
+}
+
+/// Structured guest assist lifecycle (payment request / waiter call). Partial unique for open payment requests is in SQL migration.
+model TableAssistRequest {
+  id                     String                   @id @default(cuid())
+  organizationId         String
+  branchId               String
+  tableId                String
+  kind                   TableAssistKind
+  paymentMethod          PaymentMethodPreference?
+  mode                   String?
+  reason                 String?
+  note                   String?
+  status                 TableAssistStatus         @default(OPEN)
+  requestedAmount        Decimal?                 @db.Decimal(10, 2)
+  businessNotificationId String?                  @unique
+  acknowledgedByUserId   String?
+  resolvedByUserId       String?
+  resolvedPaymentId      String?
+  expiresAt              DateTime
+  createdAt              DateTime                 @default(now())
+  acknowledgedAt         DateTime?
+  resolvedAt             DateTime?
+  cancelledAt            DateTime?
+  releasedAt             DateTime?
+
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch               Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  table                RestaurantTable       @relation(fields: [tableId], references: [id])
+  businessNotification BusinessNotification? @relation(fields: [businessNotificationId], references: [id])
+  acknowledgedBy       User?                 @relation("TableAssistAcknowledgedBy", fields: [acknowledgedByUserId], references: [id])
+  resolvedBy           User?                 @relation("TableAssistResolvedBy", fields: [resolvedByUserId], references: [id])
+  payment              Payment?              @relation(fields: [resolvedPaymentId], references: [id])
+
+  @@index([tableId, status])
+  @@index([branchId, status])
+  @@index([organizationId, status])
 }
 
 /// Tenant-scoped PSP credentials for operational WexPay payments (NOT Core BillingPayment).

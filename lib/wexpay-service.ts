@@ -9,6 +9,17 @@ import * as adminPreviewWriteAudit from "@/lib/wexon-admin-preview-write";
 import { assertEntitlementLimit, type CoreEntitlementMap } from "@/lib/wexon-core-access";
 import { calculateTableAccount, closeTableBlockReason, filterTableSessionRecords, type TableAccountSnapshot } from "@/lib/wexpay-account";
 import {
+  acknowledgeTableAssistRequest as acknowledgeTableAssistRequestInDomain,
+  assertPublicPaymentRequestPreconditions,
+  createStructuredTableAssistRequest,
+  getActiveTableAssistRequest,
+  getAssistRequestById,
+  maybeResolveTableAssistRequestOnPayment,
+  releaseTableAssistRequest as releaseTableAssistRequestInDomain,
+  type CreateTableAssistResult,
+  type TableAssistPaymentMethod,
+} from "@/lib/wexpay-table-assist";
+import {
   assertBranchInOrg,
   assertCategoryInOrg,
   assertModifierGroupInOrg,
@@ -1773,6 +1784,13 @@ export async function createPayment(
       },
     });
 
+    await maybeResolveTableAssistRequestOnPayment(tx, {
+      tableId: table.id,
+      payment,
+      actorUserId: auditUserId(context),
+      organizationId: context.organizationId,
+    });
+
     return { kind: "settled" as const, payment, externalCheckoutUrl: null as string | null };
   });
 
@@ -1893,6 +1911,13 @@ export async function settlePaymentFromProviderWebhook(
     },
     tx,
   );
+
+  await maybeResolveTableAssistRequestOnPayment(tx, {
+    tableId: lockedPayment.tableId,
+    payment: updated,
+    actorUserId: null,
+    organizationId: input.organizationId,
+  });
 
   return { payment: updated, skipped: false as const };
 }
@@ -2252,7 +2277,46 @@ export async function getPublicTableBill(input: {
     status: account.status,
     empty: lines.length === 0 && account.totalAmount === 0,
     lines,
+    activeAssistRequest: await getActiveTableAssistRequest(table.id),
   };
+}
+
+export {
+  assertPublicPaymentRequestPreconditions,
+  getActiveTableAssistRequest,
+  getAssistRequestById,
+};
+
+export async function acknowledgeTableAssistRequest(
+  context: WexPayMutationContext,
+  input: { requestId: string },
+) {
+  assertCashierOperate(context, "acknowledge_assist_request");
+  return acknowledgeTableAssistRequestInDomain(
+    {
+      organizationId: context.organizationId,
+      canManage: context.canManage,
+      actorUserId: auditUserId(context),
+      ipAddress: context.ipAddress,
+    },
+    input,
+  );
+}
+
+export async function releaseTableAssistRequest(
+  context: WexPayMutationContext,
+  input: { requestId: string },
+) {
+  assertCashierOperate(context, "release_assist_request");
+  return releaseTableAssistRequestInDomain(
+    {
+      organizationId: context.organizationId,
+      canManage: context.canManage,
+      actorUserId: auditUserId(context),
+      ipAddress: context.ipAddress,
+    },
+    input,
+  );
 }
 
 export async function createPublicTableAssistNotification(input: {
@@ -2262,8 +2326,26 @@ export async function createPublicTableAssistNotification(input: {
   kind: "payment_request" | "waiter_call";
   reason?: string | null;
   note?: string | null;
+  mode?: string | null;
+  paymentMethod?: TableAssistPaymentMethod | null;
+  /** When true, creates TableAssistRequest lifecycle (payment-request v2). */
+  structured?: boolean;
   ipAddress: string | null;
-}) {
+}): Promise<CreateTableAssistResult> {
+  if (input.structured) {
+    return createStructuredTableAssistRequest({
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      tableId: input.tableId,
+      kind: input.kind,
+      reason: input.reason,
+      note: input.note,
+      mode: input.mode ?? input.reason,
+      paymentMethod: input.paymentMethod,
+      ipAddress: input.ipAddress,
+    });
+  }
+
   const table = await prisma.restaurantTable.findFirst({
     where: {
       id: input.tableId,
@@ -2310,5 +2392,10 @@ export async function createPublicTableAssistNotification(input: {
     },
   });
 
-  return { id: notification.id, title };
+  return {
+    id: notification.id,
+    title,
+    requestId: notification.id,
+    alreadyOpen: false,
+  };
 }
