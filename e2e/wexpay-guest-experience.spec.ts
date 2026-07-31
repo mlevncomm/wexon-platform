@@ -45,15 +45,18 @@ test.describe("wexpay guest — read-only", () => {
     await assertNoSecrets(page);
   });
 
-  test("landing CTAs and restaurant identity when fixture exists", async ({ page }) => {
+  test("landing CTAs without bottom nav when fixture exists", async ({ page }) => {
     skipUnlessLicensedFixture();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
+    await expect(page.getByTestId("qr-landing-screen")).toBeVisible();
     await expect(page.getByTestId("qr-cta-order")).toBeVisible();
-    await expect(page.getByTestId("qr-cta-order")).toContainText(/Menüyü İncele/i);
+    await expect(page.getByTestId("qr-cta-order")).toContainText(/Sipariş Vermek İstiyorum/i);
     await expect(page.getByTestId("qr-cta-pay")).toBeVisible();
     await expect(page.getByTestId("qr-cta-waiter")).toBeVisible();
     await expect(page.getByText(/Masaya hoş geldiniz/i)).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toHaveCount(0);
+    await expect(page.getByTestId("qr-menu-screen")).toHaveCount(0);
     await assertNoSecrets(page);
   });
 
@@ -77,6 +80,7 @@ test.describe("wexpay guest — read-only", () => {
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
     await page.getByTestId("qr-cta-order").click();
     await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
     await expect(page.getByTestId("qr-menu-search")).toBeVisible();
 
     const body = await page.locator("body").innerText();

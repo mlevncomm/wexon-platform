@@ -43,19 +43,21 @@ test.describe.serial("wexpay guest mutation (isolated)", () => {
     const qrPath = `/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`;
     await page.goto(qrPath);
     await dismissCookieBanner(page);
-    await expect(page.getByTestId("qr-cta-order")).toBeVisible();
+    await expect(page.getByTestId("qr-landing-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toHaveCount(0);
     await expect(page.getByText(/Masaya hoş geldiniz/i)).toBeVisible();
     await assertNoSecrets(page);
 
     await page.getByTestId("qr-cta-order").click();
     await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
     await expect(page.getByTestId("qr-menu-search")).toBeVisible();
 
     const search = page.getByTestId("qr-menu-search");
     await search.fill("Izgara");
     await expect(page.getByText(/Izgara/i).first()).toBeVisible({ timeout: 10_000 });
 
-    const categoryBtn = page.locator("[data-testid^='qr-category-'], button").filter({ hasText: /Ana|Hepsi|Yemek/i }).first();
+    const categoryBtn = page.locator("[data-testid^='qr-chip-'], button").filter({ hasText: /Ana|Hepsi|Yemek/i }).first();
     if (await categoryBtn.count()) {
       await categoryBtn.click();
     }

@@ -31,10 +31,12 @@ test.describe("QR customer order experience", () => {
   test("landing opens with browse and bill CTAs", async ({ page }) => {
     skipUnlessReady();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
+    await expect(page.getByTestId("qr-landing-screen")).toBeVisible();
     await expect(page.getByTestId("qr-cta-order")).toBeVisible();
-    await expect(page.getByTestId("qr-cta-order")).toContainText(/Menüyü İncele/i);
+    await expect(page.getByTestId("qr-cta-order")).toContainText(/Sipariş Vermek İstiyorum/i);
     await expect(page.getByTestId("qr-cta-pay")).toBeVisible();
     await expect(page.getByText(/Masaya hoş geldiniz/i)).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toHaveCount(0);
   });
 
   test("order flow: menu, note, cart, submit success", async ({ page }) => {
@@ -42,6 +44,7 @@ test.describe("QR customer order experience", () => {
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
     await page.getByTestId("qr-cta-order").click();
     await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
 
     const firstQuickAdd = page.locator("[data-testid^='qr-quick-add-']").first();
     await expect(firstQuickAdd).toBeVisible();

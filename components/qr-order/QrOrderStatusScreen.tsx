@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { qrCard, qrFrameNarrow, qrGhostCta, qrIconBtn, qrPrimaryCta } from "@/components/qr-order/qr-theme";
+import { qrCard, qrFrameNarrow, qrGhostCta, qrGhostCtaInline, qrPrimaryCta } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
 import {
   normalizeOrderStatus,
@@ -21,7 +21,7 @@ function statusRank(status: QrOrderStatus | null): number {
 export default function QrOrderStatusScreen({
   context,
   highlightOrderNo,
-  onBack,
+  onBack: _onBack,
   onNewOrder,
   onViewBill,
 }: {
@@ -31,6 +31,7 @@ export default function QrOrderStatusScreen({
   onNewOrder: () => void;
   onViewBill: () => void;
 }) {
+  void _onBack;
   const [bill, setBill] = useState<QrBillSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,62 +151,69 @@ export default function QrOrderStatusScreen({
   const focusedStatus = focused ? normalizeOrderStatus(focused.status) : null;
 
   return (
-    <div className={`${qrFrameNarrow} min-h-[100dvh] pb-10 pt-4`} data-testid="qr-order-status-screen">
+    <div
+      className={`${qrFrameNarrow} min-h-[100dvh] pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[max(10px,env(safe-area-inset-top))]`}
+      data-testid="qr-order-status-screen"
+    >
       <header className="flex items-center gap-3">
-        <button type="button" onClick={onBack} className={qrIconBtn} aria-label="Geri">
-          ←
-        </button>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-800">Takip</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Siparişlerim</p>
           <h1 className="truncate text-lg font-black tracking-tight text-slate-950">
             Sipariş durumu · {context.tableLabel}
           </h1>
         </div>
-        <button type="button" onClick={() => void refresh()} className={qrGhostCta} data-testid="qr-status-refresh">
+        <button type="button" onClick={() => void refresh()} className={qrGhostCtaInline} data-testid="qr-status-refresh">
           Yenile
         </button>
       </header>
 
       {loading && !bill ? (
         <div className="mt-6 space-y-3">
-          <div className="h-28 animate-pulse rounded-[28px] bg-white/70 motion-reduce:animate-none" />
-          <div className="h-40 animate-pulse rounded-[28px] bg-white/70 motion-reduce:animate-none" />
+          <div className="h-28 animate-pulse rounded-[20px] bg-white/80 motion-reduce:animate-none" />
+          <div className="h-40 animate-pulse rounded-[20px] bg-white/80 motion-reduce:animate-none" />
         </div>
       ) : null}
 
       {error ? (
-        <p role="alert" className="mt-6 rounded-[24px] bg-rose-50 px-4 py-4 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
+        <p role="alert" className="mt-6 rounded-[20px] bg-rose-50 px-4 py-4 text-sm font-bold text-rose-700 ring-1 ring-rose-200">
           {error}
         </p>
       ) : null}
 
       {focused ? (
         <div className={`${qrCard} mt-5 p-5`}>
-          <p className="text-sm font-black text-slate-950">{focused.orderNo}</p>
-          <p className="mt-1 text-sm font-semibold text-slate-500">{formatTry(focused.total)}</p>
-          <ol className="mt-5 space-y-2.5">
-            {TRACK_STEPS.map((step) => {
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-black text-slate-950">{focused.orderNo}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">{formatTry(focused.total)}</p>
+            </div>
+            <span className="rounded-full bg-wx-ink px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+              {orderStatusLabel(focused.status)}
+            </span>
+          </div>
+          <ol className="relative mt-6 space-y-0 border-l-2 border-slate-200 pl-5">
+            {TRACK_STEPS.map((step, index) => {
               const active = focusedStatus === step;
               const reached =
                 focusedStatus === "CANCELLED"
                   ? false
                   : statusRank(focusedStatus) >= statusRank(step);
               return (
-                <li
-                  key={step}
-                  className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold ${
-                    active ? "bg-emerald-50 text-emerald-950 ring-1 ring-emerald-200" : reached ? "text-slate-800" : "text-slate-400"
-                  }`}
-                >
+                <li key={step} className={`relative pb-5 last:pb-0 ${active ? "text-slate-950" : reached ? "text-slate-700" : "text-slate-400"}`}>
                   <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${
-                      reached ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
+                    className={`absolute -left-[1.55rem] top-0 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black ${
+                      reached ? "bg-wx-ink text-white" : "bg-white text-slate-400 ring-2 ring-slate-200"
                     }`}
                     aria-hidden="true"
                   >
-                    {reached ? "✓" : "·"}
+                    {reached ? "✓" : index + 1}
                   </span>
-                  <span>{orderStatusLabel(step)}</span>
+                  <p className={`text-sm font-black ${active ? "text-wx-ink" : ""}`}>
+                    {orderStatusLabel(step)}
+                  </p>
+                  {active ? (
+                    <p className="mt-0.5 text-xs font-semibold text-slate-500">Şu anki durum</p>
+                  ) : null}
                 </li>
               );
             })}

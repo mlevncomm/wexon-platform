@@ -238,7 +238,8 @@ async function seedDemo({ product, plan }) {
       slug: DEMO.organizationSlug,
       email: DEMO.organizationEmail,
       country: "TR",
-      isDemo: true,
+      // Public /wexpay/t/* resolves reject isDemo orgs — local guest QR needs a real-shaped tenant.
+      isDemo: false,
       isActive: true,
     },
   });
@@ -470,7 +471,7 @@ async function main() {
         organization: {
           name: result.organization.name,
           slug: result.organization.slug,
-          isDemo: true,
+          isDemo: false,
         },
         login: {
           email: result.userEmail,

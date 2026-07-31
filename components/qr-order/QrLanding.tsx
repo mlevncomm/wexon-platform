@@ -1,7 +1,13 @@
 "use client";
 
-import QrStatusBadge from "@/components/qr-order/QrStatusBadge";
-import { qrCard, qrFrame, qrGhostCta, qrGlass, qrPrimaryCta, qrSecondaryCta } from "@/components/qr-order/qr-theme";
+import {
+  qrCard,
+  qrFocusRing,
+  qrFrame,
+  qrGhostCta,
+  qrPageShellLanding,
+} from "@/components/qr-order/qr-theme";
+import QrEmptyState from "@/components/qr-order/ui/QrEmptyState";
 import type { QrTableContext } from "@/lib/qr-order/types";
 
 export default function QrLanding({
@@ -18,53 +24,50 @@ export default function QrLanding({
   onCallWaiter: () => void;
 }) {
   return (
-    <div className={`relative flex min-h-[100dvh] flex-col pb-10 pt-6 sm:pt-10 ${qrFrame}`}>
-      <header className="relative z-10 text-center">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-800/90 sm:text-[11px]">
-          WexPay · Masa siparişi
-        </p>
-        <h1 className="mt-3 break-words text-[1.85rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-4xl md:text-5xl">
-          {context.restaurantName}
-        </h1>
-        <p className="mt-2 text-sm font-semibold text-slate-500 sm:text-base">
-          {context.branchName}
-          {" · "}
-          <span className="text-slate-800">{context.tableLabel}</span>
-        </p>
-        <div className="mt-4 flex justify-center">
-          <QrStatusBadge tone="mint">Masaya hoş geldiniz</QrStatusBadge>
-        </div>
-      </header>
+    <div className={`${qrPageShellLanding} items-center`} data-testid="qr-landing-screen">
+      <div className={`${qrFrame} flex w-full flex-1 flex-col justify-center py-6 sm:py-10`}>
+        <header className="text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-wx-ink-faint">
+            WexPay · Masa siparişi
+          </p>
+          <h1 className="mt-3 truncate text-2xl font-black tracking-tight text-wx-ink sm:text-3xl">
+            {context.restaurantName}
+          </h1>
+          <p className="mt-1 text-sm font-semibold text-wx-ink-muted">
+            <span className="truncate">{context.tableLabel}</span>
+            <span className="text-wx-hairline"> · </span>
+            <span className="truncate">{context.branchName}</span>
+          </p>
+          <p className="mx-auto mt-3 max-w-sm text-sm font-medium leading-relaxed text-wx-ink-muted">
+            Masaya hoş geldiniz. Sipariş verin veya hesabınızı görüntüleyin.
+          </p>
+        </header>
 
-      <section
-        className={`relative z-10 mt-7 sm:mt-10 ${qrGlass} rounded-[28px] p-5 sm:rounded-[36px] sm:p-8 lg:p-10`}
-      >
-        <div className="lg:grid lg:grid-cols-[1.15fr_1fr] lg:items-end lg:gap-12">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-800">
-              Hoş geldiniz
-            </p>
-            <h2 className="mt-3 text-[1.4rem] font-black leading-snug tracking-[-0.03em] text-slate-950 sm:text-3xl">
-              Menüyü inceleyin, siparişinizi masadan gönderin
-            </h2>
-            <p className="mt-3 max-w-xl text-sm font-semibold leading-relaxed text-slate-500 sm:text-[15px]">
-              Kayıt olmadan sipariş verebilirsiniz. Siparişiniz restoran ekranına düşer; garson
-              çağrısı ve ödeme talebi masanıza bağlı iletilir.
-            </p>
+        {menuEmpty ? (
+          <div className="mt-8">
+            <QrEmptyState
+              title="Menü henüz hazır değil"
+              description="Personelden yardım isteyebilirsiniz. Hesabınızı görüntüleyebilir veya garson çağırabilirsiniz."
+              actionLabel="Hesabı gör"
+              onAction={onPay}
+            />
           </div>
-
-          <div className="mt-6 space-y-3 lg:mt-0">
+        ) : (
+          <div className="mt-8 space-y-3">
             <button
               type="button"
               data-testid="qr-cta-order"
               onClick={onBrowseMenu}
-              className={`${qrPrimaryCta} flex-col gap-1 !items-stretch !justify-start px-5 py-4 text-left sm:py-5`}
+              className={`${qrCard} ${qrFocusRing} flex w-full flex-col items-start gap-1.5 p-5 text-left transition hover:border-emerald-200 hover:shadow-[var(--wx-shadow-lift)] active:scale-[0.99] motion-reduce:active:scale-100 sm:p-6`}
             >
-              <span className="text-[15px] font-black leading-none sm:text-base">Menüyü İncele</span>
-              <span className="text-xs font-semibold text-emerald-50/95 sm:text-[13px]">
-                {menuEmpty
-                  ? "Menü şu an boş — personelden yardım isteyin"
-                  : "Kategoriler, ürünler ve sepet — tek akışta sipariş"}
+              <span className="text-[10px] font-black uppercase tracking-[0.14em] text-wx-accent">
+                Sipariş
+              </span>
+              <span className="text-lg font-black tracking-tight text-wx-ink sm:text-xl">
+                Sipariş Vermek İstiyorum
+              </span>
+              <span className="text-sm font-medium leading-relaxed text-wx-ink-muted">
+                Menüyü görüntüleyin ve masanızdan sipariş verin.
               </span>
             </button>
 
@@ -72,54 +75,35 @@ export default function QrLanding({
               type="button"
               data-testid="qr-cta-pay"
               onClick={onPay}
-              className={`${qrSecondaryCta} flex-col gap-1 !items-stretch !justify-start px-5 py-4 text-left`}
+              className={`${qrCard} ${qrFocusRing} flex w-full flex-col items-start gap-1.5 p-5 text-left transition hover:border-emerald-200 hover:shadow-[var(--wx-shadow-lift)] active:scale-[0.99] motion-reduce:active:scale-100 sm:p-6`}
             >
-              <span className="text-[15px] font-black leading-none text-slate-950 sm:text-base">
-                Hesabı Gör / Ödeme Talebi
+              <span className="text-[10px] font-black uppercase tracking-[0.14em] text-wx-ink-faint">
+                Hesap
               </span>
-              <span className="text-xs font-semibold text-slate-500 sm:text-[13px]">
-                Hesabı görüntüle veya restorana ödeme talebi ilet
+              <span className="text-lg font-black tracking-tight text-wx-ink sm:text-xl">
+                Ödeme Yapmak İstiyorum
               </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="qr-cta-waiter"
-              onClick={onCallWaiter}
-              className={`${qrCard} flex min-h-12 w-full items-center justify-center rounded-[20px] px-5 text-sm font-black text-slate-800 transition hover:border-emerald-200`}
-            >
-              Garson Çağır
+              <span className="text-sm font-medium leading-relaxed text-wx-ink-muted">
+                Masa hesabınızı görüntüleyin ve ödeme seçeneklerine ulaşın.
+              </span>
             </button>
           </div>
-        </div>
+        )}
 
-        {menuEmpty ? (
-          <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 ring-1 ring-amber-200/80">
-            Menü şu anda boş. Personelden yardım isteyebilirsiniz.
+        <div className="mt-6 space-y-3">
+          <button
+            type="button"
+            data-testid="qr-cta-waiter"
+            onClick={onCallWaiter}
+            className={`${qrGhostCta} text-wx-ink-muted`}
+          >
+            Garson çağır
+          </button>
+          <p className="text-center text-[11px] font-semibold text-wx-ink-faint">
+            Powered by Wexon · WexPay
           </p>
-        ) : null}
-      </section>
-
-      <div className="relative z-10 mt-5 flex flex-wrap gap-2 sm:mt-6">
-        <button
-          type="button"
-          data-testid="qr-cta-browse"
-          onClick={onBrowseMenu}
-          className={`${qrGhostCta} max-w-xs`}
-        >
-          Menüyü İncele
-        </button>
-        <button type="button" onClick={onCallWaiter} className={`${qrGhostCta} max-w-xs`}>
-          Garson Çağır
-        </button>
-        <button type="button" onClick={onPay} className={`${qrGhostCta} max-w-xs`}>
-          Hesabı Gör
-        </button>
+        </div>
       </div>
-
-      <p className="relative z-10 mt-auto pt-8 text-center text-[11px] font-semibold text-slate-400 sm:pt-12">
-        Powered by Wexon · WexPay
-      </p>
     </div>
   );
 }
