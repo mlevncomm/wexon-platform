@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useRef, useState } from "react";
 import QrCartBar from "@/components/qr-order/QrCartBar";
@@ -95,7 +95,7 @@ export default function QrMenuScreen({
   return (
     <div className={`${qrPageShellFlush} items-center`}>
       <div className={`${qrFrame} w-full overflow-x-hidden pb-24 pt-0`}>
-        <header className="sticky top-0 z-20 -mx-4 border-b border-slate-200/60 bg-[#F5F7FB]/95 px-4 pb-3 pt-[max(10px,env(safe-area-inset-top))] backdrop-blur-md sm:-mx-6 sm:px-6">
+        <header className="sticky top-0 z-20 -mx-4 border-b border-slate-200/60 bg-wx-surface/95 px-4 pb-3 pt-[max(10px,env(safe-area-inset-top))] backdrop-blur-md sm:-mx-6 sm:px-6">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
@@ -132,7 +132,7 @@ export default function QrMenuScreen({
                 <circle cx="17" cy="20" r="1.2" fill="currentColor" stroke="none" />
               </svg>
               {itemCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F97316] px-1 text-[10px] font-black text-white">
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-wx-accent px-1 text-[10px] font-black text-white">
                   {itemCount}
                 </span>
               ) : null}

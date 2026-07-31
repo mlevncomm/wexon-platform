@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { qrCard, qrGhostCta, qrGlass, qrPrimaryCta, qrFrameNarrow, qrPageShell } from "@/components/qr-order/qr-theme";
 import { formatTry } from "@/lib/qr-order/format";
@@ -21,7 +21,7 @@ export default function QrCheckoutSuccess({
     <div className={`${qrPageShell} items-center`}>
       <div className={`${qrFrameNarrow} w-full py-8`}>
         <div className={`${qrGlass} rounded-[28px] p-7 text-center`}>
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#152238] text-3xl font-black text-white">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-wx-ink text-3xl font-black text-white">
             ✓
           </div>
           <h1 className="mt-5 text-2xl font-black tracking-tight text-slate-950" data-testid="qr-order-success">
@@ -34,7 +34,7 @@ export default function QrCheckoutSuccess({
             {" · "}
             {formatTry(order.subtotal)}
           </p>
-          <p className="mt-3 text-sm font-bold text-[#152238]" data-testid="qr-order-status">
+          <p className="mt-3 text-sm font-bold text-wx-ink" data-testid="qr-order-status">
             Durum: {orderStatusLabel(order.status)}
           </p>
         </div>

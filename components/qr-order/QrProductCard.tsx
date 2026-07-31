@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import QrProductMedia from "@/components/qr-order/QrProductMedia";
 import { qrAccentAdd, qrCard, qrFocusRing, qrPrice } from "@/components/qr-order/qr-theme";
@@ -25,7 +25,7 @@ export default function QrProductCard({
       >
         <div className="relative bg-slate-50 px-3 pt-3">
           {product.isPopular ? (
-            <span className="absolute left-3 top-3 z-10 rounded-full bg-[#152238] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+            <span className="absolute left-3 top-3 z-10 rounded-full bg-wx-ink px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
               Popüler
             </span>
           ) : null}

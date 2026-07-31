@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { qrCard, qrFrameNarrow, qrGhostCta, qrGhostCtaInline, qrPrimaryCta } from "@/components/qr-order/qr-theme";
@@ -187,7 +187,7 @@ export default function QrOrderStatusScreen({
               <p className="text-sm font-black text-slate-950">{focused.orderNo}</p>
               <p className="mt-1 text-sm font-semibold text-slate-500">{formatTry(focused.total)}</p>
             </div>
-            <span className="rounded-full bg-[#152238] px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+            <span className="rounded-full bg-wx-ink px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
               {orderStatusLabel(focused.status)}
             </span>
           </div>
@@ -202,13 +202,13 @@ export default function QrOrderStatusScreen({
                 <li key={step} className={`relative pb-5 last:pb-0 ${active ? "text-slate-950" : reached ? "text-slate-700" : "text-slate-400"}`}>
                   <span
                     className={`absolute -left-[1.55rem] top-0 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black ${
-                      reached ? "bg-[#152238] text-white" : "bg-white text-slate-400 ring-2 ring-slate-200"
+                      reached ? "bg-wx-ink text-white" : "bg-white text-slate-400 ring-2 ring-slate-200"
                     }`}
                     aria-hidden="true"
                   >
                     {reached ? "✓" : index + 1}
                   </span>
-                  <p className={`text-sm font-black ${active ? "text-[#152238]" : ""}`}>
+                  <p className={`text-sm font-black ${active ? "text-wx-ink" : ""}`}>
                     {orderStatusLabel(step)}
                   </p>
                   {active ? (

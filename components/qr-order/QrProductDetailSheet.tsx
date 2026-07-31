@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useId, useRef, useState } from "react";
 import QrModalShell from "@/components/qr-order/QrModalShell";
@@ -81,7 +81,7 @@ function ProductDetailForm({
         <h2 id="qr-product-detail-title" className="text-2xl font-black tracking-tight text-slate-950">
           {product.name}
         </h2>
-        <p className="mt-1 text-lg font-black tabular-nums text-[#F97316]" data-testid="qr-product-price">
+        <p className="mt-1 text-lg font-black tabular-nums text-wx-accent" data-testid="qr-product-price">
           {formatTry(unitPrice)}
         </p>
         {product.description ? (
@@ -125,7 +125,7 @@ function ProductDetailForm({
                           data-testid={`qr-option-${option.id}`}
                           className={`flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
                             checked
-                              ? "border-[#152238]/35 bg-slate-50 text-slate-950"
+                              ? "border-wx-accent/35 bg-slate-50 text-slate-950"
                               : "border-slate-200 bg-slate-50/80 text-slate-800"
                           }`}
                         >
@@ -140,7 +140,7 @@ function ProductDetailForm({
                                 );
                                 setSelectionError(null);
                               }}
-                              className="h-4 w-4 accent-[#152238]"
+                              className="h-4 w-4 accent-wx-accent"
                             />
                             <span className="truncate">{option.name}</span>
                           </span>
@@ -184,7 +184,7 @@ function ProductDetailForm({
             rows={2}
             maxLength={200}
             placeholder="Örn. Soğansız olsun"
-            className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold text-slate-950 outline-none focus-visible:border-[#152238]/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-[#152238]/10"
+            className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold text-slate-950 outline-none focus-visible:border-wx-accent/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-wx-accent/15"
           />
           <span className="mt-1 block text-[11px] font-medium text-slate-400">
             Notlar personele iletilir; ekstra ürün veya ücret garantisi yoktur.
@@ -228,13 +228,13 @@ function ProductDetailForm({
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-slate-100 bg-[#152238] p-4">
+      <div className="shrink-0 border-t border-slate-100 bg-wx-ink p-4">
         <button
           type="button"
           data-testid="qr-add-to-cart"
           onClick={submit}
           aria-describedby={selectionError ? errorId : undefined}
-          className="flex min-h-12 w-full items-center justify-center rounded-[18px] bg-[#F97316] px-5 text-[15px] font-black text-white shadow-[0_12px_28px_rgba(249,115,22,0.35)] transition hover:bg-[#EA580C] active:scale-[0.98]"
+          className="flex min-h-12 w-full items-center justify-center rounded-[18px] bg-wx-accent px-5 text-[15px] font-black text-white shadow-[var(--wx-shadow-lift)] transition hover:bg-wx-accent-dim active:scale-[0.98]"
         >
           Sepete Ekle — {formatTry(total)}
         </button>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useId } from "react";
 import QrEmptyState from "@/components/qr-order/ui/QrEmptyState";
@@ -150,7 +150,7 @@ export default function QrCartSheet({
                 onChange={(event) => onGeneralNoteChange(event.target.value)}
                 rows={3}
                 maxLength={500}
-                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold outline-none focus-visible:border-[#152238]/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-[#152238]/10"
+                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold outline-none focus-visible:border-wx-accent/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-wx-accent/15"
                 aria-describedby={error ? errorId : undefined}
               />
             </label>

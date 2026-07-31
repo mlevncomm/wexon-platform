@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useId, useRef, useState } from "react";
 import QrModalShell from "@/components/qr-order/QrModalShell";
@@ -331,7 +331,7 @@ export default function QrBillScreen({
                 </div>
                 <div className="mt-3 flex justify-between border-t border-slate-200/80 pt-3 text-lg font-black text-slate-950">
                   <span>Kalan</span>
-                  <span data-testid="qr-bill-remaining" className="tabular-nums text-[#F97316]">
+                  <span data-testid="qr-bill-remaining" className="tabular-nums text-wx-accent">
                     {formatTry(bill.remainingAmount)}
                   </span>
                 </div>

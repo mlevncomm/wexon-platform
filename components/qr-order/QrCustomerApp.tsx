@@ -26,6 +26,7 @@ import type {
   QrTableContext,
   QrView,
 } from "@/lib/qr-order/types";
+import { getInitialQrView, shouldShowQrBottomNav } from "@/lib/qr-order/view-routing";
 
 function newIdempotencyKey() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -49,7 +50,7 @@ export default function QrCustomerApp({
   categories: QrCategory[];
   initialPaytrReturn?: QrPaytrReturn | null;
 }) {
-  const [view, setView] = useState<QrView>(initialPaytrReturn ? "bill" : "menu");
+  const [view, setView] = useState<QrView>(() => getInitialQrView(initialPaytrReturn));
   const [lines, setLines] = useState<QrCartLine[]>([]);
   const [cartReady, setCartReady] = useState(false);
   const [generalNote, setGeneralNote] = useState("");
@@ -87,7 +88,7 @@ export default function QrCustomerApp({
 
   const menuEmpty = categories.every((category) => category.products.length === 0);
   const itemCount = cartItemCount(lines);
-  const showNav = view === "menu" || view === "status" || view === "bill" || view === "landing";
+  const showNav = shouldShowQrBottomNav(view);
 
   function addLine(line: QrCartLine) {
     setLines((current) => {
@@ -187,11 +188,11 @@ export default function QrCustomerApp({
   }
 
   return (
-    <main className="relative isolate flex min-h-[100dvh] w-full max-w-[100vw] flex-1 flex-col items-center overflow-x-hidden text-slate-950">
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-[#F5F7FB]" />
+    <main className="relative isolate flex min-h-[100dvh] w-full max-w-[100vw] flex-1 flex-col items-center overflow-x-hidden text-wx-ink">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-wx-surface" />
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed left-1/2 top-0 -z-10 h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-sky-200/30 blur-3xl motion-reduce:hidden sm:h-[28rem] sm:w-[28rem]"
+        className="pointer-events-none fixed left-1/2 top-0 -z-10 h-[20rem] w-[20rem] -translate-x-1/2 rounded-full bg-emerald-200/25 blur-3xl motion-reduce:hidden sm:h-[28rem] sm:w-[28rem]"
       />
 
       <div aria-live="polite" className="sr-only">

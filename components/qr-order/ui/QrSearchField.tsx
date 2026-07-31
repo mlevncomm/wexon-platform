@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { qrFocusRing } from "@/components/qr-order/qr-theme";
 
@@ -29,7 +29,7 @@ export default function QrSearchField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className={`min-h-12 w-full rounded-2xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-4 text-sm font-semibold text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus-visible:border-[#152238]/35 focus-visible:ring-4 focus-visible:ring-[#152238]/10 ${qrFocusRing}`}
+          className={`min-h-12 w-full rounded-2xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-4 text-sm font-semibold text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus-visible:border-wx-accent/35 focus-visible:ring-4 focus-visible:ring-wx-accent/15 ${qrFocusRing}`}
         />
       </div>
     </label>

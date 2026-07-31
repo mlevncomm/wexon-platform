@@ -577,6 +577,8 @@ test.describe.serial("WexPay PR-4 isolated full journey", () => {
       guestQuality = captureBrowserQuality(guestPage);
       await guestPage.goto(publicPath);
       await dismissCookieBanner(guestPage);
+      await expect(guestPage.getByTestId("qr-landing-screen")).toBeVisible();
+      await guestPage.getByTestId("qr-cta-order").click();
       await expect(guestPage.getByTestId("qr-menu-screen")).toBeVisible();
       const quickAdd = guestPage.locator("[data-testid^='qr-quick-add-']").first();
       if (await quickAdd.count()) {

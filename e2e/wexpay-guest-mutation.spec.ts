@@ -36,17 +36,21 @@ test.describe.serial("wexpay guest mutation (isolated)", () => {
     }
   });
 
-  test("menu → cart → idempotent submit → status poll → services", async ({ page, request, context }) => {
+  test("landing → menu → cart → idempotent submit → status poll → services", async ({ page, request, context }) => {
     skipUnlessIsolatedMutation();
     await page.setViewportSize({ width: 390, height: 844 });
 
     const qrPath = `/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`;
     await page.goto(qrPath);
     await dismissCookieBanner(page);
-    await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
-    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
+    await expect(page.getByTestId("qr-landing-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toHaveCount(0);
+    await expect(page.getByText(/Masaya hoş geldiniz/i)).toBeVisible();
     await assertNoSecrets(page);
 
+    await page.getByTestId("qr-cta-order").click();
+    await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
     await expect(page.getByTestId("qr-menu-search")).toBeVisible();
 
     const search = page.getByTestId("qr-menu-search");
@@ -157,14 +161,13 @@ test.describe.serial("wexpay guest mutation (isolated)", () => {
     });
 
     await page.goto(qrPath);
-    await page.getByTestId("qr-nav-more").click();
-    await page.getByTestId("qr-more-waiter").click();
+    await page.getByTestId("qr-cta-waiter").click();
     await page.getByTestId("qr-waiter-submit").click();
     await expect(page.getByTestId("qr-waiter-success")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/Garson çağrınız restorana iletildi/i)).toBeVisible();
 
     await page.goto(qrPath);
-    await page.getByTestId("qr-nav-bill").click();
+    await page.getByTestId("qr-cta-pay").click();
     await expect(page.getByTestId("qr-bill-screen")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("qr-pay-in-restaurant")).toBeVisible();
     await page.getByTestId("qr-payment-request").click();

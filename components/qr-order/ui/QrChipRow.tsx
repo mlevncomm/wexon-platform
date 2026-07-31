@@ -1,6 +1,6 @@
 "use client";
 
-import { qrFocusRing } from "@/components/qr-order/qr-theme";
+import { qrChipActive, qrChipIdle, qrFocusRing } from "@/components/qr-order/qr-theme";
 
 export default function QrChipRow({
   items,
@@ -27,10 +27,8 @@ export default function QrChipRow({
             aria-selected={active}
             data-testid={`qr-chip-${item.id}`}
             onClick={() => onSelect(item.id)}
-            className={`shrink-0 rounded-full px-4 py-2.5 text-sm font-bold transition ${qrFocusRing} ${
-              active
-                ? "bg-[#152238] text-white shadow-[0_8px_20px_rgba(21,34,56,0.25)]"
-                : "bg-white text-slate-700 ring-1 ring-slate-200/80 hover:bg-slate-50"
+            className={`shrink-0 rounded-full px-4 py-2.5 text-sm font-bold transition-[background-color,box-shadow,color] duration-200 ${qrFocusRing} ${
+              active ? qrChipActive : qrChipIdle
             }`}
           >
             {item.name}

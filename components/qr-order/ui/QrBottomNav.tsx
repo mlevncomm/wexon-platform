@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactElement } from "react";
+import { qrInkBar } from "@/components/qr-order/qr-theme";
 
 export type QrNavTab = "menu" | "orders" | "bill" | "more";
 
@@ -65,7 +66,7 @@ export default function QrBottomNav({
     <nav
       aria-label="Masa sipariş menüsü"
       data-testid="qr-bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#152238] pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-12px_40px_rgba(21,34,56,0.35)]"
+      className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/10 ${qrInkBar} pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5`}
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-0.5 px-2 sm:px-4">
         {TABS.map((tab) => {
@@ -88,7 +89,7 @@ export default function QrBottomNav({
                 <span className="relative inline-flex h-5 w-5 items-center justify-center" aria-hidden="true">
                   <Icon className="h-5 w-5" />
                   {tab.id === "menu" && cartCount > 0 ? (
-                    <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#F97316] px-1 text-[9px] font-black text-white">
+                    <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-wx-accent px-1 text-[9px] font-black text-white">
                       {cartCount > 99 ? "99+" : cartCount}
                     </span>
                   ) : null}

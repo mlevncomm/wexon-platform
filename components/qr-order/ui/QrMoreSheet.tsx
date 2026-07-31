@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import QrModalShell from "@/components/qr-order/QrModalShell";
 import { qrCard, qrGhostCta, qrPrimaryCta } from "@/components/qr-order/qr-theme";
@@ -17,7 +17,7 @@ export default function QrMoreSheet({
 }) {
   return (
     <QrModalShell open={open} onClose={onClose} titleId="qr-more-title">
-      <div className="w-full max-w-md rounded-t-[28px] border border-white/80 bg-[#F5F7FB] p-5 shadow-2xl sm:rounded-[28px] sm:p-6">
+      <div className="w-full max-w-md rounded-t-[28px] border border-white/80 bg-wx-surface p-5 shadow-2xl sm:rounded-[28px] sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Daha fazla</p>

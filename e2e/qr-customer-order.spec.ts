@@ -28,18 +28,23 @@ test.describe("QR customer order experience", () => {
     await expect(page.getByRole("heading", { name: /QR geçersiz/i })).toBeVisible();
   });
 
-  test("menu-first shell opens with bottom nav", async ({ page }) => {
+  test("landing opens with browse and bill CTAs", async ({ page }) => {
     skipUnlessReady();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
-    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
-    await expect(page.getByTestId("qr-nav-bill")).toBeVisible();
+    await expect(page.getByTestId("qr-landing-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-cta-order")).toBeVisible();
+    await expect(page.getByTestId("qr-cta-order")).toContainText(/Sipariş Vermek İstiyorum/i);
+    await expect(page.getByTestId("qr-cta-pay")).toBeVisible();
+    await expect(page.getByText(/Masaya hoş geldiniz/i)).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toHaveCount(0);
   });
 
   test("order flow: menu, note, cart, submit success", async ({ page }) => {
     skipUnlessMutation();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
+    await page.getByTestId("qr-cta-order").click();
     await expect(page.getByTestId("qr-menu-screen")).toBeVisible();
+    await expect(page.getByTestId("qr-bottom-nav")).toBeVisible();
 
     const firstQuickAdd = page.locator("[data-testid^='qr-quick-add-']").first();
     await expect(firstQuickAdd).toBeVisible();
@@ -72,7 +77,7 @@ test.describe("QR customer order experience", () => {
   test("pay CTA opens bill with in-restaurant payment copy", async ({ page }) => {
     skipUnlessReady();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await page.getByTestId("qr-nav-bill").click();
+    await page.getByTestId("qr-cta-pay").click();
     await expect(page.getByTestId("qr-bill-screen")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("qr-pay-in-restaurant")).toBeVisible();
   });
@@ -80,8 +85,7 @@ test.describe("QR customer order experience", () => {
   test("waiter call success state", async ({ page }) => {
     skipUnlessMutation();
     await page.goto(`/wexpay/t/${encodeURIComponent(fixtures.qrCode!)}`);
-    await page.getByTestId("qr-nav-more").click();
-    await page.getByTestId("qr-more-waiter").click();
+    await page.getByTestId("qr-cta-waiter").click();
     await page.getByTestId("qr-waiter-submit").click();
     await expect(page.getByText(/Garson çağrınız restorana iletildi/i)).toBeVisible({ timeout: 15_000 });
   });
